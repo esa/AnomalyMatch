@@ -1,0 +1,31 @@
+name: am
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - dotmap
+  - efficientnet-pytorch
+  - h5py
+  - imageio
+  - ipykernel
+  - ipywidgets
+  - loguru
+  - matplotlib
+  - numpy
+  - pandas
+  - python=3.11
+  - pytorch
+  - pytorch-cuda=12.4
+  - pyturbojpeg
+  - scikit-learn
+  - scikit-image
+  - toml
+  - torchvision
+  - tqdm
+  - pip
+  - pip:
+      - albumentations
+      - efficientnet_lite_pytorch
+      - efficientnet_lite0_pytorch_model
+      - opencv-python-headless
