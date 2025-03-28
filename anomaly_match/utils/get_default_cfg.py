@@ -38,8 +38,8 @@ def get_default_cfg():
     # DataLoader settings
     cfg.N_to_load = 1000
     cfg.size = [224, 224]
-    cfg.num_workers = 0
-    cfg.pin_memory = False
+    cfg.num_workers = 4
+    cfg.pin_memory = True
     cfg.oversample = True
 
     # FixMatch settings
