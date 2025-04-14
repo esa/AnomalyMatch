@@ -100,7 +100,7 @@ def calculate_total_experiments():
 
 def update_time_estimate(experiment_duration):
     """Update time tracking and display estimated remaining time."""
-    global completed_experiments, experiment_times
+    global completed_experiments, experiment_times # noqa
 
     completed_experiments += 1
     experiment_times.append(experiment_duration)
