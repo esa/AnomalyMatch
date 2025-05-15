@@ -28,7 +28,7 @@ relies on ipywidgets.
 
 ```bash
 # Clone the repository
-git clone https://github.com/ESA-Datalabs/AnomalyMatch.git
+git clone https://github.com/ESA/AnomalyMatch.git
 cd AnomalyMatch
 
 # Create and activate conda environment from the environment.yml file
@@ -43,7 +43,7 @@ pip install .
 
 ```bash
 # Clone the repository
-git clone https://github.com/ESA-Datalabs/AnomalyMatch.git
+git clone https://github.com/ESA/AnomalyMatch.git
 cd AnomalyMatch
 
 # Create and activate conda environment
