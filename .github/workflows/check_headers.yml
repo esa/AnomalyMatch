@@ -1,0 +1,124 @@
+#   Copyright (c) European Space Agency, 2025.
+#
+#   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
+#   is part of this source code package. No part of the package, including
+#   this file, may be copied, modified, propagated, or distributed except according to
+#   the terms contained in the file 'LICENCE.txt'.
+name: Check License Headers
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check_license_headers:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.11      
+      - name: Check license headers
+        run: |
+          # Define license headers for different file types (exact format)
+          PYTHON_HEADER="#   Copyright (c) European Space Agency, 2025.
+          #
+          #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
+          #   is part of this source code package. No part of the package, including
+          #   this file, may be copied, modified, propagated, or distributed except according to
+          #   the terms contained in the file 'LICENCE.txt'."
+          
+          YML_HEADER="#   Copyright (c) European Space Agency, 2025.
+          #
+          #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
+          #   is part of this source code package. No part of the package, including
+          #   this file, may be copied, modified, propagated, or distributed except according to
+          #   the terms contained in the file 'LICENCE.txt'."
+          
+          MARKDOWN_HEADER="[//]: # (Copyright &#40;c&#41; European Space Agency, 2025.)
+          [//]: # ()
+          [//]: # (This file is subject to the terms and conditions defined in file 'LICENCE.txt', which)
+          [//]: # (is part of this source code package. No part of the package, including)
+          [//]: # (this file, may be copied, modified, propagated, or distributed except according to)
+          [//]: # (the terms contained in the file 'LICENCE.txt'.)"
+          
+          INI_HEADER="#   Copyright (c) European Space Agency, 2025.
+          #
+          #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
+          #   is part of this source code package. No part of the package, including
+          #   this file, may be copied, modified, propagated, or distributed except according to
+          #   the terms contained in the file 'LICENCE.txt'."
+          
+          # Function to get expected header based on file extension
+          get_expected_header() {
+            local file="$1"
+            case "$file" in
+              *.py) echo "$PYTHON_HEADER" ;;
+              *.yml|*.yaml) echo "$YML_HEADER" ;;
+              *.md) echo "$MARKDOWN_HEADER" ;;
+              *.ini|.gitignore|.flake8) echo "$INI_HEADER" ;;
+              *) echo "$INI_HEADER" ;;  # Default to # comments
+            esac
+          }
+          
+          # Find all relevant files excluding specified directories
+          PYTHON_FILES=$(find . -name "*.py" -not -path "./datalabs_setup/*" -not -path "./utility_scripts/*" -not -path "./.git/*" -not -path "./__pycache__/*" -not -path "./.*/__pycache__/*")
+          YML_FILES=$(find . -name "*.yml" -o -name "*.yaml" | grep -v "./.git/")
+          MARKDOWN_FILES=$(find . -name "*.md" -not -path "./.github/ISSUE_TEMPLATE/*" | grep -v "./.git/")
+          INI_FILES=$(find . -name "*.ini" | grep -v "./.git/")
+          GITIGNORE_FILES=$(find . -name ".gitignore" | grep -v "./.git/")
+          FLAKE8_FILES=$(find . -name ".flake8" | grep -v "./.git/")
+          
+          # Combine all files
+          ALL_FILES="$PYTHON_FILES $YML_FILES $MARKDOWN_FILES $INI_FILES $GITIGNORE_FILES $FLAKE8_FILES"
+          
+          MISSING_HEADERS=()
+          
+          echo "Checking license headers in all relevant files..."
+          echo ""
+            for file in $ALL_FILES; do
+            if [[ -n "$file" && -f "$file" ]]; then
+              echo "Checking: $file"
+              
+              EXPECTED_HEADER=$(get_expected_header "$file")
+              
+              # Read the first 6 lines of the file (header is 6 lines)
+              ACTUAL_HEADER=$(head -n 6 "$file")
+
+              # Debug output (uncomment for troubleshooting)
+              # echo "Expected header for $file:"
+              # echo "$EXPECTED_HEADER"
+              # echo "Actual header for $file:"
+              # echo "$ACTUAL_HEADER"
+              # echo "---"
+              
+              if [[ "$ACTUAL_HEADER" != "$EXPECTED_HEADER" ]]; then
+                echo "❌ Missing or incorrect license header in: $file"
+                MISSING_HEADERS+=("$file")
+              else
+                echo "✅ Correct license header in: $file"
+              fi
+            fi
+          done
+          
+          echo ""
+          
+          if [ ${#MISSING_HEADERS[@]} -eq 0 ]; then
+            echo "🎉 All files have correct license headers!"
+            exit 0
+          else
+            echo "💥 The following files are missing or have incorrect license headers:"
+            for file in "${MISSING_HEADERS[@]}"; do
+              echo "  - $file"
+            done
+            echo ""
+            echo "Please add the correct license header to these files."
+            echo "File types checked: .py, .yml/.yaml, .md, .ini, .gitignore, .flake8"
+            echo "Note: Python files exclude datalabs_setup/ and utility_scripts/ directories"
+            exit 1
+          fi
