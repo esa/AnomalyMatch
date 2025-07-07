@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+- family-names: "Gómez"
+  given-names: "Pablo"
+  orcid: "https://orcid.org/0000-0002-5631-8240"
+- family-names: "O'Ryan"
+  given-names: "David"
+  orcid: "https://orcid.org/0000-0003-1217-4617"
+title: "AnomalyMatch: Discovering Rare Objects of Interest with Semi-supervised and Active Learning"
+version: 1.1.0
+doi: 10.48550/arXiv.2505.03509
+date-released: 2025-07-04
+url: "https://github.com/ESA/AnomalyMatch"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Gómez"
+    given-names: "Pablo"
+    orcid: "https://orcid.org/0000-0002-5631-8240"
+  - family-names: "O'Ryan"
+    given-names: "David"
+    orcid: "https://orcid.org/0000-0003-1217-4617"
+  title: "AnomalyMatch: Discovering Rare Objects of Interest with Semi-supervised and Active Learning"
+  journal: "arXiv preprint"
+  year: 2025
+  doi: 10.48550/arXiv.2505.03509
+  url: "https://arxiv.org/abs/2505.03509"

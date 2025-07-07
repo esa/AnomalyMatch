@@ -3,7 +3,7 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import argparse
 import os
 
@@ -28,7 +28,7 @@ def parse_arguments():
     parser.add_argument(
         "--dataset",
         type=str,
-        choices=["galaxymnist", "miniimagenet"],
+        choices=["galaxymnist", "miniimagenet", "galaxyzoo"],
         default="galaxymnist",
         help="Dataset to use for benchmarking",
     )
@@ -78,6 +78,18 @@ def parse_arguments():
     parser.add_argument(
         "--skip_mock_ui", action="store_true", help="Skip mock UI and direct logging to terminal"
     )
+    parser.add_argument(
+        "--input_dir",
+        type=str,
+        default="datasets",
+        help="Directory containing prepared datasets (default: datasets)",
+    )
+    parser.add_argument(
+        "--create_galaxy_plots",
+        action="store_true",
+        default=True,
+        help="Create additional plots for GalaxyZoo dataset",
+    )
     args = parser.parse_args()
 
     # Convert anomaly_classes from string to list of integers
@@ -114,18 +126,22 @@ def setup_directories(args):
 
 def load_dataset_info(args):
     """Load dataset information from CSV files."""
-    base_path = "datasets"
+    base_path = args.input_dir
     if not os.path.exists(base_path):
-        base_path = os.path.join("paper_scripts", "datasets")
+        base_path = os.path.join("paper_scripts", args.input_dir)
 
     if args.dataset == "galaxymnist":
-        labels_path = os.path.join(base_path, "labels_galaxymnist.csv")
+        labels_path = os.path.join(base_path, "galaxymnist", "labels_galaxymnist.csv")
         data_dir = os.path.join(base_path, "galaxymnist")
-        hdf5_path = os.path.join(base_path, "galaxymnist_224.hdf5")
+        hdf5_path = os.path.join(base_path, "galaxymnist", "galaxymnist_224.hdf5")
+    elif args.dataset == "galaxyzoo":
+        labels_path = os.path.join(base_path, "galaxyzoo", "labels_galaxyzoo.csv")
+        data_dir = os.path.join(base_path, "galaxyzoo")
+        hdf5_path = os.path.join(base_path, "galaxyzoo", "galaxyzoo_images.h5")
     else:  # miniimagenet
-        labels_path = os.path.join(base_path, "labels_miniimagenet.csv")
+        labels_path = os.path.join(base_path, "miniimagenet", "labels_miniimagenet.csv")
         data_dir = os.path.join(base_path, "miniimagenet")
-        hdf5_path = os.path.join(base_path, "miniimagenet_224.hdf5")
+        hdf5_path = os.path.join(base_path, "miniimagenet", "miniimagenet_224.hdf5")
 
     # Load full labels dataset
     all_labels_df = pd.read_csv(labels_path)
@@ -227,14 +243,16 @@ def setup_pipeline(args, data_dir, labeled_data_path, run_dir, output_widget, pr
     cfg.output_dir = str(run_dir)
     cfg.num_train_iter = args.train_iterations
     cfg.progress_bar = progress_bar
-    cfg.num_workers = 0  # Avoid multiprocessing issues
-    cfg.pin_memory = False
+    cfg.num_workers = 4
+    cfg.pin_memory = True
 
     # Configure logging
     am.set_log_level("info", cfg)
 
     # Create session
     session = am.Session(cfg)
+    # change the output path of io to the run directory
+    session.session_io.base_save_path = Path(run_dir)
 
     # Always set terminal output, but use None when skipping mock UI
     # This ensures session.out is always initialized
@@ -358,8 +376,28 @@ def evaluate_performance(scores, filenames, true_labels_df, anomaly_class):
     # Create a DataFrame with scores and filenames
     pred_df = pd.DataFrame({"filename": filenames, "score": scores})
 
+    # Add debugging information
+    logger.info(f"Number of prediction filenames: {len(filenames)}")
+    logger.info(f"Sample prediction filenames: {filenames[:5] if len(filenames) > 0 else 'None'}")
+    logger.info(f"Number of label filenames: {len(true_labels_df)}")
+    logger.info(
+        f"Sample label filenames: {true_labels_df['filename'].head().tolist() if len(true_labels_df) > 0 else 'None'}"
+    )
+
     # Merge with true labels
     merged_df = pd.merge(pred_df, true_labels_df, on="filename")
+    logger.info(f"Number of merged records: {len(merged_df)}")
+
+    if len(merged_df) == 0:
+        logger.error("No matching filenames found between predictions and labels!")
+        logger.error(
+            f"Prediction filename examples: {filenames[:10] if len(filenames) > 0 else 'None'}"
+        )
+        label_examples = (
+            true_labels_df["filename"].head(10).tolist() if len(true_labels_df) > 0 else "None"
+        )
+        logger.error(f"Label filename examples: {label_examples}")
+        raise ValueError("No matching filenames found between predictions and labels")
 
     # Create binary labels (1 for anomaly class, 0 for others)
     y_true = (merged_df["label_idx"] == anomaly_class).astype(int).values

@@ -3,29 +3,35 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import os
 import datetime
 import time
+import sys
+import subprocess
 
 from loguru import logger
 import torch
 import pandas as pd
 import numpy as np
 from contextlib import nullcontext
-import subprocess
-import sys
-import zipfile
-import toml
+import pickle
 import h5py
+import zarr
+from pathlib import Path
 
 from anomaly_match.datasets.SSL_Dataset import SSL_Dataset
 from anomaly_match.datasets.data_utils import get_prediction_dataloader
 from anomaly_match.models.FixMatch import FixMatch
+from anomaly_match.utils.constants import SUPPORTED_IMAGE_EXTENSIONS
 from anomaly_match.utils.print_cfg import print_cfg
 from anomaly_match.utils.set_log_level import set_log_level
 from anomaly_match.utils.get_net_builder import get_net_builder
 from anomaly_match.utils.get_optimizer import get_optimizer
+from anomaly_match.utils.validate_config import validate_config
+from anomaly_match.image_processing.NormalisationMethod import NormalisationMethod
+from anomaly_match.pipeline.SessionTracker import SessionTracker
+from anomaly_match.data_io.SessionIOHandler import SessionIOHandler
 
 
 class Session:
@@ -40,10 +46,15 @@ class Session:
     model: FixMatch = None
 
     active_learning_df = pd.DataFrame(columns=["filename", "label"])
+    # Cache for fast label lookups - maps filename to label
+    _label_cache = {}
+    # Cache for label distribution to avoid expensive pandas operations
+    _label_distribution_cache = None
 
     filenames = None
     scores = None
     img_catalog = None
+    cached_image_normalisation_enum = NormalisationMethod.CONVERSION_ONLY
 
     def __init__(self, cfg):
         """Initializes the session with the given configuration.
@@ -57,8 +68,27 @@ class Session:
             set_log_level(cfg.log_level, cfg)
         if cfg.log_level in ["TRACE", "DEBUG"]:
             print_cfg(cfg)
+
+        # Initialize session tracking first
+        session_name = getattr(cfg, "name", None)
+        self.session_tracker = SessionTracker(session_name=session_name)
+        self.session_io = SessionIOHandler()
+
+        # Update config paths to use centralized session directory BEFORE validation
+        self.session_io.update_config_paths_for_session(cfg, self.session_tracker)
+
+        # Validate the config
+        validate_config(cfg)
+
         self.cfg = cfg
+        self.cached_image_normalisation_enum = cfg.normalisation_method
         self.out = None  # Initialize out attribute to None
+
+        # Initialize label cache and distribution cache
+        self._label_cache = {}
+        self._label_distribution_cache = None
+        self._active_learning_counts_cache = None
+
         logger.debug("Session initialized, loading datasets")
         self._load_datasets()
         logger.debug("Datasets loaded, initializing model")
@@ -83,6 +113,8 @@ class Session:
             lambda_u=self.cfg.ulb_loss_ratio,
             hard_label=True,
             logger=logger,
+            current_normalisation_method=self.cfg.normalisation_method,
+            session_tracker=self.session_tracker,
         )
 
         # get optimizer, ADAM and SGD are supported.
@@ -103,35 +135,31 @@ class Session:
             self.model.eval_model = self.model.eval_model.cuda(self.cfg.gpu)
 
         self.model.set_data_loader(
-            self.cfg, self.labeled_train_dataset, self.unlabeled_train_dataset, self.test_dataset
+            self.cfg,
+            self.labeled_train_dataset,
+            self.unlabeled_train_dataset,
+            self.test_dataset,
         )
 
     def _load_datasets(self):
         """Loads the datasets required for training and evaluation."""
         # Construct Dataset
         self.train_dset = SSL_Dataset(
-            test_ratio=self.cfg.test_ratio,
-            N_to_load=self.cfg.N_to_load,
+            cfg=self.cfg,
             train=True,
-            data_dir=self.cfg.data_dir,
-            seed=self.cfg.seed,
-            size=self.cfg.size,
-            label_file=self.cfg.label_file,
         )
         self.labeled_train_dataset, self.unlabeled_train_dataset = self.train_dset.get_ssl_dset()
+
+        # Update information about cached dataset
+        self.cached_image_normalisation_enum = self.cfg.normalisation_method
 
         self.cfg.num_classes = self.train_dset.num_classes
         self.cfg.num_channels = self.train_dset.num_channels
 
         if self.cfg.test_ratio > 0:
             self.test_dataset = SSL_Dataset(
-                test_ratio=self.cfg.test_ratio,
-                N_to_load=self.cfg.N_to_load,
+                cfg=self.cfg,
                 train=False,
-                data_dir=self.cfg.data_dir,
-                seed=self.cfg.seed,
-                size=self.cfg.size,
-                label_file=self.cfg.label_file,
             ).get_dset()
         else:
             self.test_dataset = None
@@ -147,6 +175,7 @@ class Session:
         """Updates the predictions using the current model and datasets."""
         with self.out if self.out is not None else nullcontext():
             logger.debug("Updating predictions")
+
             self.prediction_dataloader = get_prediction_dataloader(
                 self.train_dset.dset,
                 batch_size=self.cfg.eval_batch_size,
@@ -215,28 +244,40 @@ class Session:
     def save_labels(self):
         """Saves the current labels to a CSV file."""
         with self.out if self.out is not None else nullcontext():
-            filepath = os.path.join(self.cfg.output_dir, "labeled_data.csv")
-            logger.info(f"Saving labels to {filepath}")
+            # Get combined labeled data from dataset and active learning
+            combined_df = self._get_combined_labeled_data()
 
-            # Make outfolder if it doesn't exist
-            if not os.path.exists(self.cfg.output_dir):
-                os.makedirs(self.cfg.output_dir)
+            # Update the session tracker with combined data, preserving iteration info
+            self.session_tracker.update_labeled_data(combined_df)
 
-            # Combine active_learning_df with already labeled data in the dataset
-            labeled_data = [
-                {"filename": filename, "label": "normal" if target == 0 else "anomaly"}
-                for filename, target in zip(
-                    self.labeled_train_dataset.filenames, self.labeled_train_dataset.targets
-                )
-            ]
+            # Save the session (includes labeled data)
+            session_path = self.session_io.save_session(self.session_tracker, cfg=self.cfg)
+            logger.debug(f"Session saved to {session_path}")
 
-            labeled_df = pd.DataFrame(labeled_data)
-
-            combined_df = pd.concat([labeled_df, self.active_learning_df]).drop_duplicates(
-                subset="filename", keep="last"
+    def _get_combined_labeled_data(self):
+        """Get combined labeled data from dataset and active learning."""
+        # Combine active_learning_df with already labeled data in the dataset
+        labeled_data = [
+            {"filename": filename, "label": "normal" if target == 0 else "anomaly"}
+            for filename, target in zip(
+                self.labeled_train_dataset.filenames,
+                self.labeled_train_dataset.targets,
             )
+        ]
 
-            combined_df.to_csv(filepath, index=False)
+        labeled_df = pd.DataFrame(labeled_data)
+        combined_df = pd.concat([labeled_df, self.active_learning_df]).drop_duplicates(
+            subset="filename", keep="last"
+        )
+
+        # Add metadata if available in the dataset
+        metadata_df = self.train_dset.dset.get_all_metadata()
+        if metadata_df is not None:
+            metadata_df = metadata_df.copy()
+            metadata_df.reset_index(inplace=True)  # Convert index back to column
+            combined_df = combined_df.merge(metadata_df, on="filename", how="left")
+
+        return combined_df
 
     def set_terminal_out(self, out):
         """Sets the terminal output context.
@@ -274,6 +315,67 @@ class Session:
                     [self.active_learning_df, new_row], ignore_index=True
                 )
 
+            # Update the cache and invalidate distribution cache
+            self._label_cache[current_filename] = label
+            self._label_distribution_cache = None
+            self._active_learning_counts_cache = None
+
+            # Add to session tracker
+            self.session_tracker.add_labeled_sample(current_filename, label)
+
+    def unlabel_image(self, idx):
+        """Removes the label for the image at the given index.
+
+        Args:
+            idx (int): Index of the image to unlabel.
+        """
+        with self.out if self.out is not None else nullcontext():
+            current_filename = self.filenames[idx]
+            # Check if the filename exists in the active learning DataFrame
+            if current_filename in self.active_learning_df["filename"].values:
+                logger.debug(f"Removing label for {current_filename}")
+                # Remove the row with this filename
+                self.active_learning_df = self.active_learning_df[
+                    self.active_learning_df["filename"] != current_filename
+                ]
+
+                # Remove from cache and invalidate distribution cache
+                self._label_cache.pop(current_filename, None)
+                self._label_distribution_cache = None
+                self._active_learning_counts_cache = None
+
+                # Also update the session tracker's labeled data if possible
+                if hasattr(self.session_tracker, "labeled_data_df"):
+                    # This will maintain any iteration information for analytics
+                    # but mark the label as "removed" for tracking purposes
+                    self.session_tracker.labeled_data_df.loc[
+                        self.session_tracker.labeled_data_df["filename"] == current_filename,
+                        "label",
+                    ] = "removed"
+                    logger.debug(f"Updated session tracker to mark {current_filename} as removed")
+            else:
+                logger.debug(f"No label found for {current_filename}")
+
+    def set_normalisation_method(self, method: NormalisationMethod):
+        """Updates the normalization method in the config.
+
+        Args:
+            method (NormalisationMethod): The new normalization method to apply.
+        """
+        # update norm method in session cfg, should
+        self.cfg.normalisation_method = method
+
+    def _reload_datasets(self):
+        """Reloads the datasets if normalisation changed."""
+        self._load_datasets()
+        # Reinitialize model with new data
+        self.model.set_data_loader(
+            self.cfg,
+            self.labeled_train_dataset,
+            self.unlabeled_train_dataset,
+            self.test_dataset,
+        )
+
     def remember_current_file(self, filename):
         """Remembers the current file by appending it to a CSV if not already present."""
         with self.out if self.out is not None else nullcontext():
@@ -282,7 +384,8 @@ class Session:
 
             # Use cfg.name instead of cfg.save_file for the output filename
             output_file = os.path.join(
-                self.cfg.output_dir, f"{self.cfg.name}_{self.session_start}_remembered_files.csv"
+                self.cfg.output_dir,
+                f"{self.cfg.name}_{self.session_start}_remembered_files.csv",
             )
 
             # Read existing files or create empty DataFrame
@@ -303,14 +406,35 @@ class Session:
             logger.info(f"Remembered file {filename}")
 
     def save_model(self):
-        """Saves the current model state."""
+        """Saves the current model state using SessionIOHandler."""
         with self.out if self.out is not None else nullcontext():
-            self.model.save_model(self.cfg)
+            # Save model using SessionIOHandler
+            model_path = self.session_io.save_model(self.model, self.cfg, self.session_tracker)
+
+            logger.info(f"Model saved to: {model_path}")
 
     def load_model(self):
-        """Loads the model state from the configuration."""
+        """Loads the model state using SessionIOHandler."""
         with self.out if self.out is not None else nullcontext():
-            self.model.load_model(self.cfg)
+            success = self.session_io.load_model(self.model, self.cfg)
+
+            if success:
+                logger.info("Model loaded successfully")
+
+                # Check if normalisation method was updated from the loaded model
+                if hasattr(self.model, "last_normalisation_method"):
+                    if self.model.last_normalisation_method != self.cfg.normalisation_method:
+                        logger.info(
+                            f"Normalisation method updated from loaded model: "
+                            f"{self.model.last_normalisation_method}"
+                        )
+
+                        # Update cached normalisation and reload datasets if needed
+                        if self.cached_image_normalisation_enum != self.cfg.normalisation_method:
+                            logger.info("Normalisation method changed, reloading datasets...")
+                            self._reload_datasets()
+            else:
+                logger.error("Failed to load model")
 
     def train(self, cfg, progress_callback=None):
         """Trains the model using the given configuration.
@@ -322,20 +446,58 @@ class Session:
         self.cfg = cfg
         self.top_N_filenames_scores = []  # Clear top N filenames and scores
         with self.out if self.out is not None else nullcontext():
+            # Start a new session iteration
+            self.session_tracker.start_new_session_iteration()
+
             self.save_labels()
             # Update the datasets
             self.labeled_train_dataset, self.unlabeled_train_dataset = self.train_dset.update_dsets(
                 self.active_learning_df, N_to_load=self.cfg.N_to_load
             )
+
+            # Clear active_learning_df after updating datasets to prevent double-counting
+            # The newly labeled samples are now in the main training dataset
+            self.active_learning_df = pd.DataFrame(columns=["filename", "label"])
+
+            # Invalidate caches since the dataset structure has changed
+            self._label_distribution_cache = None
+            self._active_learning_counts_cache = None
+            # Clear the label cache since active_learning_df is now empty
+            self._label_cache = {}
+
             self.model.set_data_loader(
                 self.cfg,
                 self.labeled_train_dataset,
                 self.unlabeled_train_dataset,
                 self.test_dataset,
             )
-            self.model.train(cfg, progress_callback=progress_callback)
+
+            # Train the model and get evaluation results
+            eval_results = self.model.train(cfg, progress_callback=progress_callback)
+
+            # Update session tracker with training results
+            if eval_results:
+                # Filter out large data fields that shouldn't be saved to session metadata
+                filtered_eval_results = {
+                    k: v
+                    for k, v in eval_results.items()
+                    if k
+                    not in ["eval/predictions_and_labels", "eval/roc_data", "eval/precision_recall"]
+                }
+                self.session_tracker.update_test_performance(filtered_eval_results)
+
+            # Update total model iterations
+            self.session_tracker.total_model_iterations = self.model.total_it
+
             logger.info("Training complete.")
-            self.model.save_run(cfg.save_file, cfg.save_path, cfg=None)
+            # Update cached image normalisation enum
+            self.cached_image_normalisation_enum = self.cfg.normalisation_method
+            # Save model to session directory using centralized save_model method
+            self.save_model()
+
+            # Save session again to capture training results (test performance, model path)
+            session_path = self.session_io.save_session(self.session_tracker, cfg=self.cfg)
+            logger.debug(f"Session saved after training completion to {session_path}")
 
     def get_label_distribution(self):
         """Gets the distribution of labels in the training dataset, including new labels in active_learning_df.
@@ -343,16 +505,49 @@ class Session:
         Returns:
             tuple: A tuple containing the count of normal and anomalous labels.
         """
+        # Return cached result if available
+        if self._label_distribution_cache is not None:
+            return self._label_distribution_cache
+
         normal_count = torch.sum(self.labeled_train_dataset.targets == 0)
         anomalous_count = len(self.labeled_train_dataset.targets) - normal_count
-        if self.active_learning_df is not None:
-            new_labels = self.active_learning_df[
-                ~self.active_learning_df["filename"].isin(self.labeled_train_dataset.data)
-            ]
-            normal_count += np.sum(new_labels["label"] == "normal")
-            anomalous_count += np.sum(new_labels["label"] == "anomaly")
 
-        return normal_count, anomalous_count
+        if self.active_learning_df is not None and not self.active_learning_df.empty:
+            # More efficient way to count new labels
+            # Instead of filtering, just count all labels in active_learning_df
+            # This assumes active_learning_df only contains new labels not in labeled_train_dataset
+            new_normal = np.sum(self.active_learning_df["label"] == "normal")
+            new_anomalous = np.sum(self.active_learning_df["label"] == "anomaly")
+
+            normal_count += new_normal
+            anomalous_count += new_anomalous
+
+        # Cache the result
+        self._label_distribution_cache = (normal_count, anomalous_count)
+        return self._label_distribution_cache
+
+    def get_active_learning_counts(self):
+        """Gets the count of newly annotated samples in active_learning_df.
+
+        Returns:
+            tuple: (new_normal_count, new_anomalous_count)
+        """
+        if self.active_learning_df is None or self.active_learning_df.empty:
+            return 0, 0
+
+        # Use cached values if available
+        if (
+            hasattr(self, "_active_learning_counts_cache")
+            and self._active_learning_counts_cache is not None
+        ):
+            return self._active_learning_counts_cache
+
+        new_normal = np.sum(self.active_learning_df["label"] == "normal")
+        new_anomalous = np.sum(self.active_learning_df["label"] == "anomaly")
+
+        # Cache the result
+        self._active_learning_counts_cache = (new_normal, new_anomalous)
+        return self._active_learning_counts_cache
 
     def start_UI(self):
         """Starts the user interface for the session."""
@@ -377,11 +572,14 @@ class Session:
         """
         if self.active_learning_df is None:
             return "None"
-        elif self.filenames[idx] not in self.active_learning_df["filename"].values:
-            return "None"
-        return self.active_learning_df.loc[
-            self.active_learning_df["filename"] == self.filenames[idx], "label"
-        ].values[0]
+
+        # Rebuild cache if it's empty but active_learning_df has data
+        if not self._label_cache and not self.active_learning_df.empty:
+            self._rebuild_label_cache()
+
+        filename = self.filenames[idx]
+        # Use fast cache lookup instead of pandas operations
+        return self._label_cache.get(filename, "None")
 
     def load_next_batch(self):
         """Loads the next batch of data and updates predictions."""
@@ -389,28 +587,71 @@ class Session:
         self.top_N_filenames_scores = []  # Clear top N filenames and scores
         # Note that we are updating also the labeled_dataset since the unlabeled
         # data are going to disappear from the unlabeled dataset once we call this function.
-        self.train_dset.update_dsets(
+        self.labeled_train_dataset, self.unlabeled_train_dataset = self.train_dset.update_dsets(
             label_update=self.active_learning_df, N_to_load=self.cfg.N_to_load
         )
+
+        # Clear active_learning_df after updating datasets to prevent double-counting
+        # The newly labeled samples are now in the main training dataset
+        self.active_learning_df = pd.DataFrame(columns=["filename", "label"])
+
+        # Invalidate caches since the dataset structure has changed
+        self._label_distribution_cache = None
+        self._active_learning_counts_cache = None
+        # Clear the label cache since active_learning_df is now empty
+        self._label_cache = {}
+
+        self.cached_image_normalisation_enum = self.cfg.normalisation_method
+        # We don't rebuild the cache here since active_learning_df is empty
+        # The get_label method will handle finding labels in the main dataset if needed
         self.update_predictions()
 
     def reset_model(self):
         """Resets the model and reinitializes the session."""
         logger.debug("Resetting model")
+
+        # Reset session tracker
+        session_name = getattr(self.cfg, "name", None)
+        self.session_tracker = SessionTracker(session_name=session_name)
+
+        # Update config paths to use centralized session directory
+        self.session_io.update_config_paths_for_session(self.cfg, self.session_tracker)
+
+        # Clear label cache and distribution cache on reset
+        self._label_cache = {}
+        self._label_distribution_cache = None
+        self._active_learning_counts_cache = None
+
         self._init_model()
         self.update_predictions()
 
-    def run_pipeline(self, temp_config_path, input_path, top_N):
+    def run_pipeline(self, temp_config_path, input_path, top_N, file_type=None):
         """Run the appropriate pipeline subprocess based on file type."""
+        # Auto-detect file type if not provided
+        if file_type is None:
+            if os.path.isfile(input_path):
+                # Single file - detect from extension
+                _, ext = os.path.splitext(input_path.lower())
+                extension_map = {
+                    ".h5": "hdf5",
+                    ".hdf5": "hdf5",
+                    ".zarr": "zarr",
+                    ".txt": "image",  # Grouped image files
+                }
+                file_type = extension_map.get(ext, "image")
+            else:
+                # Directory - auto-detect
+                file_type = self._auto_detect_prediction_file_type(input_path)
+
         script_map = {
-            "zip": "prediction_process_zip.py",
             "hdf5": "prediction_process_hdf5.py",
             "image": "prediction_process.py",
+            "zarr": "prediction_process_zarr.py",
         }
 
-        script = script_map.get(self.cfg.prediction_file_type)
+        script = script_map.get(file_type)
         if not script:
-            raise ValueError(f"Unsupported prediction file type: {self.cfg.prediction_file_type}")
+            raise ValueError(f"Unsupported prediction file type: {file_type}")
 
         # Get the directory two levels up from this file's location
         current_dir = os.path.dirname(os.path.abspath(__file__))  # Get session.py directory
@@ -421,7 +662,7 @@ class Session:
             raise FileNotFoundError(f"Script not found at expected path: {script_path}")
 
         # For image directories, we need to create a temporary file list
-        if self.cfg.prediction_file_type == "image":
+        if file_type == "image":
             # Create a temporary file containing the list of image paths
             temp_file_list = os.path.join("tmp", f"{self.cfg.save_file}_file_list.txt")
             with open(temp_file_list, "w") as f:
@@ -429,10 +670,16 @@ class Session:
 
             # Call prediction_process.py with the file list
             subprocess.run(
-                [sys.executable, script_path, temp_config_path, temp_file_list, str(top_N)]
+                [
+                    sys.executable,
+                    script_path,
+                    temp_config_path,
+                    temp_file_list,
+                    str(top_N),
+                ]
             )
         else:
-            # For zip and hdf5 files, pass the file path directly
+            # For hdf5 and zarr files, pass the file path directly
             subprocess.run([sys.executable, script_path, temp_config_path, input_path, str(top_N)])
 
         # Reset logger to old level
@@ -441,6 +688,9 @@ class Session:
     def evaluate_all_images(self, top_N=1000, progress_callback=None):
         """Evaluates all images and updates the session's img_catalog with the top N images."""
         logger.info("Evaluating all images")
+        # check if normalisation changed and reload if necessary
+        if self.cfg.normalisation_method != self.cached_image_normalisation_enum:
+            self._reload_datasets()
 
         # Check if model exists before proceeding
         if not os.path.exists(self.cfg.model_path):
@@ -453,23 +703,30 @@ class Session:
                 self.widget.ui["train_label"].value = "Error: Model not found!"
             raise FileNotFoundError(error_msg)
 
+        # Auto-detect file type based on prediction_search_dir
+        detected_file_type = None
+        if self.cfg.prediction_search_dir:
+            detected_file_type = self._auto_detect_prediction_file_type(
+                self.cfg.prediction_search_dir
+            )
+
         # Define supported file extensions
         supported_extensions = {
-            "zip": [".zip"],
             "hdf5": [".h5", ".hdf5"],
-            "image": [".jpg", ".jpeg", ".png", ".tif", ".tiff"],
+            "image": SUPPORTED_IMAGE_EXTENSIONS,
+            "zarr": [".zarr"],
         }
 
-        pattern = supported_extensions.get(self.cfg.prediction_file_type)
+        pattern = supported_extensions.get(detected_file_type)
         if not pattern:
-            raise ValueError(f"Unsupported prediction file type: {self.cfg.prediction_file_type}")
+            raise ValueError(f"Unsupported prediction file type: {detected_file_type}")
 
-        # Get all matching files from the cfg.search_dir
+        # Get all matching files from the cfg.prediction_search_dir
         input_files = []
-        for f in os.listdir(self.cfg.search_dir):
+        for f in os.listdir(self.cfg.prediction_search_dir):
             file_ext = os.path.splitext(f.lower())[1]
             if file_ext in pattern:
-                input_files.append(os.path.join(self.cfg.search_dir, f))
+                input_files.append(os.path.join(self.cfg.prediction_search_dir, f))
 
         num_files = len(input_files)
         total_images = 0
@@ -477,24 +734,18 @@ class Session:
         start_time = time.time()
 
         # First count total images
-        logger.info("Counting total images to process...")
+        logger.debug("Counting total images to process...")
         for input_file in input_files:
             try:
-                if self.cfg.prediction_file_type == "zip":
-                    with zipfile.ZipFile(input_file, "r") as zip_file:
-                        total_images += len(
-                            [
-                                f
-                                for f in zip_file.namelist()
-                                if any(
-                                    f.lower().endswith(ext)
-                                    for ext in [".jpg", ".jpeg", ".png", ".tif", ".tiff"]
-                                )
-                            ]
-                        )
-                elif self.cfg.prediction_file_type == "hdf5":
+                if detected_file_type == "hdf5":
                     with h5py.File(input_file, "r") as h5f:
                         total_images += len(h5f["images"])
+                elif detected_file_type == "zarr":
+                    root = zarr.open_group(input_file, mode="r")
+                    if "images" in root:
+                        total_images += root["images"].shape[0]
+                    else:
+                        logger.warning(f"No 'images' array found in Zarr file {input_file}")
                 else:  # jpeg/image files - single file
                     total_images += 1
             except Exception as e:
@@ -502,25 +753,55 @@ class Session:
 
         logger.info(f"Found total of {total_images:,} images to process in {num_files} files")
 
-        for file_idx, input_file in enumerate(input_files):
-            # Get number of images in current file
-            if self.cfg.prediction_file_type == "zip":
-                with zipfile.ZipFile(input_file, "r") as zip_file:
-                    num_items = len(
-                        [
-                            f
-                            for f in zip_file.namelist()
-                            if any(
-                                f.lower().endswith(ext)
-                                for ext in [".jpg", ".jpeg", ".png", ".tif", ".tiff"]
-                            )
-                        ]
-                    )
-            elif self.cfg.prediction_file_type == "hdf5":
+        # Group image files if the prediction type is 'image'
+        if detected_file_type == "image":
+            # Save original total images count
+            total_input_images = total_images
+            group_size = 10000
+            grouped_files = (
+                [input_files]
+                if len(input_files) <= group_size
+                else [
+                    input_files[i : i + group_size] for i in range(0, len(input_files), group_size)
+                ]
+            )
+            # Create new input_files list with group file paths
+            tmp_dir = Path("tmp")
+            tmp_dir.mkdir(exist_ok=True)
+
+            input_files = []
+            for idx, group in enumerate(grouped_files):
+                path = tmp_dir / f"evaluate_all_images_grouped_{idx}.txt"
+                path.write_text("\n".join(group))
+                input_files.append(str(path))
+            num_files = len(input_files)
+            logger.debug(
+                f"Created {len(input_files)} group{'s' if len(input_files) != 1 else ''} "
+                f"for {total_input_images} images"
+            )
+
+        for file_idx, input_file in enumerate(input_files):  # Get number of images in current file
+            logger.debug(f"Processing file {file_idx + 1}/{num_files}: {input_file}")
+            if detected_file_type == "hdf5":
                 with h5py.File(input_file, "r") as h5f:
                     num_items = len(h5f["images"])
-            else:
-                num_items = 1
+            elif detected_file_type == "zarr":
+                try:
+                    root = zarr.open_group(input_file, mode="r")
+                    if "images" in root:
+                        num_items = root["images"].shape[0]
+                    else:
+                        logger.warning(f"No 'images' array found in Zarr file {input_file}")
+                        num_items = 0
+                except Exception as e:
+                    logger.error(f"Error reading Zarr file {input_file}: {e}")
+                    num_items = 0
+            else:  # image files
+                if input_file.endswith(".txt"):  # This is a group file
+                    with open(input_file, "r") as f:
+                        num_items = len(f.readlines())
+                else:
+                    num_items = 1
 
             # Calculate timing and progress
             elapsed_time = time.time() - start_time
@@ -564,14 +845,21 @@ class Session:
                     "Please ensure you have saved the model before running predictions."
                 )
 
-            temp_config_path = os.path.join("tmp", f"{self.cfg.save_file}_config.toml")
+            temp_config_path = os.path.join("tmp", f"{self.cfg.save_file}_config.pkl")
             # Make tmp folder if it doesn't exist
             os.makedirs("tmp", exist_ok=True)
-            with open(temp_config_path, "w") as f:
-                toml.dump(temp_config, f)
+
+            # Clear progress bar key from cfg is present since it is not pickle serializable
+            if "progress_bar" in temp_config:
+                del temp_config["progress_bar"]
+
+            # Save the config to a temporary file as pickle
+            with open(temp_config_path, "wb") as f:
+                pickle.dump(temp_config, f)
+            logger.debug(f"Temporary config saved to {temp_config_path}")
 
             # Run the prediction process script
-            self.run_pipeline(temp_config_path, input_file, top_N)
+            self.run_pipeline(temp_config_path, input_file, top_N, detected_file_type)
 
             # Load results and update UI
             output_csv_path = os.path.join(
@@ -587,14 +875,37 @@ class Session:
                 filenames = df["Filename"].values
                 self.filenames = np.array([os.path.basename(f) for f in filenames])
                 self.scores = df["Score"].values
-                self.img_catalog = np.load(output_npy_path).transpose(0, 2, 3, 1)
+
+                # Load images using consistent format handling (same as load_top_files)
+                imgs_data = np.load(output_npy_path)
+
+                # Check if images are already in HWC format or need transpose from CHW
+                if len(imgs_data.shape) == 4:
+                    if imgs_data.shape[1] <= 4 and imgs_data.shape[3] > 4:  # Likely CHW format
+                        logger.debug("Converting loaded images from CHW to HWC format")
+                        self.img_catalog = imgs_data.transpose(0, 2, 3, 1)
+                    else:  # Already in HWC format
+                        logger.debug("Images already in HWC format")
+                        self.img_catalog = imgs_data
+                else:
+                    # Handle unexpected formats gracefully
+                    logger.warning(f"Unexpected image shape: {imgs_data.shape}, using as-is")
+                    self.img_catalog = imgs_data
+
+                # Ensure images are uint8 for consistency with load_images.py processing
+                if self.img_catalog.dtype != np.uint8:
+                    logger.debug(f"Converting images from {self.img_catalog.dtype} to uint8")
+                    if self.img_catalog.max() <= 1.0:
+                        self.img_catalog = (self.img_catalog * 255.0).clip(0, 255).astype(np.uint8)
+                    else:
+                        self.img_catalog = self.img_catalog.clip(0, 255).astype(np.uint8)
 
                 # Update UI if available
                 if self.widget is not None:
                     self.widget.display_top_files_scores()
             else:
                 logger.error(
-                    "Output files not found. Prediction process might have failed. Please check logs in the folder <anomaly_match/logs>."  # noqa: E501
+                    "Output files not found. Prediction process might have failed. On Datalabs, the process may have exceeded the RAM allocation. Please check logs in the folder <anomaly_match/logs>."  # noqa: E501
                 )
 
             # Log statistics
@@ -635,13 +946,13 @@ class Session:
         else:
             logger.warning("No images were processed or processing time was too short")
 
-        logger.info(f"Processed {num_files} files with {self.cfg.prediction_file_type} format")
+        logger.info(f"Processed {num_files} files with {detected_file_type} format")
         logger.debug(f"Total images scored: {len(self.scores)}")
 
-    def load_top_files(self):
-        """Loads the top files from the output directory."""
-        output_csv_path = os.path.join(self.cfg.output_dir, "top1000.csv")
-        output_npy_path = os.path.join(self.cfg.output_dir, "top1000.npy")
+    def load_top_files(self, top_N):
+        """Loads the top files from the output directory using consistent image processing."""
+        output_csv_path = os.path.join(self.cfg.output_dir, f"{self.cfg.save_file}_top{top_N}.csv")
+        output_npy_path = os.path.join(self.cfg.output_dir, f"{self.cfg.save_file}_top{top_N}.npy")
 
         if os.path.exists(output_csv_path) and os.path.exists(output_npy_path):
             logger.info("Loading updated results from output files")
@@ -651,15 +962,38 @@ class Session:
             self.filenames = np.array([os.path.basename(f) for f in filenames])
             self.scores = df["Score"].values
 
+            # Load images using consistent format handling
             imgs_data = np.load(output_npy_path)
 
-            self.img_catalog = imgs_data.transpose(0, 2, 3, 1)
+            # Check if images are already in HWC format or need transpose from CHW
+            if len(imgs_data.shape) == 4:
+                if imgs_data.shape[1] <= 4 and imgs_data.shape[3] > 4:  # Likely CHW format
+                    logger.debug("Converting loaded images from CHW to HWC format")
+                    self.img_catalog = imgs_data.transpose(0, 2, 3, 1)
+                else:  # Already in HWC format
+                    logger.debug("Images already in HWC format")
+                    self.img_catalog = imgs_data
+            else:
+                # Handle unexpected formats gracefully
+                logger.warning(f"Unexpected image shape: {imgs_data.shape}, using as-is")
+                self.img_catalog = imgs_data
+
+            # Ensure images are uint8 for consistency with load_images.py processing
+            if self.img_catalog.dtype != np.uint8:
+                logger.debug(f"Converting images from {self.img_catalog.dtype} to uint8")
+                if self.img_catalog.max() <= 1.0:
+                    self.img_catalog = (self.img_catalog * 255.0).clip(0, 255).astype(np.uint8)
+                else:
+                    self.img_catalog = self.img_catalog.clip(0, 255).astype(np.uint8)
 
             logger.info(
                 f"Top {len(self.scores)} filenames and scores collected with mean,std"
                 + f" = {np.mean(self.scores)}, {np.std(self.scores)}"
             )
             logger.debug(f"In total scored {len(self.scores)} images")
+            logger.debug(
+                f"Image catalog shape: {self.img_catalog.shape}, dtype: {self.img_catalog.dtype}"
+            )
 
             # Call Widget's display_top_files_scores to update the UI
             if self.widget is not None:
@@ -671,3 +1005,78 @@ class Session:
                 + "output files from the folder anomaly_match_results to top1000.csv and top1000.npy."
                 + " (This is to avoid accidental overwriting of results)"
             )
+
+    def get_session_info(self):
+        """Get session information from the session tracker."""
+        return self.session_tracker.get_session_info()
+
+    def get_iteration_info(self, iteration_number=None):
+        """Get iteration information from the session tracker."""
+        return self.session_tracker.get_iteration_info(iteration_number)
+
+    def save_session(self):
+        """Save the complete session using SessionIOHandler."""
+        return self.session_io.save_session(self.session_tracker, cfg=self.cfg)
+
+    def _auto_detect_prediction_file_type(self, search_dir):
+        """Auto-detect prediction file type based on files in the directory."""
+        if not search_dir or not os.path.exists(search_dir):
+            logger.warning(
+                f"Search directory {search_dir} does not exist, defaulting to 'image' file type"
+            )
+            return "image"
+
+        # Define supported file extensions
+        extension_map = {
+            ".h5": "hdf5",
+            ".hdf5": "hdf5",
+            ".zarr": "zarr",
+            ".jpg": "image",
+            ".jpeg": "image",
+            ".png": "image",
+            ".tif": "image",
+            ".tiff": "image",
+            ".fits": "image",
+        }
+
+        # Count files by type
+        file_type_counts = {}
+        for filename in os.listdir(search_dir):
+            file_path = os.path.join(search_dir, filename)
+
+            # Check if it's a file with supported extension
+            if os.path.isfile(file_path):
+                _, ext = os.path.splitext(filename.lower())
+                if ext in extension_map:
+                    file_type = extension_map[ext]
+                    file_type_counts[file_type] = file_type_counts.get(file_type, 0) + 1
+
+            # Check if it's a zarr directory (zarr stores can be directories)
+            elif os.path.isdir(file_path):
+                if filename.lower().endswith(".zarr") or os.path.exists(
+                    os.path.join(file_path, "zarr.json")
+                ):
+                    file_type_counts["zarr"] = file_type_counts.get("zarr", 0) + 1
+
+        if not file_type_counts:
+            logger.warning(
+                f"No supported files found in {search_dir}, defaulting to 'image' file type"
+            )
+            return "image"
+
+        # Return the most common file type
+        detected_type = max(file_type_counts, key=file_type_counts.get)
+        logger.debug(
+            f"Auto-detected prediction file type: {detected_type} (found {file_type_counts[detected_type]} files)"
+        )
+
+        return detected_type
+
+    def _rebuild_label_cache(self):
+        """Rebuilds the label cache from active_learning_df for fast lookups."""
+        self._label_cache = {}
+        self._label_distribution_cache = None  # Invalidate distribution cache
+        self._active_learning_counts_cache = None  # Invalidate counts cache
+        if self.active_learning_df is not None and not self.active_learning_df.empty:
+            for _, row in self.active_learning_df.iterrows():
+                self._label_cache[row["filename"]] = row["label"]

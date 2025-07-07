@@ -3,16 +3,16 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import torch
 from torch.utils.data import sampler, DataLoader
 from torch.utils.data.sampler import BatchSampler, WeightedRandomSampler
-from torchvision import transforms
 import numpy as np
 
 from loguru import logger
 from .BasicDataset import BasicDataset
-from .StreamingDataset import StreamingDataset
+
+from anomaly_match.image_processing.transforms import get_prediction_transforms
 
 
 def get_prediction_dataloader(dset, batch_size=None, num_workers=4, pin_memory=True):
@@ -30,12 +30,7 @@ def get_prediction_dataloader(dset, batch_size=None, num_workers=4, pin_memory=T
     unlabeled, unlabeled_filenames = dset.unlabeled
 
     # Basic transform for prediction - just convert to tensor
-    transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            # transforms.Normalize(dset.mean, dset.std),  # Normalization disabled by default
-        ]
-    )
+    transform = get_prediction_transforms()
 
     # Create dataset with dummy labels (-1)
     ulb_dset = BasicDataset(
@@ -221,44 +216,3 @@ def get_data_loader(
             pin_memory=pin_memory,
             persistent_workers=True if num_workers > 0 else False,
         )
-
-
-def get_streaming_prediction_dataloader(
-    file_list, batch_size, mean, std, size, num_workers=0, pin_memory=False
-):
-    """Create a DataLoader for streaming predictions from files.
-
-    This is useful for making predictions on large datasets that don't fit in memory.
-    Files are loaded on demand by the StreamingDataset.
-
-    Args:
-        file_list: List of file paths to process
-        batch_size: Size of each batch
-        mean: Mean values for normalization (per channel)
-        std: Standard deviation values for normalization (per channel)
-        size: Target size for images (height, width)
-        num_workers: Number of subprocesses to use for data loading
-        pin_memory: If True, copy tensors into CUDA pinned memory
-
-    Returns:
-        DataLoader: PyTorch DataLoader for streaming prediction
-    """
-    # Basic transform for prediction
-    transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            # transforms.Normalize(mean, std),  # Normalization disabled by default
-        ]
-    )
-
-    # Create streaming dataset that loads files on demand
-    streaming_dataset = StreamingDataset(
-        file_list, size=size, mean=mean, std=std, transform=transform
-    )
-
-    return DataLoader(
-        streaming_dataset,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-    )

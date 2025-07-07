@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anomaly_match"
+version = "1.1.0"
+description = "A tool for anomaly detection in images using semi-supervised and active learning with a GUI"
+readme = "README.md"
+license = { file = "LICENSE.txt" }
+requires-python = ">=3.11"
+authors = [{ name = "European Space Agency" }]
+keywords = [
+    "anomaly-detection",
+    "machine-learning",
+    "computer-vision",
+    "active-learning",
+    "semi-supervised",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+
+dependencies = [
+    "albumentations",
+    "astropy",
+    "dotmap",
+    "efficientnet-pytorch",
+    "efficientnet_lite_pytorch",
+    "efficientnet_lite0_pytorch_model",
+    "h5py",
+    "ipykernel",
+    "ipywidgets",
+    "imageio",
+    "loguru",
+    "matplotlib",
+    "numpy",
+    "opencv-python-headless",
+    "pandas",
+    "pyturbojpeg",
+    "scikit-learn",
+    "scikit-image",
+    "toml",
+    "torch",
+    "tqdm",
+    "zarr>=3.0.0b0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "black", "flake8", "mypy"]
+
+[tool.setuptools]
+packages = ["anomaly_match"]
+
+[tool.setuptools.package-dir]
+"" = "."
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

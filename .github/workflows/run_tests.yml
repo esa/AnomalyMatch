@@ -3,7 +3,7 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 # This workflow will install Python dependencies, run tests and lint with a single version of Python
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
 name: Running tests
@@ -46,7 +46,7 @@ jobs:
           pip install flake8
           flake8 . --count --select=E9,F63,F7,F82,F541 --show-source --statistics --max-line-length=127
       - name: provision-with-micromamba
-        uses: mamba-org/setup-micromamba@v1
+        uses: mamba-org/setup-micromamba@v2
         with:
           environment-file: environment_CI.yml
           environment-name: am
@@ -54,14 +54,19 @@ jobs:
       - name: Test with pytest
         shell: bash -l {0}
         run: |
+          set -e
+          set -o pipefail
           micromamba activate am
           micromamba install pytest pytest-cov
-          pytest --junitxml=pytest.xml --cov-report=term-missing:skip-covered --cov=anomaly_match tests/ | tee pytest-coverage.txt
+          pytest --junitxml=pytest.xml --cov-report=xml:coverage.xml --cov-report=term --cov=anomaly_match tests/ | tee pytest-coverage.txt
+          echo "===== Coverage report ====="
+          cat pytest-coverage.txt      
       - name: Pytest coverage comment
         uses: MishaKav/pytest-coverage-comment@main
-        if: github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request'
         with:
           pytest-coverage-path: ./pytest-coverage.txt
+          pytest-xml-coverage-path: ./coverage.xml
           title: Coverage Report
           badge-title: Overall Coverage
           hide-badge: false

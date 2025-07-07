@@ -3,7 +3,7 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 #!/usr/bin/env python3
 # Disable flake8
 # flake8: noqa
@@ -12,11 +12,11 @@
 """
 Benchmark script for AnomalyMatch
 
-This script evaluates AnomalyMatch on prepared datasets (GalaxyMNIST or MiniImageNet)
+This script evaluates AnomalyMatch on prepared datasets (GalaxyMNIST, MiniImageNet, or GalaxyZoo)
 by running multiple training iterations with active learning feedback and measuring performance.
 
 Usage:
-    python paper_benchmark.py [--dataset {galaxymnist,miniimagenet}]
+    python paper_benchmark.py [--dataset {galaxymnist,miniimagenet,galaxyzoo}]
     [--anomaly_classes ANOMALY_CLASSES]
     [--n_samples N_SAMPLES] [--anomaly_ratio ANOMALY_RATIO]
     [--train_iterations TRAIN_ITERATIONS] [--n_mislabeled N_MISLABELED]
@@ -50,6 +50,10 @@ from paper_plots import (
     plot_combined_anomaly_detection,
     plot_comparative_anomaly_detection,
     plot_comparative_metrics,
+    plot_top_n_with_thresholds,
+    plot_roc_with_thresholds,
+    plot_astronomaly_comparison,
+    plot_score_vs_user_score_grid,
 )
 from paper_utils import (
     parse_arguments,
@@ -65,25 +69,21 @@ from paper_utils import (
     setup_mock_ui,
     collect_and_save_metrics,
 )
-
+from create_results import GALAXYZOO_THRESHOLDS
 import io
 import torch
 from PIL import Image
 import torchvision.transforms as transforms
-from anomaly_match.datasets.SSL_Dataset import get_transform
+from anomaly_match.image_processing.transforms import get_prediction_transforms
+
 from concurrent.futures import ThreadPoolExecutor
 import time
 
-# Try to import TurboJPEG for faster JPEG decoding
-try:
-    from turbojpeg import TurboJPEG
+from turbojpeg import TurboJPEG
 
-    jpeg_decoder = TurboJPEG()
-    USE_TURBOJPEG = True
-    logger.info("Using TurboJPEG for faster image decoding")
-except ImportError:
-    USE_TURBOJPEG = False
-    logger.info("TurboJPEG not available, using PIL for image decoding")
+jpeg_decoder = TurboJPEG()
+USE_TURBOJPEG = True
+logger.info("Using TurboJPEG for faster image decoding")
 
 
 def read_and_decode_image(image_data):
@@ -92,15 +92,14 @@ def read_and_decode_image(image_data):
         # Convert from vlen array back to bytes
         image_bytes = bytes(image_data)
 
-        # Use TurboJPEG if available (much faster for JPEGs)
-        if USE_TURBOJPEG:
-            try:
-                return jpeg_decoder.decode(image_bytes)
-            except Exception:
-                # Fall back to PIL if TurboJPEG fails
-                return np.array(Image.open(io.BytesIO(image_bytes)))
-        else:
-            # Standard PIL decoding
+        try:
+            image = jpeg_decoder.decode(image_bytes)
+            # TurboJPEG uses BGR format by default
+            # Convert BGR to RGB
+            image = image[:, :, [2, 1, 0]]
+            return np.array(image)
+        except Exception:
+            # Fall back to PIL if TurboJPEG fails
             return np.array(Image.open(io.BytesIO(image_bytes)))
     except Exception as e:
         logger.warning(f"Error decoding image: {e}")
@@ -145,7 +144,7 @@ def get_prediction_scores(session, labeled_filenames, hdf5_path, progress_bar=No
     model.eval()
 
     # Import the transform directly from the module - use evaluation transform (train=False)
-    transform = get_transform(train=False)
+    transform = get_prediction_transforms()
 
     # Number of worker threads for parallel processing
     num_workers = 1
@@ -392,7 +391,10 @@ def run_benchmark(args):
     logger.info("\n======= Evaluating baseline model before training =======")
     labeled_filenames = labeled_df["filename"].tolist()
     unlabeled_scores, unlabeled_filenames = get_prediction_scores(
-        session, labeled_filenames, hdf5_path, None if args.skip_mock_ui else progress_bar
+        session,
+        labeled_filenames,
+        hdf5_path,
+        None if args.skip_mock_ui else progress_bar,
     )
     # Assign filenames to session for later lookup
     session.filenames = np.array(unlabeled_filenames)
@@ -424,7 +426,10 @@ def run_benchmark(args):
 
     # Plot standard visualizations
     plot_score_histogram(
-        baseline_metrics["anomaly_scores"], baseline_metrics["normal_scores"], 0, baseline_plots_dir
+        baseline_metrics["anomaly_scores"],
+        baseline_metrics["normal_scores"],
+        0,
+        baseline_plots_dir,
     )
     plot_roc_prc_curves(baseline_metrics, 0, baseline_plots_dir)
     plot_top_mispredicted(
@@ -448,6 +453,39 @@ def run_benchmark(args):
     )
     detection_curves[0] = (x, y)
 
+    # Create GalaxyZoo specific plots for baseline if requested
+    if args.dataset == "galaxyzoo" and args.create_galaxy_plots:
+        logger.info("Creating GalaxyZoo specific baseline plots")
+        # Plot top-n detection with different thresholds
+        plot_top_n_with_thresholds(
+            unlabeled_scores,
+            unlabeled_filenames,
+            all_labels_df,
+            0,
+            baseline_plots_dir,
+            thresholds=GALAXYZOO_THRESHOLDS,
+        )
+        # Plot ROC curves with different thresholds
+        plot_roc_with_thresholds(
+            unlabeled_scores,
+            unlabeled_filenames,
+            all_labels_df,
+            args.anomaly_classes[0],
+            0,
+            baseline_plots_dir,
+            thresholds=GALAXYZOO_THRESHOLDS,
+        )
+        # Plot comparison with Astronomaly
+        plot_astronomaly_comparison(
+            unlabeled_scores,
+            unlabeled_filenames,
+            all_labels_df,
+            args.anomaly_classes[0],
+            0,
+            baseline_plots_dir,
+            thresholds=GALAXYZOO_THRESHOLDS,
+        )
+
     # Run training and evaluation loop
     for iteration in range(args.training_runs):
         # Create iteration-specific directory
@@ -465,12 +503,20 @@ def run_benchmark(args):
         # Save model after training
         model_save_path = os.path.join(model_dir, f"model_iter{iteration+1}.pth")
         iter_model_path = os.path.join(iter_dir, f"model.pth")
+        # session.session_tracker = None
+        session.cfg.model_path = model_save_path
         cfg.model_path = model_save_path
         session.save_model()
-
-        # Copy model to iteration-specific directory
+        # manually copy the model to the correct path
+        saved_session_path = session.session_io.get_session_save_path(session.session_tracker)
         import shutil
 
+        # Copy model to the main model directory with a fix in the output path
+        shutil.copy2(
+            os.path.join(saved_session_path, f"model_iteration_{iteration}.pth"), model_save_path
+        )
+
+        # Copy model to iteration-specific directory
         shutil.copy2(model_save_path, iter_model_path)
 
         logger.info(f"Model saved to {model_save_path}")
@@ -478,7 +524,10 @@ def run_benchmark(args):
         # Get prediction scores (filtering out already labeled samples)
         labeled_filenames = labeled_df["filename"].tolist()
         unlabeled_scores, unlabeled_filenames = get_prediction_scores(
-            session, labeled_filenames, hdf5_path, None if args.skip_mock_ui else progress_bar
+            session,
+            labeled_filenames,
+            hdf5_path,
+            None if args.skip_mock_ui else progress_bar,
         )
         # Update session.filenames for labeling corrections
         session.filenames = np.array(unlabeled_filenames)
@@ -486,7 +535,10 @@ def run_benchmark(args):
         # Evaluate performance
         logger.info("Evaluating model performance")
         metrics = evaluate_performance(
-            unlabeled_scores, unlabeled_filenames, all_labels_df, args.anomaly_classes[0]
+            unlabeled_scores,
+            unlabeled_filenames,
+            all_labels_df,
+            args.anomaly_classes[0],
         )
         metrics_history.append(metrics)
 
@@ -507,11 +559,17 @@ def run_benchmark(args):
         # Plot standard visualizations
         # Plot score histogram in iteration-specific directory
         plot_score_histogram(
-            metrics["anomaly_scores"], metrics["normal_scores"], iteration + 1, iter_plots_dir
+            metrics["anomaly_scores"],
+            metrics["normal_scores"],
+            iteration + 1,
+            iter_plots_dir,
         )
         # Also save to main plots directory for consistency
         plot_score_histogram(
-            metrics["anomaly_scores"], metrics["normal_scores"], iteration + 1, plots_dir
+            metrics["anomaly_scores"],
+            metrics["normal_scores"],
+            iteration + 1,
+            plots_dir,
         )
 
         # Plot ROC and PR curves in iteration-specific directory
@@ -559,6 +617,82 @@ def run_benchmark(args):
 
         # Save data for combined plot
         detection_curves[iteration + 1] = (x, y)
+
+        # Create GalaxyZoo specific plots if requested
+        if args.dataset == "galaxyzoo" and args.create_galaxy_plots:
+            logger.info("Creating GalaxyZoo specific plots")
+            # Plot top-n detection with different thresholds
+            plot_top_n_with_thresholds(
+                unlabeled_scores,
+                unlabeled_filenames,
+                all_labels_df,
+                iteration + 1,
+                iter_plots_dir,
+                thresholds=GALAXYZOO_THRESHOLDS,
+            )
+            plot_top_n_with_thresholds(
+                unlabeled_scores,
+                unlabeled_filenames,
+                all_labels_df,
+                iteration + 1,
+                plots_dir,
+                thresholds=GALAXYZOO_THRESHOLDS,
+            )
+            # Plot ROC curves with different thresholds
+            plot_roc_with_thresholds(
+                unlabeled_scores,
+                unlabeled_filenames,
+                all_labels_df,
+                args.anomaly_classes[0],
+                iteration + 1,
+                iter_plots_dir,
+                thresholds=GALAXYZOO_THRESHOLDS,
+            )
+            plot_roc_with_thresholds(
+                unlabeled_scores,
+                unlabeled_filenames,
+                all_labels_df,
+                args.anomaly_classes[0],
+                iteration + 1,
+                plots_dir,
+                thresholds=GALAXYZOO_THRESHOLDS,
+            )
+            # Plot comparison with Astronomaly
+            plot_astronomaly_comparison(
+                unlabeled_scores,
+                unlabeled_filenames,
+                all_labels_df,
+                args.anomaly_classes[0],
+                iteration + 1,
+                iter_plots_dir,
+                thresholds=GALAXYZOO_THRESHOLDS,
+            )
+            plot_astronomaly_comparison(
+                unlabeled_scores,
+                unlabeled_filenames,
+                all_labels_df,
+                args.anomaly_classes[0],
+                iteration + 1,
+                plots_dir,
+                thresholds=GALAXYZOO_THRESHOLDS,
+            )
+            # Plot score vs user score grid
+            plot_score_vs_user_score_grid(
+                unlabeled_scores,
+                unlabeled_filenames,
+                all_labels_df,
+                iteration + 1,
+                iter_plots_dir,
+                data_dir,
+            )
+            plot_score_vs_user_score_grid(
+                unlabeled_scores,
+                unlabeled_filenames,
+                all_labels_df,
+                iteration + 1,
+                plots_dir,
+                data_dir,
+            )
 
         # Get the filenames currently in the training dataset
         if (
@@ -791,7 +925,10 @@ def run_multi_class_benchmark(args):
         session.update_predictions()
         labeled_filenames = labeled_df["filename"].tolist()
         unlabeled_scores, unlabeled_filenames = get_prediction_scores(
-            session, labeled_filenames, hdf5_path, None if args.skip_mock_ui else progress_bar
+            session,
+            labeled_filenames,
+            hdf5_path,
+            None if args.skip_mock_ui else progress_bar,
         )
         # Assign filenames to session for later lookup
         session.filenames = np.array(unlabeled_filenames)
@@ -838,6 +975,48 @@ def run_multi_class_benchmark(args):
         )
         detection_curves[0] = (x, y)
 
+        # Create GalaxyZoo specific plots for baseline if requested
+        if args.dataset == "galaxyzoo" and args.create_galaxy_plots:
+            logger.info("Creating GalaxyZoo specific baseline plots")
+            # Plot top-n detection with different thresholds
+            plot_top_n_with_thresholds(
+                unlabeled_scores,
+                unlabeled_filenames,
+                all_labels_df,
+                0,
+                baseline_plots_dir,
+                thresholds=GALAXYZOO_THRESHOLDS,
+            )
+            # Plot ROC curves with different thresholds
+            plot_roc_with_thresholds(
+                unlabeled_scores,
+                unlabeled_filenames,
+                all_labels_df,
+                anomaly_class,
+                0,
+                baseline_plots_dir,
+                thresholds=GALAXYZOO_THRESHOLDS,
+            )
+            # Plot comparison with Astronomaly
+            plot_astronomaly_comparison(
+                unlabeled_scores,
+                unlabeled_filenames,
+                all_labels_df,
+                anomaly_class,
+                0,
+                baseline_plots_dir,
+                thresholds=GALAXYZOO_THRESHOLDS,
+            )
+            # Plot score vs user score grid
+            plot_score_vs_user_score_grid(
+                unlabeled_scores,
+                unlabeled_filenames,
+                all_labels_df,
+                0,
+                baseline_plots_dir,
+                data_dir,
+            )
+
         # Run training and evaluation loop
         for iteration in range(args.training_runs):
             # Create iteration-specific directory
@@ -855,12 +1034,21 @@ def run_multi_class_benchmark(args):
             # Save model after training
             model_save_path = os.path.join(model_dir, f"model_iter{iteration+1}.pth")
             iter_model_path = os.path.join(iter_dir, f"model.pth")
+            # session.session_tracker = None
+            session.cfg.model_path = model_save_path
             cfg.model_path = model_save_path
+            # manually copy model to correct path:
+            saved_session_path = session.session_io.get_session_save_path(session.session_tracker)
             session.save_model()
-
-            # Copy model to iteration-specific directory
             import shutil
 
+            # Copy model to the main model directory
+            shutil.copy2(
+                os.path.join(saved_session_path, f"model_iteration_{iteration}.pth"),
+                model_save_path,
+            )
+
+            # Copy model to iteration-specific directory
             shutil.copy2(model_save_path, iter_model_path)
 
             logger.info(f"Model saved to {model_save_path}")
@@ -868,7 +1056,10 @@ def run_multi_class_benchmark(args):
             # Get prediction scores (filtering out already labeled samples)
             labeled_filenames = labeled_df["filename"].tolist()
             unlabeled_scores, unlabeled_filenames = get_prediction_scores(
-                session, labeled_filenames, hdf5_path, None if args.skip_mock_ui else progress_bar
+                session,
+                labeled_filenames,
+                hdf5_path,
+                None if args.skip_mock_ui else progress_bar,
             )
             # Update session.filenames for labeling corrections
             session.filenames = np.array(unlabeled_filenames)
@@ -882,12 +1073,30 @@ def run_multi_class_benchmark(args):
 
             logger.info(f"AUROC: {metrics['auroc']:.4f}, AUPRC: {metrics['auprc']:.4f}")
 
+            # Log top percentile metrics
+            if "top_0.1pct_anomalies_found" in metrics:
+                logger.info(
+                    f"Iter {iteration+1} - Anomalies in top 0.1%: {metrics['top_0.1pct_anomalies_found']:.2f}%, "
+                    f"Precision: {metrics['top_0.1pct_precision']:.2f}%"
+                )
+            if "top_1.0pct_anomalies_found" in metrics:
+                logger.info(
+                    f"Iter {iteration+1} - Anomalies in top 1.0%: {metrics['top_1.0pct_anomalies_found']:.2f}%, "
+                    f"Precision: {metrics['top_1.0pct_precision']:.2f}%"
+                )
+
             # Plot standard visualizations
             plot_score_histogram(
-                metrics["anomaly_scores"], metrics["normal_scores"], iteration + 1, iter_plots_dir
+                metrics["anomaly_scores"],
+                metrics["normal_scores"],
+                iteration + 1,
+                iter_plots_dir,
             )
             plot_score_histogram(
-                metrics["anomaly_scores"], metrics["normal_scores"], iteration + 1, plots_dir
+                metrics["anomaly_scores"],
+                metrics["normal_scores"],
+                iteration + 1,
+                plots_dir,
             )
             plot_roc_prc_curves(metrics, iteration + 1, iter_plots_dir)
             plot_roc_prc_curves(metrics, iteration + 1, plots_dir)
@@ -931,6 +1140,82 @@ def run_multi_class_benchmark(args):
 
             # Save data for combined plot
             detection_curves[iteration + 1] = (x, y)
+
+            # Create GalaxyZoo specific plots if requested
+            if args.dataset == "galaxyzoo" and args.create_galaxy_plots:
+                logger.info("Creating GalaxyZoo specific plots")
+                # Plot top-n detection with different thresholds
+                plot_top_n_with_thresholds(
+                    unlabeled_scores,
+                    unlabeled_filenames,
+                    all_labels_df,
+                    iteration + 1,
+                    iter_plots_dir,
+                    thresholds=GALAXYZOO_THRESHOLDS,
+                )
+                plot_top_n_with_thresholds(
+                    unlabeled_scores,
+                    unlabeled_filenames,
+                    all_labels_df,
+                    iteration + 1,
+                    plots_dir,
+                    thresholds=GALAXYZOO_THRESHOLDS,
+                )
+                # Plot ROC curves with different thresholds
+                plot_roc_with_thresholds(
+                    unlabeled_scores,
+                    unlabeled_filenames,
+                    all_labels_df,
+                    anomaly_class,
+                    iteration + 1,
+                    iter_plots_dir,
+                    thresholds=GALAXYZOO_THRESHOLDS,
+                )
+                plot_roc_with_thresholds(
+                    unlabeled_scores,
+                    unlabeled_filenames,
+                    all_labels_df,
+                    anomaly_class,
+                    iteration + 1,
+                    plots_dir,
+                    thresholds=GALAXYZOO_THRESHOLDS,
+                )
+                # Plot comparison with Astronomaly
+                plot_astronomaly_comparison(
+                    unlabeled_scores,
+                    unlabeled_filenames,
+                    all_labels_df,
+                    anomaly_class,
+                    iteration + 1,
+                    iter_plots_dir,
+                    thresholds=GALAXYZOO_THRESHOLDS,
+                )
+                plot_astronomaly_comparison(
+                    unlabeled_scores,
+                    unlabeled_filenames,
+                    all_labels_df,
+                    anomaly_class,
+                    iteration + 1,
+                    plots_dir,
+                    thresholds=GALAXYZOO_THRESHOLDS,
+                )
+                # Plot score vs user score grid
+                plot_score_vs_user_score_grid(
+                    unlabeled_scores,
+                    unlabeled_filenames,
+                    all_labels_df,
+                    iteration + 1,
+                    iter_plots_dir,
+                    data_dir,
+                )
+                plot_score_vs_user_score_grid(
+                    unlabeled_scores,
+                    unlabeled_filenames,
+                    all_labels_df,
+                    iteration + 1,
+                    plots_dir,
+                    data_dir,
+                )
 
             # Get the filenames currently in the training dataset
             if (

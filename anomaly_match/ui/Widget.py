@@ -3,7 +3,7 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import os
 import numpy as np
 from ipywidgets import HBox
@@ -15,10 +15,20 @@ from sklearn.metrics import roc_curve
 import time
 import datetime
 
+from skimage.util import img_as_ubyte
+
 # Import the newly created UI elements
-from anomaly_match.ui.ui_elements import create_ui_elements, attach_click_listeners, HTML_setup
-from anomaly_match.ui.utility_functions import apply_transforms
+from anomaly_match.ui.ui_elements import (
+    create_ui_elements,
+    attach_click_listeners,
+    HTML_setup,
+)
+from anomaly_match.image_processing.display_transforms import (
+    apply_transforms_ui,
+    display_image_normalisation,
+)
 from anomaly_match.utils.numpy_to_byte_stream import numpy_array_to_byte_stream
+from anomaly_match.data_io.load_images import read_and_resize_image
 
 
 class Widget:
@@ -61,6 +71,9 @@ class Widget:
 
         # Sync initial batch slider value with session config
         self.ui["batch_size_slider"].value = self.cfg.N_to_load
+
+        # Set initial normalization dropdown value from session cached value
+        self.ui["normalisation_dropdown"].value = session.cached_image_normalisation_enum
 
         # Attach all click listeners / slider observers
         attach_click_listeners(self)
@@ -114,7 +127,7 @@ class Widget:
         return HBox([main_layout, side_display])
 
     def search_all_files(self):
-        """Searches all files and displays the top 1000 with their scores."""
+        """Searches all files and displays the top N with their scores."""
         with self.ui["out"]:
             self.session.cfg.N_to_load = self.ui["batch_size_slider"].value
             logger.debug(
@@ -152,7 +165,7 @@ class Widget:
                     if batch_update:
                         if eta_str:
                             # Use the ETA info provided by session.py
-                            message = f"Searching files... Batch: {batch}/{num_batches}"
+                            message = f"Evaluating files... Batch: {batch}/{num_batches}"
                             if progress_percent is not None:
                                 message += f" ({progress_percent:.1f}%)"
                             if images_per_second is not None:
@@ -162,7 +175,7 @@ class Widget:
                         else:
                             # Early in the process when ETA isn't available yet
                             self.ui["train_label"].value = (
-                                f"Searching files... Batch: {batch}/{num_batches}"
+                                f"Evaluating files... Batch: {batch}/{num_batches}"
                             )
                     else:
                         # Regular evaluation updates (not used in this function but keeping for completeness)
@@ -173,7 +186,21 @@ class Widget:
                         else:
                             self.ui["train_label"].value = f"Evaluating... {batch}/{num_batches}"
 
-            self.session.evaluate_all_images(top_N=5000, progress_callback=update_progress)
+            self.session.evaluate_all_images(
+                top_N=self.cfg.top_N, progress_callback=update_progress
+            )
+            # update models last_normalisation_method only after successful eval
+            if self.session.model.last_normalisation_method is None:
+                self.session.model.last_normalisation_method = self.session.cfg.normalisation_method
+            elif (
+                self.session.model.last_normalisation_method
+                != self.session.cfg.normalisation_method
+            ):
+                logger.warning(
+                    f"Evaluated with a new normalisation {self.session.cfg.normalisation_method.name} method "
+                    + f"not previously used with the model: {self.session.model.last_normalisation_method.name}"
+                )
+                self.session.model.last_normalisation_method = self.session.cfg.normalisation_method
 
             # Display will be updated by the callback when completed
             self.display_top_files_scores()
@@ -188,19 +215,38 @@ class Widget:
 
     def update_image_display(self):
         """Updates the display of the current image."""
-        img = self.session.img_catalog[self.current_index]
+
         filename = self.session.filenames[self.current_index]
         score = self.session.scores[self.current_index]
+        if self.session.cfg.normalisation_method != self.session.cached_image_normalisation_enum:
+            try:
+                logger.debug(
+                    f"Re-Loading image from {filename} with norm {self.session.cfg.normalisation_method}"
+                )
 
-        # Normalize the image array to 0-1 range, then to 255
-        img = img - np.min(img)
-        img = img / np.max(img)
-        img = (img * 255).astype(np.uint8)
-        if img.shape[-1] == 1:  # Convert grayscale to RGB if necessary
-            img = np.repeat(img, 3, axis=-1)
+                # Load the image using the centralized function
+                filepath = os.path.join(self.session.cfg.data_dir, filename)
 
-        self.original_image = Image.fromarray(img)
-        self.modified_image = apply_transforms(
+                img = read_and_resize_image(
+                    filepath,
+                    cfg=self.session.cfg,
+                    convert_to_rgb=True,
+                )
+
+                # Normalise the image array to 0-1 range, then to 255 and convert to PIL Image
+                self.original_image = display_image_normalisation(img)
+            except Exception as e:
+                logger.error(f"Error loading image {filepath}: {e}")
+                return
+        # If no reload is necessary, use cached images
+        else:
+            img = self.session.img_catalog[self.current_index]
+
+            # Normalise the image array to 0-1 range, then to 255 and convert to PIL Image
+            self.original_image = display_image_normalisation(img)
+
+        # Apply other transforms
+        self.modified_image = apply_transforms_ui(
             self.original_image,
             invert=self.invert,
             brightness=self.brightness,
@@ -210,6 +256,7 @@ class Widget:
             show_g=self.show_g,
             show_b=self.show_b,
         )
+
         self.display_image(self.modified_image, filename, score)
 
     def display_image(self, img, filename=None, score=None):
@@ -230,13 +277,39 @@ class Widget:
             label_color = "green"
             label_text = "Nominal"
 
+        # Get counts for anomalies and nominal samples
+        normal_count, anomalous_count = self.session.get_label_distribution()
+
+        # Calculate newly annotated samples (those in active_learning_df) using cached method
+        new_nominal, new_anomalous = self.session.get_active_learning_counts()
+
+        # Format the file name (shortened version)
         fname = self.session.filenames[self.current_index]
+        fname_short = os.path.basename(fname)  # Just show filename without path
+        # Shorten the filename if it's too long
+        if len(fname_short) > 32:
+            fname_short = fname_short[:15] + "..." + fname_short[-14:]
         sc = self.session.scores[self.current_index]
         total_len = len(self.session.img_catalog) - 1
+
         self.ui["filename_text"].value = (
-            f'<span style="color:white">'
-            f"Filename: {fname} | Score: {sc:.4f} | Index: {self.current_index} / {total_len}"
-            f'</span> | <span style="color:{label_color}">Label: {label_text}</span>'
+            # first line ─ Name left, Score & Index right
+            f'<span style="color:white;">'
+            f"Name: {fname_short}"
+            f"</span>"
+            f'<span style="float:right; text-align:right; color:white;">'
+            f"Score: {sc:.2f} | Index: {self.current_index}/{total_len}"
+            f"</span>"
+            # clear the float so the next line starts cleanly
+            f'<br style="clear:both;">'
+            # second line ─ Label left, overall stats right
+            f'<span style="color:white">Label: </span>'
+            f'<span style="color:{label_color}">{label_text}</span>'
+            # right-aligned block
+            f'<span style="float:right; text-align:right;">'
+            f'<span style="color:red">Anomalies: {anomalous_count}(+{new_anomalous})</span> | '
+            f'<span style="color:green">Nominal: {normal_count}(+{new_nominal})</span>'
+            f"</span>"
         )
 
     # ======== Sorting Methods ========
@@ -297,24 +370,30 @@ class Widget:
     def toggle_invert_image(self):
         """Toggles the inversion of the current image."""
         self.invert = not self.invert
-        self.modified_image = apply_transforms(
+        self.modified_image = apply_transforms_ui(
             self.original_image,
             invert=self.invert,
             brightness=self.brightness,
             contrast=self.contrast,
             unsharp_mask_applied=self.unsharp_mask_applied,
+            show_r=self.show_r,
+            show_g=self.show_g,
+            show_b=self.show_b,
         )
         self.display_image(self.modified_image)
 
     def toggle_unsharp_mask(self):
         """Toggles the application of an unsharp mask."""
         self.unsharp_mask_applied = not self.unsharp_mask_applied
-        self.modified_image = apply_transforms(
+        self.modified_image = apply_transforms_ui(
             self.original_image,
             invert=self.invert,
             brightness=self.brightness,
             contrast=self.contrast,
             unsharp_mask_applied=self.unsharp_mask_applied,
+            show_r=self.show_r,
+            show_g=self.show_g,
+            show_b=self.show_b,
         )
         self.display_image(self.modified_image)
 
@@ -322,12 +401,15 @@ class Widget:
         """Adjusts brightness and contrast of the current image."""
         self.brightness = self.ui["brightness_slider"].value
         self.contrast = self.ui["contrast_slider"].value
-        self.modified_image = apply_transforms(
+        self.modified_image = apply_transforms_ui(
             self.original_image,
             invert=self.invert,
             brightness=self.brightness,
             contrast=self.contrast,
             unsharp_mask_applied=self.unsharp_mask_applied,
+            show_r=self.show_r,
+            show_g=self.show_g,
+            show_b=self.show_b,
         )
         self.display_image(self.modified_image)
 
@@ -335,158 +417,163 @@ class Widget:
         """Displays a small gallery of either mispredicted or top anomalous/nominal images."""
         with self.ui["gallery"]:
             self.ui["gallery"].clear_output(wait=True)
+            try:
+                if self.cfg.test_ratio > 0:
 
-            if self.cfg.test_ratio > 0:
+                    # Show mispredicted images
+                    mispredicted_images = []
+                    image_text = []
 
-                # Show mispredicted images
-                mispredicted_images = []
-                image_text = []
+                    # First collect all filenames we want to display
+                    display_files = []
+                    for filename, (pred, label) in self.session.eval_performance[
+                        "eval/predictions_and_labels"
+                    ].items():
+                        pred, label = pred.item(), label.item()
+                        if pred != label:
+                            display_files.append((filename, pred, label))
 
-                # First collect all filenames we want to display
-                display_files = []
-                for filename, (pred, label) in self.session.eval_performance[
-                    "eval/predictions_and_labels"
-                ].items():
-                    pred, label = pred.item(), label.item()
-                    if pred != label:
-                        display_files.append((filename, pred, label))
+                    # Limit to top 10
+                    display_files = display_files[:10]
 
-                # Limit to top 10
-                display_files = display_files[:10]
-
-                # Load images one at a time using context manager
-                for filename, pred, label in display_files:
-                    path = os.path.join(self.cfg.data_dir, filename)
-                    if os.path.exists(path):
-                        try:
-                            with Image.open(path) as img:
-                                # Convert to RGB and make a copy in memory
-                                if img.mode != "RGB":
-                                    img = img.convert("RGB")
-                                img_array = np.array(img)
+                    # Load images one at a time using context manager
+                    for filename, pred, label in display_files:
+                        path = os.path.join(self.cfg.data_dir, filename)
+                        if os.path.exists(path):
+                            try:
+                                img_array = read_and_resize_image(
+                                    path, cfg=self.session.cfg, convert_to_rgb=True
+                                )
+                                img = Image.fromarray(img_array)
                                 mispredicted_images.append(img_array)
                                 image_text.append(
                                     f"{filename}\nPred: {pred:.2f} | Label: {label:.2f}"
                                 )
-                        except Exception as e:
-                            print(f"Error loading {filename}: {e}")
-                            continue
 
-                num_images = len(mispredicted_images)
-                if num_images > 0:
-                    plt.figure(figsize=(12, 4), facecolor="black")
-                    eval_perf = self.session.eval_performance
+                            except Exception as e:
+                                print(f"Error loading {filename}: {e}")
+                                continue
+
+                    num_images = len(mispredicted_images)
+                    if num_images > 0:
+                        plt.figure(figsize=(12, 4), facecolor="black")
+                        eval_perf = self.session.eval_performance
+                        plt.suptitle(
+                            f"Top {num_images} Mispredicted Test Images | "
+                            f"Acc: {eval_perf['eval/top-1-acc'] * 100:.1f}% | "
+                            f"AUROC: {eval_perf['eval/auroc']:.3f} | "
+                            f"AUPRC: {eval_perf['eval/auprc']:.3f}",
+                            fontsize=12,
+                            color="white",
+                        )
+
+                        for i, img in enumerate(mispredicted_images):
+                            ax = plt.subplot(2, 5, i + 1)
+                            plt.imshow(img)
+                            plt.title(image_text[i], fontsize=8, color="white")
+                            plt.axis("off")
+                            ax.set_facecolor("black")
+
+                        plt.tight_layout(pad=1.0)
+                        plt.show()
+                        plt.close()
+
+                        # Create separate figure for ROC and PRC curves
+                        plt.figure(figsize=(10, 4), facecolor="black")
+
+                        # Plot ROC curve
+                        ax1 = plt.subplot(1, 2, 1)
+                        labels, probs = eval_perf["eval/roc_data"]
+                        fpr, tpr, _ = roc_curve(labels, probs)
+                        ax1.plot(fpr, tpr, "b-", label=f'ROC (AUC={eval_perf["eval/auroc"]:.3f})')
+                        ax1.plot([0, 1], [0, 1], "r--")
+                        ax1.set_title("ROC Curve", color="white")
+                        ax1.grid(True, alpha=0.3)
+                        ax1.set_xlabel("False Positive Rate", color="white")
+                        ax1.set_ylabel("True Positive Rate", color="white")
+                        ax1.tick_params(colors="white")
+                        ax1.legend(loc="lower right", facecolor="black", labelcolor="white")
+                        ax1.set_facecolor("black")
+
+                        # Plot PRC curve
+                        ax2 = plt.subplot(1, 2, 2)
+                        precision, recall = eval_perf["eval/precision_recall"]
+                        ax2.plot(
+                            recall,
+                            precision,
+                            "g-",
+                            label=f'PRC (AUC={eval_perf["eval/auprc"]:.3f})',
+                        )
+                        ax2.set_title("Precision-Recall Curve", color="white")
+                        ax2.grid(True, alpha=0.3)
+                        ax2.set_xlabel("Recall", color="white")
+                        ax2.set_ylabel("Precision", color="white")
+                        ax2.tick_params(colors="white")
+                        ax2.legend(loc="lower left", facecolor="black", labelcolor="white")
+                        ax2.set_facecolor("black")
+
+                        plt.tight_layout(pad=2.0)
+                        plt.show()
+                        plt.close()
+
+                else:
+                    # Show top 5 anomalous & top 5 nominal
+                    scores = self.session.scores
+                    indices = np.argsort(scores)
+                    num_images_to_display = min(5, len(scores) // 2)
+
+                    top_nominal_indices = indices[:num_images_to_display]
+                    top_anomalous_indices = indices[-num_images_to_display:][::-1]
+
+                    images = []
+                    image_text = []
+
+                    for idx in top_anomalous_indices:
+                        img_arr = self.session.img_catalog[idx]
+                        img_arr = img_arr - np.min(img_arr)
+                        img_arr = img_arr / np.max(img_arr)
+                        img_arr = img_as_ubyte(img_arr)
+                        if img_arr.shape[-1] == 1:
+                            img_arr = np.repeat(img_arr, 3, axis=-1)
+                        pil_img = Image.fromarray(img_arr)
+                        images.append(pil_img)
+                        filename = self.session.filenames[idx]
+                        score = scores[idx]
+                        image_text.append(f"{filename}\nScore: {score:.4f}")
+
+                    for idx in top_nominal_indices:
+                        img_arr = self.session.img_catalog[idx]
+                        img_arr = img_arr - np.min(img_arr)
+                        img_arr = img_arr / np.max(img_arr)
+                        img_arr = img_as_ubyte(img_arr)
+                        if img_arr.shape[-1] == 1:
+                            img_arr = np.repeat(img_arr, 3, axis=-1)
+                        pil_img = Image.fromarray(img_arr)
+                        images.append(pil_img)
+                        filename = self.session.filenames[idx]
+                        score = scores[idx]
+                        image_text.append(f"{filename}\nScore: {score:.4f}")
+
+                    num_images = len(images)
+                    plt.figure(figsize=(12, 6), facecolor="black")
                     plt.suptitle(
-                        f"Top {num_images} Mispredicted Test Images | "
-                        f"Acc: {eval_perf['eval/top-1-acc'] * 100:.1f}% | "
-                        f"AUROC: {eval_perf['eval/auroc']:.3f} | "
-                        f"AUPRC: {eval_perf['eval/auprc']:.3f}",
+                        f"Top {len(top_anomalous_indices)} Anomalous and "
+                        f"Top {len(top_nominal_indices)} Nominal Images",
                         fontsize=12,
                         color="white",
                     )
 
-                    for i, img in enumerate(mispredicted_images):
+                    for i, im in enumerate(images):
                         ax = plt.subplot(2, 5, i + 1)
-                        plt.imshow(img)
+                        plt.imshow(im)
                         plt.title(image_text[i], fontsize=8, color="white")
                         plt.axis("off")
                         ax.set_facecolor("black")
 
                     plt.tight_layout(pad=1.0)
                     plt.show()
-                    plt.close()
-
-                    # Create separate figure for ROC and PRC curves
-                    plt.figure(figsize=(10, 4), facecolor="black")
-
-                    # Plot ROC curve
-                    ax1 = plt.subplot(1, 2, 1)
-                    labels, probs = eval_perf["eval/roc_data"]
-                    fpr, tpr, _ = roc_curve(labels, probs)
-                    ax1.plot(fpr, tpr, "b-", label=f'ROC (AUC={eval_perf["eval/auroc"]:.3f})')
-                    ax1.plot([0, 1], [0, 1], "r--")
-                    ax1.set_title("ROC Curve", color="white")
-                    ax1.grid(True, alpha=0.3)
-                    ax1.set_xlabel("False Positive Rate", color="white")
-                    ax1.set_ylabel("True Positive Rate", color="white")
-                    ax1.tick_params(colors="white")
-                    ax1.legend(loc="lower right", facecolor="black", labelcolor="white")
-                    ax1.set_facecolor("black")
-
-                    # Plot PRC curve
-                    ax2 = plt.subplot(1, 2, 2)
-                    precision, recall = eval_perf["eval/precision_recall"]
-                    ax2.plot(
-                        recall, precision, "g-", label=f'PRC (AUC={eval_perf["eval/auprc"]:.3f})'
-                    )
-                    ax2.set_title("Precision-Recall Curve", color="white")
-                    ax2.grid(True, alpha=0.3)
-                    ax2.set_xlabel("Recall", color="white")
-                    ax2.set_ylabel("Precision", color="white")
-                    ax2.tick_params(colors="white")
-                    ax2.legend(loc="lower left", facecolor="black", labelcolor="white")
-                    ax2.set_facecolor("black")
-
-                    plt.tight_layout(pad=2.0)
-                    plt.show()
-                    plt.close()
-
-            else:
-                # Show top 5 anomalous & top 5 nominal
-                scores = self.session.scores
-                indices = np.argsort(scores)
-                num_images_to_display = min(5, len(scores) // 2)
-
-                top_nominal_indices = indices[:num_images_to_display]
-                top_anomalous_indices = indices[-num_images_to_display:][::-1]
-
-                images = []
-                image_text = []
-
-                for idx in top_anomalous_indices:
-                    img_arr = self.session.img_catalog[idx]
-                    img_arr = img_arr - np.min(img_arr)
-                    img_arr = img_arr / np.max(img_arr)
-                    img_arr = (img_arr * 255).astype(np.uint8)
-                    if img_arr.shape[-1] == 1:
-                        img_arr = np.repeat(img_arr, 3, axis=-1)
-                    pil_img = Image.fromarray(img_arr)
-                    images.append(pil_img)
-                    filename = self.session.filenames[idx]
-                    score = scores[idx]
-                    image_text.append(f"{filename}\nScore: {score:.4f}")
-
-                for idx in top_nominal_indices:
-                    img_arr = self.session.img_catalog[idx]
-                    img_arr = img_arr - np.min(img_arr)
-                    img_arr = img_arr / np.max(img_arr)
-                    img_arr = (img_arr * 255).astype(np.uint8)
-                    if img_arr.shape[-1] == 1:
-                        img_arr = np.repeat(img_arr, 3, axis=-1)
-                    pil_img = Image.fromarray(img_arr)
-                    images.append(pil_img)
-                    filename = self.session.filenames[idx]
-                    score = scores[idx]
-                    image_text.append(f"{filename}\nScore: {score:.4f}")
-
-                num_images = len(images)
-                plt.figure(figsize=(12, 6), facecolor="black")
-                plt.suptitle(
-                    f"Top {len(top_anomalous_indices)} Anomalous and "
-                    f"Top {len(top_nominal_indices)} Nominal Images",
-                    fontsize=12,
-                    color="white",
-                )
-
-                for i, im in enumerate(images):
-                    ax = plt.subplot(2, 5, i + 1)
-                    plt.imshow(im)
-                    plt.title(image_text[i], fontsize=8, color="white")
-                    plt.axis("off")
-                    ax.set_facecolor("black")
-
-                plt.tight_layout(pad=1.0)
-                plt.show()
+            except Exception as e:
+                logger.error(f"Error displaying gallery: {e}")
 
     def save_labels(self):
         self.session.save_labels()
@@ -501,11 +588,29 @@ class Widget:
 
     def load_model(self):
         """Loads the model using the session."""
+        with self.ui["out"]:
+            logger.debug(f"Loading model, cfg norm: {self.session.cfg.normalisation_method}, ")
         self.session.load_model()
+
+        # Update the normalization dropdown to match the session's method
+        self.ui["normalisation_dropdown"].value = self.session.cfg.normalisation_method
+
+        with self.ui["out"]:
+            logger.debug(
+                f"Loaded model, cfg norm: {self.session.cfg.normalisation_method},"
+                + f" model norm: {self.session.model.last_normalisation_method}"
+            )
         self.update()
 
     def train(self):
         """Starts the training process."""
+
+        with self.ui["out"]:
+            logger.debug(
+                f"Session norm: {self.session.cached_image_normalisation_enum}, "
+                f"selected norm: {self.session.cfg.normalisation_method}"
+            )
+
         with self.ui["out"]:
             logger.debug("Starting training...")
             self.ui["progress_bar"].style = {"bar_color": "blue"}
@@ -561,6 +666,19 @@ class Widget:
                     last_iteration = iteration
 
             self.session.train(self.cfg, progress_callback=update_training_progress)
+
+            # update models last_normalisation_method after successful training
+            if self.session.model.last_normalisation_method is None:
+                self.session.model.last_normalisation_method = self.session.cfg.normalisation_method
+            elif (
+                self.session.model.last_normalisation_method
+                != self.session.cfg.normalisation_method
+            ):
+                logger.warning(
+                    f"Trained with a new normalisation {self.session.cfg.normalisation_method.name} method "
+                    + f"not previously used with the model: {self.session.model.last_normalisation_method.name}"
+                )
+                self.session.model.last_normalisation_method = self.session.cfg.normalisation_method
 
             # Calculate total time taken
             total_time = time.time() - start_time
@@ -621,7 +739,7 @@ class Widget:
     def load_top_files(self):
         """Loads the top files and updates the display."""
         with self.ui["out"]:
-            self.session.load_top_files()
+            self.session.load_top_files(self.cfg.top_N)
             self.display_top_files_scores()
 
     # Add channel toggle methods
@@ -639,3 +757,17 @@ class Widget:
         """Toggles the blue channel on/off."""
         self.show_b = change["new"]
         self.update_image_display()
+
+    def select_normalisation(self, change):
+        """Updates the normalization method when dropdown selection changes."""
+        new_value = change["new"]
+        if new_value != self.cfg.normalisation_method:
+            self.session.set_normalisation_method(new_value)
+            self.update_image_display()
+
+    def unlabel_current_image(self):
+        """Removes the label from the currently displayed image."""
+        # Call session's unlabel_image method
+        self.session.unlabel_image(self.current_index)
+        # Update the UI to reflect the change
+        self.update_image_UI_label()

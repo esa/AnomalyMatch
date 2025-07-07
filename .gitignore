@@ -3,7 +3,7 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -175,6 +175,7 @@ my_notebooks
 tests/test_data/dataset_64x64.hdf5
 *.hdf5
 out
+anomaly_match_results
 tmp
 search_dir
 datalabs_setup/secrets.env
@@ -184,3 +185,12 @@ paper_scripts/figures
 test_notebook.ipynb
 benchmark_results
 paper_scripts/test_plots_output
+#Ignore images file in paper_scripts folder and its subfolders
+paper_scripts/**/*.png
+paper_scripts/**/*.jpg
+paper_scripts/**/*.jpeg
+science_paper/**/*.png
+science_paper/**/*.jpg
+science_paper/**/*.jpeg
+pytest-coverage.txt
+pytest.xml

@@ -3,28 +3,53 @@
 [//]: # (This file is subject to the terms and conditions defined in file 'LICENCE.txt', which)
 [//]: # (is part of this source code package. No part of the package, including)
 [//]: # (this file, may be copied, modified, propagated, or distributed except according to)
-[//]: # (the terms contained in the file ‘LICENCE.txt’.)
-[![License: ESA permissive](https://img.shields.io/badge/ESA%20Public%20License-Permissive-blue.svg)](https://github.com/esa/AnomalyMatch/blob/main/LICENSE.txt)
-
-
+[//]: # (the terms contained in the file 'LICENCE.txt'.)
 # AnomalyMatch
-Semi-supervised anomaly detection with active learning
+High-performance semi-supervised anomaly detection with active learning
+
+![Demo search of Hubble Legacy Archive cutouts](resources/demo.gif)
+
+## Table of Contents
+- [AnomalyMatch](#anomalymatch)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Requirements](#requirements)
+  - [Installation](#installation)
+  - [Session Tracking](#session-tracking)
+  - [Recommended Folder Structure](#recommended-folder-structure)
+  - [Supported File Formats](#supported-file-formats)
+    - [Zarr File Support](#zarr-file-support)
+      - [Zarr File Requirements](#zarr-file-requirements)
+      - [Creating Zarr Files](#creating-zarr-files)
+      - [Zarr Configuration](#zarr-configuration)
+    - [FITS File Handling](#fits-file-handling)
+  - [Normalisation and Stretching](#normalisation-and-stretching)
+  - [Key Config Parameters](#key-config-parameters)
+  - [Advanced CFG Parameters](#advanced-cfg-parameters)
+    - [FixMatch Parameters](#fixmatch-parameters)
+    - [Training Parameters](#training-parameters)
+    - [Additional Parameters](#additional-parameters)
+  - [Acknowledgements](#acknowledgements)
 
 ## Overview
-This package uses a FixMatch pipeline built on EfficientNet models and provides a mechanism
-for active learning to detect anomalies in images. It also offers a GUI via ipywidgets for labeling and managing the detection process.
+<img src="resources/datalabs_icon.jpeg" align="right" width="150"/>
 
-![Placeholder for the app demo GIF](demo.gif)
+This package uses a FixMatch pipeline built on EfficientNet models and provides a mechanism
+for active learning to detect anomalies in images. It also offers a GUI via ipywidgets for labelling and managing the detection process, including the ability to unlabel previously labelled images.
+
+AnomalyMatch is available plug-and-play on GPUs in [ESA Datalabs](https://datalabs.esa.int/), providing seamless access to high-performance computing resources for large-scale anomaly detection tasks.
+
+For detailed information about the method and its applications, see our papers:
+- [AnomalyMatch: Discovering Rare Objects of Interest with Semi-supervised and Active Learning](https://arxiv.org/abs/2505.03509) - describing the method in detail
+- [Identifying Astrophysical Anomalies in 99.6 Million Cutouts from the Hubble Legacy Archive Using AnomalyMatch](https://arxiv.org/abs/2505.03508) - describing a scaled-up search through 100M cutouts European Space Agency, 2025.)
 
 ## Requirements
 Dependencies are listed in the `environment.yml` file. To leverage the full capabilities of 
 this package (especially training on large images or predicting over large image datasets), a GPU is strongly recommended.
-Use with Jupyter notebooks is recommended (see StarterNotebook.ipynb) since the UI 
+Use with Jupyter notebooks is recommended (see [StarterNotebook.ipynb](StarterNotebook.ipynb)) since the UI 
 relies on ipywidgets.
 
 ## Installation
-
-### For Users
 
 ```bash
 # Clone the repository
@@ -35,57 +60,161 @@ cd AnomalyMatch
 conda env create -f environment.yml
 conda activate am
 
-# Install the package
+# Install the package (use -e for development mode)
 pip install .
 ```
 
-### For Developers
+After installation, you can start using AnomalyMatch in your Jupyter notebooks. See [`StarterNotebook.ipynb`](StarterNotebook.ipynb) for an example.
 
-```bash
-# Clone the repository
-git clone https://github.com/ESA/AnomalyMatch.git
-cd AnomalyMatch
+## Session Tracking
 
-# Create and activate conda environment
-conda env create -f environment.yml
-conda activate am
+AnomalyMatch automatically tracks comprehensive session information including training iterations, model checkpoints, labelled samples, and performance metrics. All session data is saved in organised directories under `anomaly_match_results/sessions/` with the structure:
 
-# Install in development mode
-pip install -e .
+```
+session_name_timestamp/
+├── session_metadata.json    # Complete session tracking data
+├── labeled_data.csv         # All labelled samples
+├── config.toml              # Final configuration
+└── model.pth                # Model checkpoint
 ```
 
-After installation, you can start using AnomalyMatch in your Jupyter notebooks. See `StarterNotebook.ipynb` for an example.
+You can view any saved session using:
+```python
+import anomaly_match as am
+am.print_session('/path/to/session/directory')
+```
+
+Session tracking is automatic and integrates seamlessly with existing workflows.
 
 ## Recommended Folder Structure
 - project/
-  - labeled_data.csv | containing annotations of labeled examples
-  - training_images/ | the cfg.data_dir
-    - image1.jpeg
-    - image2.jpeg
-  - data_to_predict/ | the cfg.search_dir
+  - labeled_data.csv | containing annotations of labelled examples
+  - metadata.csv | containing metadata, e.g. sourceIDs, for images (optional)
+  - training_images/ | the cfg.data_dir, can contain .jpeg, .jpg, .png, .fits, .tif, or .tiff files
+    - image1.png
+    - image2.png
+  - data_to_predict/ | the cfg.prediction_search_dir
     - unlabeled_file_part1.hdf5
     - unlabeled_file_part2.hdf5
+    - large_dataset.zarr
+    - individual_images/
+      - img001.jpg
+      - img002.png
 
 Example of a minimal labeled_data.csv:
 ```
 filename,label,your_custom_source_id
-image1.jpeg,normal,123456
-image2.jpeg,anomaly,424242
+image1.png,normal,123456
+image2.png,anomaly,424242
 ```
 Here, the additional columns (like "your_custom_source_id") can store your own identifiers or data.
+
+Example of a metadata.csv:
+```
+filename,sourceID,ra,dec,custom_col
+image1.png,source1,10.5,20.3,custom_value1
+image2.png,source2,11.2,21.7,custom_value2
+```
+
+The metadata file can include optional columns for sourceID, ra, dec, and any custom columns you need. This metadata is automatically merged with the labelled data when saving results. Specify the metadata file with `cfg.metadata_file = "path/to/metadata.csv"`.
+
+The `ra` and `dec` coordinates both have to be in degree and in the [ICRS frame](https://en.wikipedia.org/wiki/International_Celestial_Reference_System).
 
 ## Supported File Formats
 
 AnomalyMatch supports the following image file formats:
-- **Standard formats**: JPEG (*.jpg, *.jpeg), PNG (*.png) (More to follow soon)
+- **Standard formats**: JPEG (*.jpg, *.jpeg), PNG (*.png), TIFF (*.tif, *.tiff)
+- **Astronomical formats**: FITS (*.fits)
+- **Container formats**: HDF5 (*.h5, *.hdf5), Zarr (*.zarr)
 
 Note: If multiple filetypes are present, all will be loaded.
+
+### Zarr File Support
+
+AnomalyMatch supports Zarr files for efficient storage and processing of large image datasets. Zarr files are particularly useful for:
+- Large collections of images that don't fit in memory
+- Distributed and cloud-based workflows
+- Efficient chunked access to image data
+
+#### Zarr File Requirements
+
+Zarr files must contain:
+- An `images` dataset with shape `(N, height, width, channels)` where N is the number of images
+- Optional metadata file (`.parquet` format) containing filenames
+
+#### Creating Zarr Files
+
+You can create compatible Zarr files using the [images_to_zarr](https://github.com/gomezzz/images_to_zarr/) utility, which converts collections of images into the Zarr format expected by AnomalyMatch.
+
+Example workflow:
+```bash
+# Install images_to_zarr
+pip install images_to_zarr
+```
+
+```python
+# Convert a directory of images to 150x150 pixel zarr format
+import images_to_zarr as i2z
+i2z.convert(
+    output_dir="path/to/output.zarr",
+    folders="path/to/images", 
+    resize=(150, 150), 
+    chunk_shape=(1000, 4, 150, 150)  # 1000 images per chunk
+)
+```
+
+For best performance, we recommend using chunks of 1000 images (`chunk_shape=(1000, channels, height, width)`).
+
+The resulting Zarr file will contain:
+- `/images`: The image array with proper chunking
+- Associated metadata file with original filenames
+
+#### Zarr Configuration
+
+AnomalyMatch automatically detects and processes Zarr files in your prediction directory:
+```python
+cfg.prediction_search_dir = "/path/to/directory/containing/zarr/files"
+```
+
+AnomalyMatch will automatically discover all `.zarr` files in the specified directory and process them efficiently in parallel. Each Zarr file should contain image data with optional metadata in a corresponding `.parquet` file.
+
+### FITS File Handling
+
+- By default, the first extension (index 0) is used when loading FITS files
+- You can specify a particular extension using the `fits_extension` parameter in the configuration:
+  - Set `cfg.fits_extension` in your code to control which FITS extensions to use
+  - Integer values (e.g., `0`, `1`, `2`) to access extensions by index
+  - String values (e.g., `"PRIMARY"`, `"SCIENCE"`) to access extensions by name
+  - List of integers or strings (e.g., `[0, 1, 2]` or `["PRIMARY", "SCIENCE", "ERROR"]`) to combine multiple extensions
+    into a single image. All specified extensions must have the same shape.
+- Multi-dimensional data is handled automatically:
+  - For data with more than 3 dimensions, only the first 3 dimensions are used
+  - FITS data are normalised to the 0-255 range when loaded (uint8)
+  - Channel order is automatically corrected if necessary
+- When combining multiple extensions:
+  - If extensions contain 2D data, they will be combined as channels (up to 3 for RGB)
+  - If more than 3 extensions are provided for 2D data, only the first 3 will be used
+  - All extensions must have identical dimensions to be combined
+
+When working with FITS files containing multiple images or data products, specify which extension(s) to use in the configuration.
+
+## Normalisation and Stretching
+- Normalisation can be selected in the UI via a drop-down. Alternatively it can be changed by setting e.g.
+    `cfg.normalisation_method = am.NormalisationMethod.ZSCALE`
+- Current options are
+    - `CONVERSION_ONLY`: no normalisation
+    - `LOG`: [logarithmic normalisation](https://docs.astropy.org/en/stable/api/astropy.visualization.LogStretch.html#astropy.visualization.LogStretch)
+    - `ZSCALE`: linear normalisation based on [zscale](https://docs.astropy.org/en/stable/api/astropy.visualization.ZScaleInterval.html) min and max.
+    - `ASINH`: [Asinh](https://docs.astropy.org/en/stable/api/astropy.visualization.AsinhStretch.html) normalisation with configurable scale and percentile clipping for both grayscale/multichannel and RGB images.
+- It currently allows an enum from [NormalisationMethod](anomaly_match/image_processing/NormalisationMethod.py) 
+- Selecting a new [normalisation](anomaly_match/image_processing/normalisation.py) in the dropdown will apply it when training or predicting. For further detail see [Normalisation-Readme](anomaly_match/image_processing/Normalisationreadme.md)
 
 ## Key Config Parameters
 - `save_dir`: Path to store the trained model output.
 - `data_dir`: Location of the training data (*.jpeg, *.jpg, *.png, *.tif, or *.tiff).
 - `label_file`: CSV mapping annotated images to labels.
-- `search_dir`: Path where data to be predicted is stored.
+- `metadata_file`: Optional CSV file containing metadata for images (automatically merged with labelled data).
+- `prediction_search_dir`: Path where data to be predicted is stored.
 - `logLevel`: Controls verbosity of training/session logs.
 - `test_ratio`: Proportion of data used for evaluation (0.0 disables test evaluation, > 0 shows AUROC/AUPRC curves).
 - `size`: Dimensions to which images are resized (below 96x96 is not recommended).
@@ -98,7 +227,7 @@ The following advanced parameters can be configured:
 
 ### FixMatch Parameters
 - `ema_m`: Exponential moving average momentum (default: 0.99)
-- `hard_label`: Whether to use hard labels for unlabeled data (default: True)
+- `hard_label`: Whether to use hard labels for unlabelled data (default: True)
 - `temperature`: Temperature for softmax in semi-supervised learning (default: 0.5)
 - `ulb_loss_ratio`: Weight of the unlabeled loss (default: 1.0)
 - `p_cutoff`: Confidence threshold for pseudo-labeling (default: 0.95)
@@ -119,4 +248,10 @@ The following advanced parameters can be configured:
 - `net`: Backbone network architecture (default: "efficientnet-lite0")
 
 ### Additional Parameters
-- `prediction_file_type`: Type of files for prediction (default: "hdf5")
+- `fits_extension`: Extension(s) to use for FITS files, can be int, string, or list of int/string (default: None)
+- `interpolation_order`: 0-5 corresponding to [skimage resize interpolation orders](https://scikit-image.org/docs/stable/api/skimage.transform.html#skimage.transform.warp) (default: 1 (Bi-linear))
+- `normalisation_method`: Normalisation method to be applied during file loading. Can also be selected in the UI dropdown. Correspons to an entry from the class NormalisationMethod (default: `NormalisationMethod.CONVERSION_ONLY`)
+
+## Acknowledgements
+
+Thank you to all users who have provided feedback and helped us to make AnomalyMatch better. Your contributions help continue improving this tool for the scientific community.

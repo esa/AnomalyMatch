@@ -3,22 +3,19 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import torch
 import torch.nn.functional as F
 from sklearn.metrics import roc_auc_score, precision_recall_curve, auc
 
 import sys
-import os
 from tqdm.auto import tqdm
-from pathlib import Path
 
 from loguru import logger
 
 from anomaly_match.utils.consistency_loss import consistency_loss
 from anomaly_match.utils.cross_entropy_loss import cross_entropy_loss
 from anomaly_match.utils.accuracy import accuracy
-from anomaly_match.utils.save_cfg import save_cfg
 from anomaly_match.datasets.data_utils import get_data_loader
 
 
@@ -34,6 +31,8 @@ class FixMatch:
         lambda_u,
         hard_label=True,
         logger=None,
+        current_normalisation_method=None,
+        session_tracker=None,
     ):
         """FixMatch implementation for semi-supervised learning.
 
@@ -50,6 +49,7 @@ class FixMatch:
             lambda_u: Weight for unsupervised loss component
             hard_label: If True, uses hard pseudo-labels, otherwise soft labels
             logger: Logger instance for outputting information
+            session_tracker: Optional session tracker for recording training progress
         """
         super(FixMatch, self).__init__()
 
@@ -66,6 +66,9 @@ class FixMatch:
         self.lambda_u = lambda_u
         self.use_hard_label = hard_label
 
+        # initialise the normalisation method "last" used
+        self.last_normalisation_method = None
+
         self.optimizer = None
         self.scheduler = None
 
@@ -74,6 +77,9 @@ class FixMatch:
         self.total_it = 0
         self.best_eval_acc = 0.0
         self.best_it = 0
+
+        # Session tracking
+        self.session_tracker = session_tracker
 
         # Logging
         self.logger = logger
@@ -167,6 +173,7 @@ class FixMatch:
 
         logger.info(
             f"Starting FixMatch training for {cfg.num_train_iter} iterations on {ngpus_per_node} GPUs"
+            + f" with normalisation {cfg.normalisation_method.name}"
         )
 
         self.it = 0
@@ -306,11 +313,14 @@ class FixMatch:
             self.it += 1
             self.total_it += 1
 
+            # Update session tracker with model loss if available
+            if self.session_tracker is not None:
+                self.session_tracker.update_model_iteration(total_loss.item())
+
         progressbar.close()
 
-        # Final evaluation
+        # Final evaluation after training
         eval_dict = self.evaluate(cfg=cfg)
-        eval_dict.update({"eval/best_acc": self.best_eval_acc, "eval/best_it": self.best_it})
         return eval_dict
 
     @torch.no_grad()
@@ -428,11 +438,11 @@ class FixMatch:
 
         # Return metrics dictionary
         return {
-            "eval/loss": total_loss / total_num if total_num > 0 else float("inf"),
-            "eval/top-1-acc": total_acc / total_num if total_num > 0 else 0.0,
-            "eval/auroc": auroc,
-            "eval/auprc": auprc,
-            "eval/confusion_matrix": confusion_matrix,
+            "eval/loss": float(total_loss / total_num) if total_num > 0 else float("inf"),
+            "eval/top-1-acc": float(total_acc / total_num) if total_num > 0 else 0.0,
+            "eval/auroc": float(auroc),
+            "eval/auprc": float(auprc),
+            "eval/confusion_matrix": confusion_matrix.cpu().numpy().tolist(),
             "eval/predictions_and_labels": predictions_and_labels,
             "eval/roc_data": (all_labels, all_probs),
             "eval/precision_recall": (precision, recall),
@@ -529,113 +539,3 @@ class FixMatch:
         filenames = [filenames[i] for i in indices.cpu()]
 
         return scores, imgs, filenames, data_iter
-
-    def save_run(self, save_name, save_path, cfg=None):
-        """Save a training run's model weights and configuration.
-
-        Args:
-            save_name: Filename for the saved model
-            save_path: Directory path for saving
-            cfg: Optional configuration to save alongside the model
-        """
-        save_filename = os.path.join(save_path, save_name)
-
-        # Create directory if it doesn't exist
-        Path(save_path).mkdir(parents=True, exist_ok=True)
-
-        # Handle distributed training case
-        train_model = (
-            self.train_model.module if hasattr(self.train_model, "module") else self.train_model
-        )
-        eval_model = (
-            self.eval_model.module if hasattr(self.eval_model, "module") else self.eval_model
-        )
-
-        # Save model state
-        torch.save(
-            {
-                "train_model": train_model.state_dict(),
-                "eval_model": eval_model.state_dict(),
-                "optimizer": self.optimizer.state_dict(),
-                "scheduler": self.scheduler.state_dict() if self.scheduler else None,
-                "it": self.it,
-            },
-            save_filename,
-        )
-
-        # Save configuration if provided
-        if cfg is not None:
-            save_cfg(cfg)
-
-        logger.info(f"Model saved to: {save_filename}")
-
-    def save_model(self, cfg):
-        """Save the current model to the path specified in the config.
-
-        Args:
-            cfg: Configuration containing model_path for saving
-        """
-        logger.info(f"Saving model to {cfg.model_path}")
-
-        # Create directory if needed
-        dir_path = Path(cfg.model_path).parent
-        Path(dir_path).mkdir(parents=True, exist_ok=True)
-
-        # Handle distributed training case
-        train_model = (
-            self.train_model.module if hasattr(self.train_model, "module") else self.train_model
-        )
-        eval_model = (
-            self.eval_model.module if hasattr(self.eval_model, "module") else self.eval_model
-        )
-
-        # Save model state
-        torch.save(
-            {
-                "train_model": train_model.state_dict(),
-                "eval_model": eval_model.state_dict(),
-                "optimizer": self.optimizer.state_dict(),
-                "scheduler": self.scheduler.state_dict() if self.scheduler else None,
-                "it": self.it,
-            },
-            cfg.model_path,
-        )
-
-    def load_model(self, cfg):
-        """Load a saved model from the path specified in the config.
-
-        Args:
-            cfg: Configuration containing model_path to load from
-        """
-        logger.info(f"Loading model from {cfg.model_path}")
-
-        # Verify path exists
-        if not os.path.exists(cfg.model_path):
-            logger.error(f"Model path {cfg.model_path} does not exist")
-            return
-
-        # Load checkpoint
-        checkpoint = torch.load(cfg.model_path, weights_only=False)
-
-        # Handle distributed training case
-        train_model = (
-            self.train_model.module if hasattr(self.train_model, "module") else self.train_model
-        )
-        eval_model = (
-            self.eval_model.module if hasattr(self.eval_model, "module") else self.eval_model
-        )
-
-        # Restore model components from checkpoint
-        for key in checkpoint.keys():
-            if hasattr(self, key) and getattr(self, key) is not None:
-                if "train_model" in key:
-                    train_model.load_state_dict(checkpoint[key])
-                elif "eval_model" in key:
-                    eval_model.load_state_dict(checkpoint[key])
-                elif key == "it":
-                    self.it = checkpoint[key]
-                else:
-                    getattr(self, key).load_state_dict(checkpoint[key])
-                logger.debug(f"Checkpoint component loaded: {key}")
-            else:
-                logger.debug(f"Checkpoint component skipped: {key}")

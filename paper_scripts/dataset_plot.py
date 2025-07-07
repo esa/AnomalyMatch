@@ -3,12 +3,12 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 """
-Dataset visualization script for GalaxyMNIST and MiniImageNet.
+Dataset visualization script for GalaxyMNIST, MiniImageNet, and GalaxyZoo.
 
 This script creates a compact, high-DPI grid visualization of sample images
-from the GalaxyMNIST and MiniImageNet datasets for the AnomalyMatch paper.
+from the GalaxyMNIST, MiniImageNet, and GalaxyZoo datasets for the AnomalyMatch paper.
 """
 
 import os
@@ -23,7 +23,7 @@ from PIL import Image
 # Figure settings for paper-quality output
 FIGURE_DPI = 300
 FIGURE_WIDTH = 12  # Wider to accommodate 12 columns
-FIGURE_HEIGHT = 5  # Adjusted for 1x12 + 3x12 layout
+FIGURE_HEIGHT = 7  # Increased to accommodate additional GalaxyZoo row
 
 # Class name mappings for both datasets
 GALAXYMNIST_CLASS_NAMES = {
@@ -173,19 +173,79 @@ def get_miniimagenet_samples(df, data_dir, anomaly_samples_per_class=2, normal_s
     return samples
 
 
+def get_galaxyzoo_samples(df, data_dir, anomaly_samples=6, normal_samples=6):
+    """
+    Get sample images from the GalaxyZoo dataset with both anomaly and normal galaxies.
+
+    Args:
+        df (pandas.DataFrame): DataFrame with GalaxyZoo metadata
+        data_dir (str): Directory containing the images
+        anomaly_samples (int): Number of anomaly samples to get
+        normal_samples (int): Number of normal samples to get
+
+    Returns:
+        list: Sample dictionaries with path and class information
+    """
+    samples = []
+
+    # Get anomaly samples (label_idx == 1)
+    anomaly_df = df[df["label_idx"] == 1]
+    if len(anomaly_df) > 0:
+        anomaly_sample_rows = anomaly_df.sample(
+            min(anomaly_samples, len(anomaly_df)), random_state=42
+        )
+
+        for _, row in anomaly_sample_rows.iterrows():
+            img_path = os.path.join(data_dir, row["filename"])
+            if os.path.exists(img_path):
+                samples.append(
+                    {
+                        "path": img_path,
+                        "class_name": "Anomaly",
+                        "class_idx": row["label_idx"],
+                        "is_anomaly_class": True,
+                        "dataset": "GalaxyZoo",
+                        "anomaly_score": row.get("anomaly_score_raw", 0.0),
+                    }
+                )
+
+    # Get normal samples (label_idx == 0)
+    normal_df = df[df["label_idx"] == 0]
+    if len(normal_df) > 0:
+        normal_sample_rows = normal_df.sample(min(normal_samples, len(normal_df)), random_state=42)
+
+        for _, row in normal_sample_rows.iterrows():
+            img_path = os.path.join(data_dir, row["filename"])
+            if os.path.exists(img_path):
+                samples.append(
+                    {
+                        "path": img_path,
+                        "class_name": "Normal",
+                        "class_idx": row["label_idx"],
+                        "is_anomaly_class": False,
+                        "dataset": "GalaxyZoo",
+                        "anomaly_score": row.get("anomaly_score_raw", 0.0),
+                    }
+                )
+
+    return samples
+
+
 def create_compact_figure(
     galaxymnist_samples,
     miniimagenet_samples,
+    galaxyzoo_samples,
     figwidth=FIGURE_WIDTH,
     figheight=FIGURE_HEIGHT,
     dpi=FIGURE_DPI,
 ):
     """
-    Create a compact figure with sample images from both datasets with in-image annotations.
+    Create a compact figure with sample images from all three datasets with in-image annotations.
 
     Args:
         galaxymnist_samples (list): List of dictionaries containing GalaxyMNIST image data
         miniimagenet_samples (list): List of dictionaries containing MiniImageNet image data
+        galaxyzoo_samples (list): List of dictionaries containing GalaxyZoo image data
         figwidth (float): Width of the figure in inches
         figheight (float): Height of the figure in inches
         dpi (int): DPI for the output figure
@@ -207,11 +267,12 @@ def create_compact_figure(
     # Define grid layout
     n_cols = 12  # 12 columns as requested
     n_galaxy_rows = 1  # 1 row for GalaxyMNIST
+    n_zoo_rows = 1  # 1 row for GalaxyZoo
     n_mini_rows = 3  # 3 rows for MiniImageNet
 
     # Create GridSpec for layout
     gs = gridspec.GridSpec(
-        n_galaxy_rows + n_mini_rows,
+        n_galaxy_rows + n_zoo_rows + n_mini_rows,
         n_cols,
         figure=fig,
         wspace=0.02,
@@ -230,7 +291,7 @@ def create_compact_figure(
             galaxy_by_class[class_idx] = []
         galaxy_by_class[class_idx].append(sample)
 
-    # Assign GalaxyMNIST samples to grid positions
+    # Assign GalaxyMNIST samples to grid positions (row 0)
     # For 1x12 layout, distribute each class evenly across the row
     for class_idx, samples in galaxy_by_class.items():
         for i, sample in enumerate(samples):
@@ -244,130 +305,159 @@ def create_compact_figure(
             ax.imshow(img)
 
             # Add class name as annotation inside the image
-            # Create a semi-transparent background rectangle for text
-            rect = Rectangle(
-                (0, 0), img.shape[1], 20, color="black", alpha=0.6
-            )  # Taller rect for larger font
+            rect = Rectangle((0, 0), img.shape[1], 20, color="black", alpha=0.6)
             ax.add_patch(rect)
 
-            # Add text (white on black background)
-            # For GalaxyMNIST, use first word of class name to save space
             ax.text(
                 img.shape[1] / 2,
-                36,  # Adjusted position for centering with taller rect
+                10,
                 sample["class_name"],
                 color="white",
-                fontsize=8,  # Increased font size
+                fontsize=8,
                 ha="center",
                 va="center",
             )
 
-            # Remove ticks
+            # Remove ticks and add border
             ax.set_xticks([])
             ax.set_yticks([])
+            for spine in ax.spines.values():
+                spine.set_linewidth(0.5)
 
-            # Add thin border
-            ax.spines["left"].set_linewidth(0.5)
-            ax.spines["right"].set_linewidth(0.5)
-            ax.spines["top"].set_linewidth(0.5)
-            ax.spines["bottom"].set_linewidth(0.5)
+    # Assign GalaxyZoo samples to grid positions (row 1)
+    # Show anomaly and normal samples
+    galaxyzoo_anomaly = [s for s in galaxyzoo_samples if s.get("is_anomaly_class", False)]
+    galaxyzoo_normal = [s for s in galaxyzoo_samples if not s.get("is_anomaly_class", False)]
 
-    # Organize MiniImageNet samples
-    anomaly_samples = [s for s in miniimagenet_samples if s.get("is_anomaly_class", False)]
-    normal_samples = [s for s in miniimagenet_samples if not s.get("is_anomaly_class", False)]
+    # Fill first 6 columns with anomaly samples
+    for i, sample in enumerate(galaxyzoo_anomaly[:6]):
+        ax = fig.add_subplot(gs[1, i])
 
-    # First allocate space for anomaly samples - 10 total (5 classes, 2 per class)
-    # We'll allocate them to the first row of MiniImageNet samples
-    for i, sample in enumerate(anomaly_samples):
-        if i >= 10:  # Only want 10 anomaly samples (5 classes × 2 samples)
-            break
-
-        col = i % n_cols
-        row = 1  # First row of MiniImageNet (after GalaxyMNIST row)
-
-        ax = fig.add_subplot(gs[row, col])
-
-        # Load and display image
         img = np.array(Image.open(sample["path"]))
         ax.imshow(img)
 
-        # Add class name as annotation inside the image
-        rect = Rectangle(
-            (0, 0), img.shape[1], 20, color="red", alpha=0.6
-        )  # Taller rect for larger font
+        rect = Rectangle((0, 0), img.shape[1], 20, color="red", alpha=0.6)
         ax.add_patch(rect)
 
-        # Add text (white on red background)
         ax.text(
-            img.shape[1] / 2,
-            10,  # Adjusted position for centering with taller rect
-            sample["class_name"],
-            color="white",
-            fontsize=8,  # Increased font size
-            ha="center",
-            va="center",
+            img.shape[1] / 2, 10, "Anomaly", color="white", fontsize=8, ha="center", va="center"
         )
 
-        # Remove ticks
         ax.set_xticks([])
         ax.set_yticks([])
-
-        # Red border for anomaly classes
         for spine in ax.spines.values():
             spine.set_color("red")
             spine.set_linewidth(0.5)
 
-    # Fill the remaining MiniImageNet grid with normal samples
+    # Fill remaining columns with normal samples
+    for i, sample in enumerate(galaxyzoo_normal[:6]):
+        col = i + 6  # Start after anomaly samples
+        ax = fig.add_subplot(gs[1, col])
+
+        img = np.array(Image.open(sample["path"]))
+        ax.imshow(img)
+
+        rect = Rectangle((0, 0), img.shape[1], 20, color="black", alpha=0.6)
+        ax.add_patch(rect)
+
+        ax.text(img.shape[1] / 2, 10, "Normal", color="white", fontsize=8, ha="center", va="center")
+
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_linewidth(0.5)
+
+    # Organize MiniImageNet samples for rows 2-4
+    mini_anomaly = [s for s in miniimagenet_samples if s.get("is_anomaly_class", False)]
+    mini_normal = [s for s in miniimagenet_samples if not s.get("is_anomaly_class", False)]
+
+    # Fill first row of MiniImageNet (row 2) with anomaly samples
+    for i, sample in enumerate(mini_anomaly[:10]):
+        ax = fig.add_subplot(gs[2, i])
+
+        img = np.array(Image.open(sample["path"]))
+        ax.imshow(img)
+
+        rect = Rectangle((0, 0), img.shape[1], 20, color="red", alpha=0.6)
+        ax.add_patch(rect)
+
+        ax.text(
+            img.shape[1] / 2,
+            10,
+            sample["class_name"],
+            color="white",
+            fontsize=8,
+            ha="center",
+            va="center",
+        )
+
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_color("red")
+            spine.set_linewidth(0.5)
+
+    # Fill remaining anomaly samples and normal samples in row 2
     normal_idx = 0
-    for row in range(1, n_galaxy_rows + n_mini_rows):  # Start from row 1 (after GalaxyMNIST)
-        # Skip first row anomaly positions
-        start_col = 10 if row == 1 else 0  # Skip the anomaly samples in the first row
+    for col in range(10, n_cols):
+        if normal_idx < len(mini_normal):
+            sample = mini_normal[normal_idx]
+            ax = fig.add_subplot(gs[2, col])
 
-        for col in range(start_col, n_cols):
-            if normal_idx < len(normal_samples):
-                sample = normal_samples[normal_idx]
+            img = np.array(Image.open(sample["path"]))
+            ax.imshow(img)
 
+            rect = Rectangle((0, 0), img.shape[1], 20, color="black", alpha=0.6)
+            ax.add_patch(rect)
+
+            ax.text(
+                img.shape[1] / 2, 10, "Nominal", color="white", fontsize=8, ha="center", va="center"
+            )
+
+            ax.set_xticks([])
+            ax.set_yticks([])
+            for spine in ax.spines.values():
+                spine.set_linewidth(0.5)
+
+            normal_idx += 1
+
+    # Fill remaining rows (3-4) with normal samples
+    for row in range(3, 5):
+        for col in range(n_cols):
+            if normal_idx < len(mini_normal):
+                sample = mini_normal[normal_idx]
                 ax = fig.add_subplot(gs[row, col])
 
-                # Load and display image
                 img = np.array(Image.open(sample["path"]))
                 ax.imshow(img)
 
-                # Add class name as annotation inside the image
-                rect = Rectangle(
-                    (0, 0), img.shape[1], 20, color="black", alpha=0.6
-                )  # Taller rect for larger font
+                rect = Rectangle((0, 0), img.shape[1], 20, color="black", alpha=0.6)
                 ax.add_patch(rect)
 
-                # Add text (white on black background)
                 ax.text(
                     img.shape[1] / 2,
-                    10,  # Adjusted position for centering with taller rect
+                    10,
                     "Nominal",
                     color="white",
-                    fontsize=8,  # Increased font size
+                    fontsize=8,
                     ha="center",
                     va="center",
                 )
 
-                # Remove ticks
                 ax.set_xticks([])
                 ax.set_yticks([])
-
-                # Add thin border
-                ax.spines["left"].set_linewidth(0.5)
-                ax.spines["right"].set_linewidth(0.5)
-                ax.spines["top"].set_linewidth(0.5)
-                ax.spines["bottom"].set_linewidth(0.5)
+                for spine in ax.spines.values():
+                    spine.set_linewidth(0.5)
 
                 normal_idx += 1
 
-    # Add dataset labels as text at top of figure
-    fig.text(0.01, 0.98, "GalaxyMNIST", fontsize=12, fontweight="bold", ha="left")
-    fig.text(0.01, 0.70, "MiniImageNet", fontsize=12, fontweight="bold", ha="left")
+    # Add dataset labels
+    fig.text(0.01, 0.96, "GalaxyMNIST", fontsize=12, fontweight="bold", ha="left")
+    fig.text(0.01, 0.76, "GalaxyZoo", fontsize=12, fontweight="bold", ha="left")
+    fig.text(0.01, 0.56, "MiniImageNet", fontsize=12, fontweight="bold", ha="left")
 
     # Add "Anomaly Classes in Red" annotation at top right
-    fig.text(0.99, 0.98, "Anomaly Classes in Red", fontsize=10, color="red", ha="right")
+    fig.text(0.99, 0.96, "Anomaly Classes in Red", fontsize=10, color="red", ha="right")
 
     return fig
 
@@ -380,9 +470,11 @@ def main():
     # Define paths for dataset files
     galaxymnist_csv_path = os.path.join(datasets_dir, "labels_galaxymnist.csv")
     miniimagenet_csv_path = os.path.join(datasets_dir, "labels_miniimagenet.csv")
+    galaxyzoo_csv_path = os.path.join(datasets_dir, "labels_galaxyzoo.csv")
 
     galaxymnist_image_dir = os.path.join(datasets_dir, "galaxymnist")
     miniimagenet_image_dir = os.path.join(datasets_dir, "miniimagenet")
+    galaxyzoo_image_dir = os.path.join(datasets_dir, "galaxyzoo")
 
     # Create output directory
     output_dir = Path("figures")
@@ -403,9 +495,17 @@ def main():
         print(f"Error loading MiniImageNet data: {e}")
         miniimagenet_df = None
 
+    try:
+        galaxyzoo_df = pd.read_csv(galaxyzoo_csv_path)
+        print(f"GalaxyZoo data loaded. Shape: {galaxyzoo_df.shape}")
+    except Exception as e:
+        print(f"Error loading GalaxyZoo data: {e}")
+        galaxyzoo_df = None
+
     # Get samples from each dataset
     galaxymnist_samples = []
     miniimagenet_samples = []
+    galaxyzoo_samples = []
 
     if galaxymnist_df is not None:
         galaxymnist_samples = get_galaxymnist_samples(
@@ -420,13 +520,22 @@ def main():
             miniimagenet_df,
             miniimagenet_image_dir,
             anomaly_samples_per_class=2,  # 2 samples per anomaly class (10 total)
-            normal_samples_total=26,  # Need 26 normal samples to fill the 3x12 grid (after 10 anomaly samples)
+            normal_samples_total=26,  # Need 26 normal samples to fill the remaining grid
         )
         print(f"Selected {len(miniimagenet_samples)} MiniImageNet samples")
 
+    if galaxyzoo_df is not None:
+        galaxyzoo_samples = get_galaxyzoo_samples(
+            galaxyzoo_df,
+            galaxyzoo_image_dir,
+            anomaly_samples=6,  # 6 anomaly samples
+            normal_samples=6,  # 6 normal samples for 1x12 grid
+        )
+        print(f"Selected {len(galaxyzoo_samples)} GalaxyZoo samples")
+
     # Create and save figure
-    if galaxymnist_samples and miniimagenet_samples:
-        fig = create_compact_figure(galaxymnist_samples, miniimagenet_samples)
+    if galaxymnist_samples and miniimagenet_samples and galaxyzoo_samples:
+        fig = create_compact_figure(galaxymnist_samples, miniimagenet_samples, galaxyzoo_samples)
 
         # Save figure with high DPI
         output_path = os.path.join(output_dir, "dataset_samples_compact.png")
@@ -440,6 +549,12 @@ def main():
         plt.close(fig)
     else:
         print("Unable to create figure: missing dataset samples")
+        if not galaxymnist_samples:
+            print("- Missing GalaxyMNIST samples")
+        if not miniimagenet_samples:
+            print("- Missing MiniImageNet samples")
+        if not galaxyzoo_samples:
+            print("- Missing GalaxyZoo samples")
 
 
 if __name__ == "__main__":

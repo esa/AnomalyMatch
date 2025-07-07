@@ -3,22 +3,24 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
-from concurrent.futures import ThreadPoolExecutor
-import imageio.v2 as imageio
+#   the terms contained in the file 'LICENCE.txt'.
 import numpy as np
 import os
 import h5py
 import pandas as pd
 from PIL import Image
-from skimage.transform import resize
-from skimage import img_as_ubyte
 from sklearn.model_selection import train_test_split
 import torch
-from tqdm import tqdm
 from loguru import logger
 
 from .Label import Label
+from anomaly_match.data_io.load_images import (
+    read_and_resize_image,
+    load_images_parallel,
+)
+
+from anomaly_match.data_io.find_images_in_folder import get_image_names_from_folder
+from anomaly_match.data_io.metadata_handler import MetadataHandler
 
 
 class AnomalyDetectionDataset(torch.utils.data.Dataset):
@@ -26,59 +28,65 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
 
     def __init__(
         self,
-        test_ratio,
-        root_dir="data/",
+        cfg,
         transform=None,
-        seed=42,
-        size=[300, 300],
         use_hdf5=True,
-        file_extensions=[".jpeg", ".jpg", ".png", ".tif", ".tiff"],
-        N_to_load=10000,
-        label_file=None,
     ):
         """
         Args:
-            test_ratio (float): Ratio of test data to total data.
-            root_dir (string): Directory with all the images.
+            cfg (DotMap): Configuration object containing dataset parameters Sets:
+                test_ratio (float): Ratio of test data to total data.
+                root_dir (string): Directory with all the images.
+                seed (int): seed used for train/test split
+                file_extensions (list): List of file extensions to include when loading images.
+                N_to_load (int): Number of unlabeled images to load per batch
+                label_file (string, optional): Path to the CSV file with labels. If None,
+                    will look for 'labeled_data.csv' in the root directory.
+                metadata_file (string, optional): Path to the CSV file with metadata. Should contain
+                    columns: filename, sourceID, ra, dec, and any custom columns.
+                fits_extension (int or str, optional): The FITS extension to use when loading FITS files.
+                    Can be either an integer index or a string extension name.
             transform (callable, optional): Optional transform to be applied
-                on a sample.
-            seed (int): seed used for train/test split
+                    on a sample.
             use_hdf5 (bool): If true, load/save the dataset from/to HDF5 file.
-            file_extensions (list): List of file extensions to include when loading images.
-            N_to_load (int): Number of unlabeled images to load per batch
-            label_file (string, optional): Path to the CSV file with labels. If None,
-                will look for 'labeled_data.csv' in the root directory.
         """
-        logger.debug(f"Loading AnomalyDetectionDataset from {root_dir}")
+        logger.debug(f"Loading AnomalyDetectionDataset from {cfg.data_dir}")
 
         # Initialize key variables
         self.classes = ["normal", "anomaly"]
-        self.seed = seed
-        self.size = size
+        self.seed = cfg.seed
+        self.size = cfg.size
         self.num_channels = 3
-        self.root_dir = root_dir
+        self.root_dir = cfg.data_dir
         self.transform = transform
-        self.test_ratio = test_ratio
-        self.file_extensions = file_extensions
-        self.N_to_load = N_to_load
+        self.cfg = cfg
+        self.test_ratio = cfg.test_ratio
+        self.N_to_load = cfg.N_to_load
+
         self.current_batch_idx = 0
         self.current_file_idx = 0
-        self.label_file = label_file if label_file else os.path.join(root_dir, "labeled_data.csv")
+        self.label_file = (
+            cfg.label_file if cfg.label_file else os.path.join(self.root_dir, "labeled_data.csv")
+        )
 
         # Initialize paths including size in the name
-        self.labeled_hdf5 = os.path.join(root_dir, f"labeled_{size[0]}x{size[1]}.hdf5")
-        self.batch_hdf5_template = os.path.join(root_dir, f"batch_{size[0]}x{size[1]}_{{}}.hdf5")
+        self.labeled_hdf5 = os.path.join(
+            self.root_dir, f"labeled_{self.size[0]}x{self.size[1]}.hdf5"
+        )
+        self.batch_hdf5_template = os.path.join(
+            self.root_dir, f"batch_{self.size[0]}x{self.size[1]}_{{}}.hdf5"
+        )
 
         logger.trace(f"Using HDF5 files: {self.labeled_hdf5}, {self.batch_hdf5_template}")
 
         # Get all filenames first
-        self.all_filenames = []
-        for f in os.listdir(self.root_dir):
-            if any(f.lower().endswith(ext.lower()) for ext in self.file_extensions):
-                self.all_filenames.append(f)
+        self.all_filenames = get_image_names_from_folder(self.root_dir, recursive=False)
 
         # If we have fewer than N_to_load images, set N_to_load to the number of images
         self.N_to_load = min(self.N_to_load, len(self.all_filenames))
+
+        # Initialize metadata handler
+        self.metadata_handler = MetadataHandler(cfg.metadata_file, self.all_filenames)
 
         # Shuffle them to ensure randomness
         np.random.seed(self.seed)
@@ -140,20 +148,12 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
         self.update_labels(labeled_data, update_training_data=False)
 
     def _read_and_resize_image(self, filepath):
-        """Read an image file and resize it."""
-        try:
-            image = imageio.imread(filepath)
-            if len(image.shape) == 2:  # Convert grayscale to RGB
-                image = np.stack((image,) * 3, axis=-1)
-            elif len(image.shape) > 2 and image.shape[2] > 3:  # Handle RGBA or other formats
-                image = image[:, :, :3]  # Keep only RGB channels
-            if image.shape[:2] != tuple(self.size):
-                image = img_as_ubyte(resize(image, self.size, anti_aliasing=True))
-            return img_as_ubyte(image)
-        except Exception as e:
-            logger.error(f"Error reading image {filepath}: {e}")
-            # Raise exception to stop execution
-            raise e
+        """Read an image file and resize it. Used in testing"""
+        return read_and_resize_image(
+            filepath,
+            cfg=self.cfg,
+            convert_to_rgb=True,
+        )
 
     def _load_initial_data(self):
         """Load labeled data and first batch of unlabeled data."""
@@ -161,32 +161,25 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
         labeled_data = pd.read_csv(self.label_file)
         labeled_dict = labeled_data.set_index("filename")["label"].to_dict()
         labeled_files = set(labeled_dict.keys())
-
         # Filter out non-existent files
-        labeled_files = [f for f in labeled_files if f in self.all_filenames]
+        labeled_files = [
+            f for f in labeled_files if f in self.all_filenames
+        ]  # 1. First load all images in parallel using our centralized image loading function
+        labeled_filepaths = [os.path.join(self.root_dir, filename) for filename in labeled_files]
 
-        def load_labeled_image(filename):
-            try:
-                sub_f = os.path.join(self.root_dir, filename)
-                image = self._read_and_resize_image(sub_f)
+        loading_results = load_images_parallel(
+            labeled_filepaths,
+            cfg=self.cfg,
+            desc="Loading labeled data",
+            max_workers=None,
+        )
+
+        # 2. Then apply labels to the loaded images
+        for filepath, image in loading_results:
+            filename = os.path.basename(filepath)
+            if filename in labeled_dict:
                 label = Label.NORMAL if labeled_dict[filename] == "normal" else Label.ANOMALY
-                return filename, (image, label)
-            except Exception as e:
-                logger.error(f"Error loading {filename}: {str(e)}")
-                return None
-
-        # Load labeled images in parallel
-        with ThreadPoolExecutor() as executor:
-            results = list(
-                tqdm(
-                    executor.map(load_labeled_image, labeled_files),
-                    desc="Loading labeled data",
-                    total=len(labeled_files),
-                )
-            )
-
-        # Update data dictionary with successfully loaded images
-        self.data_dict.update({k: v for r in results if r is not None for k, v in [r]})
+                self.data_dict[filename] = (image, label)
 
         logger.debug(f"Loaded {len(self.data_dict)} labeled images")
 
@@ -206,30 +199,26 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
         if not unlabeled_files:
             logger.debug("No unlabeled images left to load.")
             return
-
         # Calculate batch indices
         start_idx = self.current_file_idx
         end_idx = min(self.current_file_idx + self.N_to_load, len(unlabeled_files))
 
         batch_files = unlabeled_files[start_idx:end_idx]
 
-        # Load new batch
+        # Prepare absolute paths for the batch files
+        batch_filepaths = [os.path.join(self.root_dir, filename) for filename in batch_files]
 
-        def load_and_resize(filename):
-            sub_f = os.path.join(self.root_dir, filename)
-            image = self._read_and_resize_image(sub_f)
-            return filename, image
+        # Load the images in parallel
+        loading_results = load_images_parallel(
+            batch_filepaths,
+            cfg=self.cfg,
+            desc=f"Loading batch {self.current_batch_idx}",
+            max_workers=None,
+        )
 
-        with ThreadPoolExecutor() as executor:
-            results = list(
-                tqdm(
-                    executor.map(load_and_resize, batch_files),
-                    desc=f"Loading batch {self.current_batch_idx}",
-                    total=len(batch_files),
-                )
-            )
-
-        for filename, image in results:
+        # Add the loaded images to the data dictionary with UNKNOWN labels
+        for filepath, image in loading_results:
+            filename = os.path.basename(filepath)
             self.data_dict[filename] = (image, Label.UNKNOWN)
 
         self.current_batch_idx += 1
@@ -298,7 +287,10 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
             filenames_train, filenames_test = filenames, []
 
         # Store split indices to maintain consistency
-        self.split_indices = {"train": set(filenames_train), "test": set(filenames_test)}
+        self.split_indices = {
+            "train": set(filenames_train),
+            "test": set(filenames_test),
+        }
 
     @property
     def unlabeled_filepaths(self):
@@ -548,3 +540,22 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
                 if filename not in self.data_dict:
                     image = np.array(entry["image"]).reshape(self.size + [3])
                     self.data_dict[filename] = (image, Label.UNKNOWN)
+
+    def get_metadata_for_file(self, filename):
+        """Get metadata for a specific file.
+
+        Args:
+            filename (str): The filename to get metadata for.
+
+        Returns:
+            dict: Metadata for the file, or None if not found.
+        """
+        return self.metadata_handler.get_metadata_for_file(filename)
+
+    def get_all_metadata(self):
+        """Get all metadata.
+
+        Returns:
+            pd.DataFrame: The full metadata DataFrame, or None if no metadata loaded.
+        """
+        return self.metadata_handler.get_all_metadata()

@@ -3,7 +3,7 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import pandas as pd
 from pathlib import Path
 
@@ -17,30 +17,89 @@ GALAXYMNIST_CLASS_NAMES = {
     3: "Unbarred Spiral",
 }
 
+GALAXYZOO_CLASS_NAMES = {
+    0: "Normal",
+    1: "Anomaly",
+}
 
-def create_latex_table(df, caption="", label=""):
+# Special table configurations for ablation studies
+SPECIAL_TABLE_CONFIGS = {
+    "training_iterations": {
+        "first_column": "Iterations",
+        "row_labels": {50: "50", 100: "100", 250: "250", 500: "500"},
+    },
+    "active_learning": {
+        "first_column": "Active Learning",
+        "row_labels": {
+            "active": "Active Learning",
+            "no_active_same_start": "No Active Learning (same starting samples)",
+            "no_active_same_total": "No Active Learning (same total samples)",
+        },
+    },
+    "n_samples_ablation": {
+        "first_column": "Labels",
+        "row_labels": {
+            100: "100 (1 / 99) + 10 per iteration",
+            500: "500 (5 / 495) + 20 per iteration",
+            1000: "1000 (10 / 990) + 40 per iteration",
+        },
+    },
+    "galaxyzoo": {
+        "first_column": "Configuration",
+        "row_labels": {
+            # These will likely be the n_samples values or some other identifier
+            200: "200 samples, 50.0\\% anomaly ratio",
+            400: "400 samples, 50.0\\% anomaly ratio",
+            401: "400 samples, 1.5\\% anomaly ratio",  # Use 501 to distinguish from 500@2%
+        },
+    },
+}
+
+
+def create_latex_table(df, caption="", label="", table_type="default"):
     """Create a LaTeX table from the DataFrame with selected columns."""
     # Select and rename columns for the table
-    columns = {
-        "anomaly_class": "Anomaly Class",
-        "final_auroc": "AUROC",
-        "final_auprc": "AUPRC",
-        "top_0.1pct_anomalies_found": "Anomalies Found at 0.1\\% Data [\\%]",
-        "top_0.1pct_precision": "Precision at 0.1\\% Data [\\%]",
-        "top_1.0pct_anomalies_found": "Anomalies Found at 1\\% Data [\\%]",
-        "top_1.0pct_precision": "Precision at 1\\% Data [\\%]",
-    }
+    if table_type in SPECIAL_TABLE_CONFIGS:
+        # Use custom first column name for special tables
+        first_column_name = SPECIAL_TABLE_CONFIGS[table_type]["first_column"]
+        columns = {
+            "anomaly_class": first_column_name,
+            "final_auroc": "AUROC",
+            "final_auprc": "AUPRC",
+            "top_0.1pct_anomalies_found": "Anomalies in top-scoring 0.1\\% [\\%]",
+            "top_0.1pct_precision": "Precision in top-scoring 0.1\\% [\\%]",
+            "top_1.0pct_anomalies_found": "Anomalies in top-scoring  1\\% [\\%]",
+            "top_1.0pct_precision": "Precision in top-scoring  1\\% [\\%]",
+        }
+    else:
+        columns = {
+            "anomaly_class": "Anomaly Class",
+            "final_auroc": "AUROC",
+            "final_auprc": "AUPRC",
+            "top_0.1pct_anomalies_found": "Anomalies in top-scoring 0.1\\% [\\%]",
+            "top_0.1pct_precision": "Precision in top-scoring 0.1\\% [\\%]",
+            "top_1.0pct_anomalies_found": "Anomalies in top-scoring  1\\% [\\%]",
+            "top_1.0pct_precision": "Precision in top-scoring  1\\% [\\%]",
+        }
 
     df_selected = df[columns.keys()].copy()
 
     # Map class numbers to names
-    if df["dataset"].iloc[0] == "miniimagenet":
+    if table_type in SPECIAL_TABLE_CONFIGS:
+        # Use custom row labels for special tables
+        row_labels = SPECIAL_TABLE_CONFIGS[table_type]["row_labels"]
+        df_selected["anomaly_class"] = df_selected["anomaly_class"].map(row_labels)
+    elif df["dataset"].iloc[0] == "miniimagenet":
         df_selected["anomaly_class"] = (
             df_selected["anomaly_class"].astype(int).map(MINIIMAGENET_CLASS_NAMES)
         )
     elif df["dataset"].iloc[0] == "galaxymnist":
         df_selected["anomaly_class"] = (
             df_selected["anomaly_class"].astype(int).map(GALAXYMNIST_CLASS_NAMES)
+        )
+    elif df["dataset"].iloc[0] == "galaxyzoo":
+        df_selected["anomaly_class"] = (
+            df_selected["anomaly_class"].astype(int).map(GALAXYZOO_CLASS_NAMES)
         )
 
     # Calculate mean and std
@@ -143,6 +202,7 @@ def analyze_results(results_dir):
     result_files = {
         "miniimagenet": results_path / "miniimagenet_results.csv",
         "galaxymnist": results_path / "galaxymnist_results.csv",
+        "galaxyzoo": results_path / "galaxyzoo_results.csv",
         "training_iterations": results_path / "training_iterations_results.csv",
         "active_learning": results_path / "active_learning_results.csv",
         "n_samples_ablation": results_path / "n_samples_ablation_results.csv",
@@ -153,10 +213,10 @@ def analyze_results(results_dir):
         if filepath.exists():
             df = pd.read_csv(filepath)
 
-            # Create LaTeX table
+            # Create LaTeX table with appropriate table type
             caption = f"Results for {name.replace('_', ' ').title()}"
             label = f"tab:{name}_results"
-            latex_table = create_latex_table(df, caption, label)
+            latex_table = create_latex_table(df, caption, label, table_type=name)
 
             # Save to .tex file
             output_file = results_path / f"{name}_table.tex"
@@ -170,7 +230,7 @@ def main():
     """Main function to analyze results."""
     # Use absolute path from current file location
     script_dir = Path(__file__).parent
-    results_dir = script_dir.parent / "benchmark_results" / "results_20250321_124008"
+    results_dir = script_dir.parent / "benchmark_results" / "results_20250529_102218/"
 
     if not results_dir.exists():
         print(f"Results directory not found: {results_dir}")
