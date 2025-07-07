@@ -12,7 +12,7 @@ title: "AnomalyMatch: Discovering Rare Objects of Interest with Semi-supervised 
 version: 1.1.0
 doi: 10.48550/arXiv.2505.03509
 date-released: 2025-07-04
-url: "https://github.com/ESA-Datalabs/AnomalyMatch"
+url: "https://github.com/ESA/AnomalyMatch"
 preferred-citation:
   type: article
   authors:
