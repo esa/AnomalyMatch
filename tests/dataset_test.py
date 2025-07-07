@@ -3,7 +3,7 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import pytest
 import numpy as np
 import pandas as pd
@@ -13,10 +13,14 @@ from anomaly_match.datasets.Label import Label
 from anomaly_match.datasets.AnomalyDetectionDataset import AnomalyDetectionDataset
 from anomaly_match.datasets.BasicDataset import BasicDataset
 from anomaly_match.datasets.SSL_Dataset import SSL_Dataset
-from torchvision import transforms
 import os
 import tempfile
 from PIL import Image
+
+from anomaly_match.image_processing.transforms import (
+    get_weak_transforms,
+    get_prediction_transforms,
+)
 
 
 @pytest.fixture(scope="module")
@@ -27,7 +31,18 @@ def base_config():
     cfg.size = [64, 64]
     cfg.num_train_iter = 2
     cfg.test_ratio = 0.5
+    cfg.N_to_load = 10
+    cfg.fits_extension = None
+    cfg.label_file = None
     return cfg
+
+
+@pytest.fixture(scope="function")
+def test_config(base_config):
+    """Provides a fresh copy of the base configuration for each test, which need to modify it."""
+    import copy
+
+    return copy.deepcopy(base_config)
 
 
 @pytest.fixture(scope="module")
@@ -75,12 +90,7 @@ def multi_extension_dataset():
 
 def test_anomaly_detection_dataset_initialization(base_config):
     """Test AnomalyDetectionDataset initialization and basic properties."""
-    dataset = AnomalyDetectionDataset(
-        test_ratio=base_config.test_ratio,
-        root_dir=base_config.data_dir,
-        size=base_config.size,
-        N_to_load=10,
-    )
+    dataset = AnomalyDetectionDataset(base_config)
 
     assert dataset is not None
     assert dataset.size == base_config.size
@@ -91,17 +101,14 @@ def test_anomaly_detection_dataset_initialization(base_config):
     assert hasattr(dataset, "std")
 
 
-def test_multiple_file_extensions_support(multi_extension_dataset):
+def test_multiple_file_extensions_support(multi_extension_dataset, test_config):
     """Test support for multiple file extensions."""
     temp_dir, test_images, extensions = multi_extension_dataset
+    test_config.data_dir = str(temp_dir)  # Ensure path is string
+    test_config.test_ratio = 0.5  # to handle small datasets
 
     # Create dataset with default extensions
-    dataset = AnomalyDetectionDataset(
-        test_ratio=0.5,  # Use 50/50 split for better handling of small datasets
-        root_dir=temp_dir,
-        size=[64, 64],
-        N_to_load=10,
-    )
+    dataset = AnomalyDetectionDataset(test_config)
 
     # Check if all images were found
     assert len(dataset.all_filenames) == len(
@@ -113,48 +120,12 @@ def test_multiple_file_extensions_support(multi_extension_dataset):
         assert filename in dataset.all_filenames, f"Image {filename} was not found in dataset"
 
 
-def test_file_extension_filtering(multi_extension_dataset):
-    """Test filtering by specific file extensions."""
-    temp_dir, test_images, extensions = multi_extension_dataset
-
-    # Test with limited extensions
-    limited_extensions = [".jpg", ".png"]
-    dataset = AnomalyDetectionDataset(
-        test_ratio=0.0,  # No test split to avoid sklearn errors with small datasets
-        root_dir=temp_dir,
-        size=[64, 64],
-        file_extensions=limited_extensions,
-        N_to_load=10,
-    )
-
-    # Check if only images with specified extensions were found
-    expected_count = sum(
-        1 for img in test_images if any(img.lower().endswith(ext) for ext in limited_extensions)
-    )
-    assert (
-        len(dataset.all_filenames) == expected_count
-    ), f"Expected {expected_count} images but found {len(dataset.all_filenames)}"
-
-    # Verify correct images are included
-    for filename in test_images:
-        if any(filename.lower().endswith(ext) for ext in limited_extensions):
-            assert filename in dataset.all_filenames, f"Image {filename} should be in dataset"
-        else:
-            assert (
-                filename not in dataset.all_filenames
-            ), f"Image {filename} should not be in dataset"
-
-
-def test_read_and_resize_different_formats(multi_extension_dataset):
+def test_read_and_resize_different_formats(multi_extension_dataset, test_config):
     """Test reading and resizing images of different formats."""
     temp_dir, test_images, _ = multi_extension_dataset
-
-    dataset = AnomalyDetectionDataset(
-        test_ratio=0.0,  # No test split to avoid sklearn errors with small datasets
-        root_dir=temp_dir,
-        size=[64, 64],
-        N_to_load=10,
-    )
+    test_config.data_dir = temp_dir
+    test_config.test_ratio = 0.0  # No test split to avoid sklearn errors with small datasets
+    dataset = AnomalyDetectionDataset(test_config)
 
     # Test that all images can be loaded and are properly resized
     for filename in test_images:
@@ -168,9 +139,7 @@ def test_read_and_resize_different_formats(multi_extension_dataset):
 
 def test_anomaly_detection_dataset_splits(base_config):
     """Test dataset splitting functionality."""
-    dataset = AnomalyDetectionDataset(
-        test_ratio=0.5, root_dir=base_config.data_dir, size=base_config.size, N_to_load=10
-    )
+    dataset = AnomalyDetectionDataset(base_config)
 
     train_data = dataset.train_data
     test_data = dataset.test_data
@@ -189,11 +158,7 @@ def test_basic_dataset(sample_data):
     imgs, filenames, targets = sample_data
 
     # Create transforms
-    transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-        ]
-    )
+    transform = get_prediction_transforms()  # empty transform for testing
 
     dataset = BasicDataset(imgs, filenames, targets, num_classes=2, transform=transform)
 
@@ -210,12 +175,8 @@ def test_basic_dataset(sample_data):
 def test_ssl_dataset(base_config):
     """Test SSL_Dataset initialization and splitting."""
     ssl_dataset = SSL_Dataset(
-        test_ratio=base_config.test_ratio,
-        N_to_load=10,
+        cfg=base_config,
         train=True,
-        data_dir=base_config.data_dir,
-        seed=42,
-        size=base_config.size,
     )
 
     # Test getting SSL datasets
@@ -229,12 +190,7 @@ def test_ssl_dataset(base_config):
 
 def test_dataset_label_updates(base_config):
     """Test label updating functionality."""
-    dataset = AnomalyDetectionDataset(
-        test_ratio=base_config.test_ratio,
-        root_dir=base_config.data_dir,
-        size=base_config.size,
-        N_to_load=10,
-    )
+    dataset = AnomalyDetectionDataset(base_config)
 
     # Create new labels
     new_labels = pd.DataFrame({"filename": [dataset.all_filenames[0]], "label": ["normal"]})
@@ -251,12 +207,8 @@ def test_dataset_label_updates(base_config):
 
 def test_dataset_batch_loading(base_config):
     """Test batch loading functionality."""
-    dataset = AnomalyDetectionDataset(
-        test_ratio=base_config.test_ratio,
-        root_dir=base_config.data_dir,
-        size=base_config.size,
-        N_to_load=5,  # Small batch size for testing
-    )
+    base_config.N_to_load = 5  # Small batch size for testing
+    dataset = AnomalyDetectionDataset(base_config)
 
     initial_unlabeled = len(dataset.unlabeled[1])
     dataset.load_next_batch()
@@ -272,13 +224,7 @@ def test_basic_dataset_augmentation(sample_data):
     imgs, filenames, targets = sample_data
 
     # Create weak and strong transforms
-    weak_transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.RandomHorizontalFlip(p=0.5),
-        ]
-    )
-
+    weak_transform = get_weak_transforms()
     # Test with strong augmentation
     dataset = BasicDataset(
         imgs,
@@ -301,12 +247,8 @@ def test_basic_dataset_augmentation(sample_data):
 def test_ssl_dataset_consistency(base_config):
     """Test consistency of SSL dataset splits."""
     ssl_dataset = SSL_Dataset(
-        test_ratio=base_config.test_ratio,
-        N_to_load=10,
+        cfg=base_config,
         train=True,
-        data_dir=base_config.data_dir,
-        seed=42,
-        size=base_config.size,
     )
 
     # Get datasets twice and verify they're the same
@@ -319,12 +261,7 @@ def test_ssl_dataset_consistency(base_config):
 
 def test_anomaly_detection_dataset_data_loading(base_config):
     """Test data loading functionality."""
-    dataset = AnomalyDetectionDataset(
-        test_ratio=base_config.test_ratio,
-        root_dir=base_config.data_dir,
-        size=base_config.size,
-        N_to_load=10,
-    )
+    dataset = AnomalyDetectionDataset(base_config)
 
     # Test getting unlabeled data
     unlabeled = dataset.unlabeled
@@ -341,12 +278,7 @@ def test_anomaly_detection_dataset_data_loading(base_config):
 
 def test_anomaly_detection_dataset_properties(base_config):
     """Test data access properties."""
-    dataset = AnomalyDetectionDataset(
-        test_ratio=base_config.test_ratio,
-        root_dir=base_config.data_dir,
-        size=base_config.size,
-        N_to_load=10,
-    )
+    dataset = AnomalyDetectionDataset(base_config)
 
     # Test getting unlabeled data
     unlabeled = dataset.unlabeled
@@ -359,12 +291,7 @@ def test_anomaly_detection_dataset_properties(base_config):
 
 def test_anomaly_detection_dataset_hdf5(base_config, tmp_path):
     """Test HDF5 save/load functionality."""
-    dataset = AnomalyDetectionDataset(
-        test_ratio=base_config.test_ratio,
-        root_dir=base_config.data_dir,
-        size=base_config.size,
-        N_to_load=10,
-    )
+    dataset = AnomalyDetectionDataset(base_config)
 
     # Test save/load functionality
     save_path = tmp_path / "test_save.hdf5"
@@ -372,24 +299,14 @@ def test_anomaly_detection_dataset_hdf5(base_config, tmp_path):
     assert save_path.exists()
 
     # Test loading
-    new_dataset = AnomalyDetectionDataset(
-        test_ratio=base_config.test_ratio,
-        root_dir=base_config.data_dir,
-        size=base_config.size,
-        N_to_load=10,
-    )
+    new_dataset = AnomalyDetectionDataset(base_config)
     new_dataset.load_from_hdf5(str(save_path))
     assert len(new_dataset.data_dict) > 0
 
 
 def test_anomaly_detection_dataset_data_access(base_config):
     """Test data access methods."""
-    dataset = AnomalyDetectionDataset(
-        test_ratio=base_config.test_ratio,
-        root_dir=base_config.data_dir,
-        size=base_config.size,
-        N_to_load=10,
-    )
+    dataset = AnomalyDetectionDataset(base_config)
 
     # Test accessing labeled and unlabeled data
     unlabeled = dataset.unlabeled
@@ -401,12 +318,7 @@ def test_anomaly_detection_dataset_data_access(base_config):
 
 def test_anomaly_detection_dataset_file_operations(base_config):
     """Test file operations."""
-    dataset = AnomalyDetectionDataset(
-        test_ratio=base_config.test_ratio,
-        root_dir=base_config.data_dir,
-        size=base_config.size,
-        N_to_load=10,
-    )
+    dataset = AnomalyDetectionDataset(base_config)
 
     # Test file access methods
     assert isinstance(dataset.unlabeled_filenames, list)
@@ -415,12 +327,7 @@ def test_anomaly_detection_dataset_file_operations(base_config):
 
 def test_anomaly_detection_dataset_hdf5_operations(base_config, tmp_path):
     """Test HDF5 operations."""
-    dataset = AnomalyDetectionDataset(
-        test_ratio=base_config.test_ratio,
-        root_dir=base_config.data_dir,
-        size=base_config.size,
-        N_to_load=10,
-    )
+    dataset = AnomalyDetectionDataset(base_config)
 
     # Test HDF5 save/load
     save_path = tmp_path / "test_save.hdf5"

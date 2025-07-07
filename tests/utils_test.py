@@ -3,16 +3,13 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import torch
 import torch.optim as optim
 from anomaly_match.utils.get_cosine_schedule_with_warmup import get_cosine_schedule_with_warmup
 from anomaly_match.utils.get_optimizer import get_optimizer
 from anomaly_match.utils.get_net_builder import get_net_builder
 from anomaly_match.utils.set_seeds import set_seeds
-from anomaly_match.utils.save_cfg import save_cfg
-import os
-from dotmap import DotMap
 
 
 def test_cosine_schedule_with_warmup():
@@ -36,7 +33,9 @@ def test_cosine_schedule_with_warmup():
 
 def test_get_optimizer():
     model = torch.nn.Linear(10, 2)
-    cfg = DotMap()
+    from anomaly_match.utils.get_default_cfg import get_default_cfg
+
+    cfg = get_default_cfg()
 
     # Test SGD
     cfg.opt = "SGD"
@@ -47,9 +46,7 @@ def test_get_optimizer():
         model, name=cfg.opt, lr=cfg.lr, momentum=cfg.momentum, weight_decay=cfg.weight_decay
     )
     assert isinstance(optimizer_sgd, torch.optim.SGD)
-
-    # Test Adam separately to avoid variable scope issues
-    cfg_adam = DotMap()
+    cfg_adam = get_default_cfg()
     cfg_adam.opt = "Adam"
     cfg_adam.lr = 0.0001
     cfg_adam.weight_decay = 0.0005
@@ -69,18 +66,3 @@ def test_set_seeds():
     # Test that setting seeds doesn't raise errors
     set_seeds(42)
     set_seeds(0)
-
-
-def test_save_cfg(tmp_path):
-    cfg = DotMap()
-    cfg.name = "test_config"
-    cfg.data_dir = "test_data/"
-    cfg.size = [64, 64]
-    cfg.save_path = str(tmp_path)
-
-    # Save configuration
-    save_cfg(cfg)
-
-    # Check that the file was created
-    expected_path = os.path.join(cfg.save_path, "cfg.toml")
-    assert os.path.exists(expected_path)

@@ -3,7 +3,7 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import pytest
 import torch
 from anomaly_match.models.FixMatch import FixMatch
@@ -171,20 +171,20 @@ class TestFixMatch:
         lb_dataset = MockDataset(100)
         ulb_dataset = MockDataset(300)
         eval_dataset = MockDataset(50)
+        # Start with default config
+        from anomaly_match.utils.get_default_cfg import get_default_cfg
 
-        # Create simple config
-        class Config:
-            def __init__(self):
-                self.batch_size = 16
-                self.uratio = 2  # Ratio between unlabeled and labeled batch sizes
-                self.num_train_iter = 10
-                self.num_workers = 0
-                self.pin_memory = False
-                self.eval_batch_size = 16
-                self.oversample = use_weighted_sampler
-                self.gpu = 0  # Needed for the set_data_loader function
+        cfg = get_default_cfg()
 
-        cfg = Config()
+        # Override with test-specific settings
+        cfg.batch_size = 16
+        cfg.uratio = 2  # Ratio between unlabeled and labeled batch sizes
+        cfg.num_train_iter = 10
+        cfg.num_workers = 0
+        cfg.pin_memory = False
+        cfg.eval_batch_size = 16
+        cfg.oversample = use_weighted_sampler
+        cfg.gpu = 0  # Needed for the set_data_loader function
 
         # Set data loaders
         fixmatch_model.set_data_loader(cfg, lb_dataset, ulb_dataset, eval_dataset)

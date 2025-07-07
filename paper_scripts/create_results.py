@@ -3,12 +3,12 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 """
 Results creation script for AnomalyMatch paper experiments.
 
 This script automates running multiple benchmark configurations to produce results for:
-- Multiple datasets (miniImageNet and galaxyMNIST)
+- Multiple datasets (miniImageNet, galaxyMNIST, and galaxyZoo)
 - Different settings (classes, anomaly ratios)
 - Training iterations analysis
 - Active learning impact analysis
@@ -30,6 +30,7 @@ import glob
 # Toggle which experiment sets to run
 RUN_MINIIMAGENET = False
 RUN_GALAXYMNIST = False
+RUN_GALAXYZOO = True
 RUN_TRAINING_ITERATIONS_STUDY = False  # Different training iterations
 RUN_ACTIVE_LEARNING_ABLATION = False  # With/without active learning
 RUN_N_SAMPLES_ABLATION = False  # New ablation study with varying sample sizes
@@ -43,19 +44,25 @@ DEFAULT_N_MISLABELED = 20
 # Dataset-specific sample sizes
 MINIIMAGENET_N_SAMPLES = 500
 GALAXYMNIST_N_SAMPLES = 40  # Different sample size for GalaxyMNIST
+GALAXYZOO_N_SAMPLES = 500  # Sample size for GalaxyZoo
 # Dataset-specific anomaly ratios
 MINIIMAGENET_ANOMALY_RATIO = 0.01  # Fixed ratio for miniImageNet
 GALAXYMNIST_ANOMALY_RATIO = 0.25  # Fixed ratio for GalaxyMNIST
+GALAXYZOO_ANOMALY_RATIO = 0.05  # Fixed ratio for GalaxyZoo
+GALAXYZOO_THRESHOLDS = [0.95, 0.9, 0.8, 0.7]  # thresholds for classifying an anomaly
 DEFAULT_N_TO_LOAD = 10000  # Number of images to load for prediction
 DEFAULT_OUTPUT_DIR = (
     "/media/team_workspaces/AnomalyMatch/paper_results"  # Default base directory for results
     # "benchmark_results/"
 )
+DEFAULT_INPUT_DIR = "datasets"  # Default input directory where prepared datasets are located
 
 # MiniImageNet experiment configurations
 MINIIMAGENET_CLASSES = [48, 57, 68, 85, 95]  # Classes to use as anomalies
 # GalaxyMNIST experiment configurations
 GALAXYMNIST_CLASSES = [0, 1, 2, 3]  # Classes to use as anomalies
+# GalaxyZoo experiment configurations - binary classification (0=normal, 1=anomaly)
+GALAXYZOO_CLASSES = [1]  # Only anomaly class since it's binary classification
 
 # Training iterations study configurations
 TRAINING_ITERATIONS_VALUES = [50, 100, 250, 500]  # Different numbers of training iterations
@@ -86,6 +93,10 @@ def calculate_total_experiments():
     if RUN_GALAXYMNIST:
         total += len(GALAXYMNIST_CLASSES)
 
+    if RUN_GALAXYZOO:
+        # 3 configurations (200@5%, 500@2%, 500@1.5%) × 1 class = 3 experiments
+        total += len(GALAXYZOO_CLASSES) * 3
+
     if RUN_TRAINING_ITERATIONS_STUDY:
         total += len(TRAINING_ITERATIONS_VALUES)
 
@@ -100,7 +111,7 @@ def calculate_total_experiments():
 
 def update_time_estimate(experiment_duration):
     """Update time tracking and display estimated remaining time."""
-    global completed_experiments, experiment_times # noqa
+    global completed_experiments, experiment_times  # noqa: F824
 
     completed_experiments += 1
     experiment_times.append(experiment_duration)
@@ -141,6 +152,7 @@ def parse_arguments():
     parser.add_argument(
         "--galaxymnist", action="store_true", help="Run only GalaxyMNIST experiments"
     )
+    parser.add_argument("--galaxyzoo", action="store_true", help="Run only GalaxyZoo experiments")
     parser.add_argument(
         "--training-study", action="store_true", help="Run only training iterations study"
     )
@@ -152,6 +164,12 @@ def parse_arguments():
     parser.add_argument(
         "--output-dir", type=str, help="Custom output directory (defaults to timestamped dir)"
     )
+    parser.add_argument(
+        "--input-dir",
+        type=str,
+        default=DEFAULT_INPUT_DIR,
+        help="Input directory where prepared datasets are located (default: datasets)",
+    )
 
     args = parser.parse_args()
 
@@ -159,6 +177,7 @@ def parse_arguments():
     config = {
         "run_miniimagenet": RUN_MINIIMAGENET,
         "run_galaxymnist": RUN_GALAXYMNIST,
+        "run_galaxyzoo": RUN_GALAXYZOO,
         "run_training_iterations_study": RUN_TRAINING_ITERATIONS_STUDY,
         "run_active_learning_ablation": RUN_ACTIVE_LEARNING_ABLATION,
         "run_n_samples_ablation": RUN_N_SAMPLES_ABLATION,
@@ -166,9 +185,16 @@ def parse_arguments():
     }
 
     # If specific flags are set, only run those experiments
-    if args.miniimagenet or args.galaxymnist or args.training_study or args.active_learning:
+    if (
+        args.miniimagenet
+        or args.galaxymnist
+        or args.galaxyzoo
+        or args.training_study
+        or args.active_learning
+    ):
         config["run_miniimagenet"] = args.miniimagenet
         config["run_galaxymnist"] = args.galaxymnist
+        config["run_galaxyzoo"] = args.galaxyzoo
         config["run_training_iterations_study"] = args.training_study
         config["run_active_learning_ablation"] = args.active_learning
 
@@ -176,6 +202,7 @@ def parse_arguments():
     if args.all:
         config["run_miniimagenet"] = True
         config["run_galaxymnist"] = True
+        config["run_galaxyzoo"] = True
         config["run_training_iterations_study"] = True
         config["run_active_learning_ablation"] = True
         config["run_n_samples_ablation"] = True
@@ -201,6 +228,7 @@ def create_output_dir(custom_dir=None):
     # Create subdirectories for different experiment types
     (output_dir / "miniimagenet").mkdir(exist_ok=True)
     (output_dir / "galaxymnist").mkdir(exist_ok=True)
+    (output_dir / "galaxyzoo").mkdir(exist_ok=True)
     (output_dir / "training_iterations").mkdir(exist_ok=True)
     (output_dir / "active_learning").mkdir(exist_ok=True)
     (output_dir / "n_samples_ablation").mkdir(exist_ok=True)
@@ -250,7 +278,7 @@ def run_benchmark(args, log_file):
         return process.returncode
 
 
-def run_miniimagenet_experiments(output_dir, seed):
+def run_miniimagenet_experiments(output_dir, seed, input_dir):
     """Run miniImageNet experiments with various configurations."""
     print("\n======= Running miniImageNet Experiments =======")
     mini_output_dir = output_dir / "miniimagenet"
@@ -276,6 +304,8 @@ def run_miniimagenet_experiments(output_dir, seed):
             str(DEFAULT_N_MISLABELED),
             "--output_dir",
             str(mini_output_dir / experiment_name),
+            "--input_dir",
+            str(input_dir),
             "--seed",
             str(seed),
             "--size",
@@ -297,7 +327,7 @@ def run_miniimagenet_experiments(output_dir, seed):
         update_time_estimate(exp_duration)
 
 
-def run_galaxymnist_experiments(output_dir, seed):
+def run_galaxymnist_experiments(output_dir, seed, input_dir):
     """Run GalaxyMNIST experiments with various configurations."""
     print("\n======= Running GalaxyMNIST Experiments =======")
     galaxy_output_dir = output_dir / "galaxymnist"
@@ -323,6 +353,8 @@ def run_galaxymnist_experiments(output_dir, seed):
             str(DEFAULT_N_MISLABELED),
             "--output_dir",
             str(galaxy_output_dir / experiment_name),
+            "--input_dir",
+            str(input_dir),
             "--seed",
             str(seed),
             "--size",
@@ -344,7 +376,67 @@ def run_galaxymnist_experiments(output_dir, seed):
         update_time_estimate(exp_duration)
 
 
-def training_iterations_study(output_dir, seed):
+def run_galaxyzoo_experiments(output_dir, seed, input_dir):
+    """Run GalaxyZoo experiments with various configurations."""
+    print("\n======= Running GalaxyZoo Experiments =======")
+    zoo_output_dir = output_dir / "galaxyzoo"
+
+    # Define specific configurations for GalaxyZoo
+    # Format: (n_samples, anomaly_ratio)
+    galaxyzoo_configs = [
+        (200, 0.5),  # 200 samples with 50% anomaly ratio
+        (400, 0.5),  # 400 samples with 50% anomaly ratio
+        (400, 0.015),  # 400 samples with 1.5% anomaly ratio
+    ]
+
+    # Test anomaly detection on Galaxy Zoo dataset (binary classification)
+    for cls in GALAXYZOO_CLASSES:
+        for n_samples, anomaly_ratio in galaxyzoo_configs:
+            experiment_name = f"zoo_class{cls}_n{n_samples}_ratio{anomaly_ratio:.3f}"
+            print(f"\nRunning experiment: {experiment_name}")
+            exp_start_time = time.time()
+
+            args = [
+                "--dataset",
+                "galaxyzoo",
+                "--anomaly_classes",
+                str(cls),
+                "--n_samples",
+                str(n_samples),
+                "--anomaly_ratio",
+                str(anomaly_ratio),
+                "--train_iterations",
+                str(DEFAULT_TRAIN_ITERATIONS),
+                "--n_mislabeled",
+                str(DEFAULT_N_MISLABELED),
+                "--output_dir",
+                str(zoo_output_dir / experiment_name),
+                "--input_dir",
+                str(input_dir),
+                "--seed",
+                str(seed),
+                "--size",
+                str(DEFAULT_IMAGE_SIZE),
+                "--n_to_load",
+                str(DEFAULT_N_TO_LOAD),
+                "--training_runs",
+                str(DEFAULT_TRAINING_RUNS),
+                # Add flag to create new Galaxy Zoo plots
+                "--create_galaxy_plots",
+            ]
+
+            if SKIP_MOCK_UI:
+                args.append("--skip_mock_ui")
+
+            log_file = zoo_output_dir / f"{experiment_name}.log"
+            run_benchmark(args, log_file)
+
+        # Update time estimate
+        exp_duration = time.time() - exp_start_time
+        update_time_estimate(exp_duration)
+
+
+def training_iterations_study(output_dir, seed, input_dir):
     """Run study on effect of different training iterations."""
     print("\n======= Running Training Iterations Study =======")
     training_output_dir = output_dir / "training_iterations"
@@ -353,8 +445,8 @@ def training_iterations_study(output_dir, seed):
     cls = MINIIMAGENET_CLASSES[0]
 
     for iterations in TRAINING_ITERATIONS_VALUES:
-        experiment_name = f"mini_class{cls}_iterations{iterations}"
-        print(f"\nRunning training study: {experiment_name}")
+        experiment_name = f"iterations{iterations}_class{cls}"
+        print(f"\nRunning experiment: {experiment_name}")
         exp_start_time = time.time()
 
         args = [
@@ -363,15 +455,17 @@ def training_iterations_study(output_dir, seed):
             "--anomaly_classes",
             str(cls),
             "--n_samples",
-            str(MINIIMAGENET_N_SAMPLES),  # Use miniImageNet specific sample size
+            str(MINIIMAGENET_N_SAMPLES),
             "--anomaly_ratio",
             str(MINIIMAGENET_ANOMALY_RATIO),
             "--train_iterations",
-            str(iterations),
+            str(iterations),  # Variable iterations
             "--n_mislabeled",
             str(DEFAULT_N_MISLABELED),
             "--output_dir",
             str(training_output_dir / experiment_name),
+            "--input_dir",
+            str(input_dir),
             "--seed",
             str(seed),
             "--size",
@@ -393,7 +487,7 @@ def training_iterations_study(output_dir, seed):
         update_time_estimate(exp_duration)
 
 
-def active_learning_ablation(output_dir, seed):
+def active_learning_ablation(output_dir, seed, input_dir):
     """Run experiment to compare with and without active learning."""
     print("\n======= Running Active Learning Ablation Study =======")
     al_output_dir = output_dir / "active_learning"
@@ -447,6 +541,8 @@ def active_learning_ablation(output_dir, seed):
         str(DEFAULT_N_MISLABELED),
         "--output_dir",
         str(al_output_dir / experiment_name),
+        "--input_dir",
+        str(input_dir),
         "--seed",
         str(seed),
         "--size",
@@ -487,6 +583,8 @@ def active_learning_ablation(output_dir, seed):
         "0",  # No active learning
         "--output_dir",
         str(al_output_dir / experiment_name),
+        "--input_dir",
+        str(input_dir),
         "--seed",
         str(seed),
         "--size",
@@ -531,6 +629,8 @@ def active_learning_ablation(output_dir, seed):
         "0",  # No active learning needed as we start with all samples
         "--output_dir",
         str(al_output_dir / experiment_name),
+        "--input_dir",
+        str(input_dir),
         "--seed",
         str(seed),
         "--size",
@@ -552,7 +652,7 @@ def active_learning_ablation(output_dir, seed):
     update_time_estimate(exp_duration)
 
 
-def n_samples_ablation(output_dir, seed):
+def n_samples_ablation(output_dir, seed, input_dir):
     """Run ablation study with varying sample sizes."""
     print("\n======= Running N_SAMPLES Ablation Study =======")
     n_samples_output_dir = output_dir / "n_samples_ablation"
@@ -580,6 +680,8 @@ def n_samples_ablation(output_dir, seed):
             str(n_mislabeled),
             "--output_dir",
             str(n_samples_output_dir / experiment_name),
+            "--input_dir",
+            str(input_dir),
             "--seed",
             str(seed),
             "--size",
@@ -616,6 +718,7 @@ def collect_ablation_results(output_dir):
     run_type_dfs = {
         "miniimagenet": [],
         "galaxymnist": [],
+        "galaxyzoo": [],
         "training_iterations": [],
         "active_learning": [],
         "n_samples_ablation": [],
@@ -634,6 +737,8 @@ def collect_ablation_results(output_dir):
             return "miniimagenet"
         elif "galaxymnist" in path_str:
             return "galaxymnist"
+        elif "galaxyzoo" in path_str:
+            return "galaxyzoo"
         else:
             return None
 
@@ -710,6 +815,7 @@ def main():
     # Extract config values
     run_miniimagenet = config["run_miniimagenet"]
     run_galaxymnist = config["run_galaxymnist"]
+    run_galaxyzoo = config["run_galaxyzoo"]
     run_training_iterations_study = config["run_training_iterations_study"]
     run_active_learning_ablation = config["run_active_learning_ablation"]
     run_n_samples_ablation = config["run_n_samples_ablation"]
@@ -741,19 +847,22 @@ def main():
 
     # Run selected experiments
     if run_miniimagenet:
-        run_miniimagenet_experiments(output_dir, seed)
+        run_miniimagenet_experiments(output_dir, seed, args.input_dir)
 
     if run_galaxymnist:
-        run_galaxymnist_experiments(output_dir, seed)
+        run_galaxymnist_experiments(output_dir, seed, args.input_dir)
+
+    if run_galaxyzoo:
+        run_galaxyzoo_experiments(output_dir, seed, args.input_dir)
 
     if run_training_iterations_study:
-        training_iterations_study(output_dir, seed)
+        training_iterations_study(output_dir, seed, args.input_dir)
 
     if run_active_learning_ablation:
-        active_learning_ablation(output_dir, seed)
+        active_learning_ablation(output_dir, seed, args.input_dir)
 
     if run_n_samples_ablation:
-        n_samples_ablation(output_dir, seed)
+        n_samples_ablation(output_dir, seed, args.input_dir)
 
     # Collect and aggregate results
     summary_dir = collect_ablation_results(output_dir)
@@ -767,6 +876,7 @@ def main():
         # Using ASCII compatible characters instead of Unicode symbols
         f.write(f"- MiniImageNet experiments: {'Yes' if run_miniimagenet else 'No'}\n")
         f.write(f"- GalaxyMNIST experiments: {'Yes' if run_galaxymnist else 'No'}\n")
+        f.write(f"- GalaxyZoo experiments: {'Yes' if run_galaxyzoo else 'No'}\n")
         f.write(
             f"- Training iterations study: {'Yes' if run_training_iterations_study else 'No'}\n"
         )

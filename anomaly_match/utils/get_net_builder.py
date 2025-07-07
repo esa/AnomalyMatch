@@ -3,7 +3,7 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 from efficientnet_pytorch import EfficientNet
 import efficientnet_lite_pytorch
 from efficientnet_lite0_pytorch_model import EfficientnetLite0ModelFile

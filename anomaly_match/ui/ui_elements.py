@@ -3,12 +3,15 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import ipywidgets as widgets
 from ipywidgets import Button, HBox, VBox
 from IPython.display import HTML
+from loguru import logger
+
 from anomaly_match import __version__
 from anomaly_match.ui.memory_monitor import MemoryMonitor
+from anomaly_match.image_processing.NormalisationMethod import NormalisationMethod
 
 HTML_setup = HTML(
     """
@@ -77,13 +80,15 @@ additional_button_names = [
     "Save Labels",
     "Load Top Files",
 ]
-transform_button_names = ["Invert Image", "Restore", "Apply Unsharp Mask"]
+transform_button_names = ["Invert Image", "Restore", "Toggle Unsharp Mask"]
+normalisation_button_names = ["Normalisation"]
 
 
 def create_ui_elements():
     """
     Creates and returns the necessary UI widgets as a dictionary.
     """
+    logger.debug("Creating UI elements")
 
     # HTML widget
     filename_text = widgets.HTML(
@@ -136,6 +141,7 @@ def create_ui_elements():
     # Define colors
     ORANGE_COLOR = "#fd7e14"  # Bootstrap orange
     WHITE_COLOR = "#ffffff"  # White
+    RED_COLOR = "#dc3545"  # Bootstrap danger red
 
     # Create Remember button with orange color
     remember_button = Button(
@@ -143,6 +149,25 @@ def create_ui_elements():
         button_style="warning",
         layout=widgets.Layout(background_color="black"),
         style={"button_color": ORANGE_COLOR},
+    )
+
+    # Create Remove label button with danger/red styling
+    remove_label_button = Button(
+        description="Remove label",
+        button_style="danger",
+        layout=widgets.Layout(background_color="black"),
+        style={"button_color": RED_COLOR},
+    )
+
+    # Add a dropdown for normalisation methods
+    normalisation_dropdown = widgets.Dropdown(
+        options=NormalisationMethod.get_dropdown_options(),
+        value=NormalisationMethod.CONVERSION_ONLY,
+        description=normalisation_button_names[0],
+        layout=widgets.Layout(background_color="black", width="250px"),
+        style={"description_width": "initial"},
+        disabled=False,
+        continuous_update=True,
     )
 
     # Update transform buttons with white background but black text
@@ -211,7 +236,12 @@ def create_ui_elements():
 
     # Group RGB checkboxes in a compact horizontal box
     channel_controls = HBox(
-        [channel_label, red_channel_checkbox, green_channel_checkbox, blue_channel_checkbox],
+        [
+            channel_label,
+            red_channel_checkbox,
+            green_channel_checkbox,
+            blue_channel_checkbox,
+        ],
         layout=widgets.Layout(
             background_color="black", width="180px", justify_content="flex-start"
         ),
@@ -219,7 +249,7 @@ def create_ui_elements():
 
     # Create a slider container with both sliders and the RGB controls
     slider_row = HBox(
-        [brightness_slider, contrast_slider, channel_controls],
+        [brightness_slider, contrast_slider],
         layout=widgets.Layout(background_color="black"),
     )
 
@@ -239,7 +269,7 @@ def create_ui_elements():
         min=500,
         max=50000,
         step=500,
-        description="Batch Size",
+        description="# of Unlabelled to use",
         continuous_update=True,
         layout=widgets.Layout(background_color="black"),
         style={"description_width": "initial", "handle_color": "white"},
@@ -270,16 +300,22 @@ def create_ui_elements():
     train_iteration_slider = widgets.IntSlider(
         value=50,
         min=50,
-        max=100000,
+        max=2000,
         step=50,
         description="Train Iterations",
         continuous_update=True,
-        style={"description_width": "initial", "handle_color": "white", "text_color": "white"},
+        style={
+            "description_width": "initial",
+            "handle_color": "white",
+            "text_color": "white",
+        },
         layout=widgets.Layout(background_color="black"),
     )
 
     train_label = widgets.Label(
-        value="", layout=widgets.Layout(background_color="black"), style={"color": "white"}
+        value="",
+        layout=widgets.Layout(background_color="black"),
+        style={"color": "white"},
     )
 
     progress_bar = widgets.FloatProgress(
@@ -359,7 +395,7 @@ def create_ui_elements():
         layout=widgets.Layout(background_color="black"),
     )
 
-    # Create model controls row (previously bottom_row2) and move it to the top
+    # Create model controls row and move it to the top
     model_controls = HBox(
         additional_buttons,  # All model-related buttons
         layout=widgets.Layout(background_color="black"),
@@ -380,6 +416,10 @@ def create_ui_elements():
             decision_buttons[1],
             skip_buttons[1],
         ],
+        layout=widgets.Layout(background_color="black"),
+    )  # Add new row with channels, normalisation, and remove label button
+    bottom_row2 = HBox(
+        [channel_controls, normalisation_dropdown, remove_label_button],
         layout=widgets.Layout(background_color="black"),
     )
 
@@ -406,6 +446,7 @@ def create_ui_elements():
             center_row,
             transform_controls,
             bottom_row1,
+            bottom_row2,
             bottom_row3,
             bottom_row4,
             bottom_row5,
@@ -439,6 +480,7 @@ def create_ui_elements():
         "transform_controls": transform_controls,
         "search_all_files_button": search_all_files_button,
         "bottom_row1": bottom_row1,
+        "bottom_row2": bottom_row2,
         "bottom_row3": bottom_row3,
         "bottom_row4": bottom_row4,
         "bottom_row5": bottom_row5,
@@ -448,6 +490,8 @@ def create_ui_elements():
         "red_channel_checkbox": red_channel_checkbox,
         "green_channel_checkbox": green_channel_checkbox,
         "blue_channel_checkbox": blue_channel_checkbox,
+        "normalisation_dropdown": normalisation_dropdown,
+        "remove_label_button": remove_label_button,
     }
 
 
@@ -488,6 +532,11 @@ def attach_click_listeners(widget):
     # Brightness/Contrast observers
     widget.ui["brightness_slider"].observe(widget.adjust_brightness_contrast, names="value")
     widget.ui["contrast_slider"].observe(widget.adjust_brightness_contrast, names="value")
+    # Normalisation observer
+    widget.ui["normalisation_dropdown"].observe(widget.select_normalisation, names="value")
+
+    # Remove label button
+    widget.ui["remove_label_button"].on_click(lambda _: widget.unlabel_current_image())
 
     # Additional buttons
     widget.ui["additional_buttons"][0].on_click(lambda _: widget.save_model())

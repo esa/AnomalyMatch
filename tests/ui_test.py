@@ -3,7 +3,7 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import pytest
 import ipywidgets as widgets
 from anomaly_match.ui.Widget import Widget
@@ -39,7 +39,8 @@ def base_config():
     cfg.test_ratio = 0.5
     cfg.output_dir = "tests/test_output"
     cfg.progress_bar = progress_bar
-    cfg.search_dir = "tests/test_data/"  # Set a default search directory
+    cfg.prediction_search_dir = "tests/test_data/"  # Set a default search directory
+    cfg.top_N = 10
     return cfg, out
 
 
@@ -81,6 +82,25 @@ class TestUIInitialization:
         assert ui_widget.session is not None
         assert isinstance(ui_widget.ui["image_widget"], widgets.Image)
         assert isinstance(ui_widget.ui["filename_text"], widgets.HTML)
+
+    def test_normalization_dropdown(self, ui_widget):
+        # Get the initial normalization method
+        initial_method = ui_widget.session.cfg.normalisation_method
+
+        # Get the dropdown options and find a different method
+        dropdown_options = ui_widget.ui["normalisation_dropdown"].options
+        # Find a method different from the initial one, looking at the enum value in the tuple
+        new_method = next(
+            method[1]  # Take the enum value from the tuple
+            for method in dropdown_options
+            if isinstance(method, tuple) and method[1] != initial_method
+        )
+
+        # Set the dropdown value to the enum value directly
+        ui_widget.ui["normalisation_dropdown"].value = new_method
+
+        # Assert that the session config was updated
+        assert ui_widget.session.cfg.normalisation_method == new_method
 
 
 class TestUINavigation:
@@ -168,12 +188,17 @@ class TestUIBatchOperations:
 
     def test_search_all_files(self, ui_widget):
         with patch("anomaly_match.ui.Widget.display"):
+            # Save model first so evaluate_all_images can find it
+            ui_widget.save_model()
+
             # Ensure test data directory exists and has files
-            os.makedirs(ui_widget.session.cfg.search_dir, exist_ok=True)
+            os.makedirs(ui_widget.session.cfg.prediction_search_dir, exist_ok=True)
             # Create a test image if directory is empty
-            if not os.listdir(ui_widget.session.cfg.search_dir):
+            if not os.listdir(ui_widget.session.cfg.prediction_search_dir):
                 test_img = np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)
-                test_img_path = os.path.join(ui_widget.session.cfg.search_dir, "test.jpg")
+                test_img_path = os.path.join(
+                    ui_widget.session.cfg.prediction_search_dir, "test.jpg"
+                )
                 Image.fromarray(test_img).save(test_img_path)
 
             ui_widget.search_all_files()

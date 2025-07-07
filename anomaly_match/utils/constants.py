@@ -3,4 +3,8 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
+"""Constants used across the AnomalyMatch module."""
+
+# Supported image file extensions
+SUPPORTED_IMAGE_EXTENSIONS = [".fits", ".jpeg", ".jpg", ".png", ".tif", ".tiff"]

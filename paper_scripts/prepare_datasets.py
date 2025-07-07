@@ -3,22 +3,23 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 """
 Dataset preparation script for AnomalyMatch paper experiments.
 
-This script prepares both miniImageNet and galaxyMNIST datasets:
+This script prepares miniImageNet, galaxyMNIST, and galaxyZoo datasets:
 1. Downloads and processes data (if needed)
 2. Saves images in a consistent format in the datasets folder
 3. Creates label CSV files with original class labels
 4. Creates HDF5 files for quick loading
 
 Usage:
-    python prepare_datasets.py [--dataset {miniimagenet,galaxymnist,all}]
+    python prepare_datasets.py [--dataset {miniimagenet,galaxymnist,galaxyzoo,all}]
 
 Requirements:
     - galaxy-datasets package for GalaxyMNIST dataset
     - miniImageNet data files (parquet format) in mini-imagenet/data/
+    - GalaxyZoo images and training_solutions_am_2.csv in datasets/ folder
 """
 
 import os
@@ -47,7 +48,7 @@ def parse_arguments():
     parser.add_argument(
         "--dataset",
         type=str,
-        choices=["miniimagenet", "galaxymnist", "all"],
+        choices=["miniimagenet", "galaxymnist", "galaxyzoo", "all"],
         default="all",
         help="Dataset to prepare",
     )
@@ -73,16 +74,22 @@ def parse_arguments():
         help="Directory to store galaxy mnist data downloads (defaults to output_dir/galaxy_downloads)",
     )
     parser.add_argument(
+        "--galaxyzoo_dir",
+        type=str,
+        default="datasets",
+        help="Directory containing galaxyzoo images and training_solutions_am_2.csv",
+    )
+    parser.add_argument(
         "--num_workers",
         type=int,
         default=8,
         help="Number of parallel workers for image processing",
     )
-    parser.add_argument("--jpeg_quality", type=int, default=90, help="JPEG quality for storage")
+    parser.add_argument("--jpeg_quality", type=int, default=95, help="JPEG quality for storage")
     return parser.parse_args()
 
 
-def save_image(image, filename, output_path, size, quality=90):
+def save_image(image, filename, output_path, size, quality=95):
     """Save a single image to disk with specified parameters"""
     if isinstance(image, np.ndarray):
         if image.dtype == np.float32 and image.max() <= 1.0:
@@ -112,13 +119,13 @@ def save_image(image, filename, output_path, size, quality=90):
 
     # Resize if needed
     if img.size != (size, size):
-        img = img.resize((size, size), Image.LANCZOS)
+        img = img.resize((size, size), Image.BILINEAR)
 
     # Save the image
     img.save(output_path, format="JPEG", quality=quality)
 
 
-def create_hdf5_file(images, filenames, output_path, img_size=224, quality=90):
+def create_hdf5_file(images, filenames, output_path, img_size=224, quality=95):
     """Create a single HDF5 file containing all images and their filenames."""
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
@@ -155,7 +162,7 @@ def create_hdf5_file(images, filenames, output_path, img_size=224, quality=90):
                     # For PIL images
                     with io.BytesIO() as buffer:
                         if image.size != (img_size, img_size):
-                            image = image.resize((img_size, img_size), Image.LANCZOS)
+                            image = image.resize((img_size, img_size), Image.BILINEAR)
                         image.save(buffer, format="JPEG", quality=quality)
                         buffer.seek(0)
                         jpeg_bytes = buffer.getvalue()
@@ -171,7 +178,7 @@ def create_hdf5_file(images, filenames, output_path, img_size=224, quality=90):
 
 
 def create_hdf5_file_incrementally(
-    output_path, total_images, img_size=224, quality=90, batch_size=1000
+    output_path, total_images, img_size=224, quality=95, batch_size=1000
 ):
     """Create an HDF5 file incrementally without storing all images in memory.
 
@@ -209,7 +216,7 @@ def create_hdf5_file_incrementally(
                 # For PIL images
                 with io.BytesIO() as buffer:
                     if image.size != (img_size, img_size):
-                        image = image.resize((img_size, img_size), Image.LANCZOS)
+                        image = image.resize((img_size, img_size), Image.BILINEAR)
                     image.save(buffer, format="JPEG", quality=quality)
                     buffer.seek(0)
                     jpeg_bytes = buffer.getvalue()
@@ -449,7 +456,7 @@ def prepare_miniimagenet(miniimagenet_dir, output_dir, img_size=224, batch_size=
     return total_images, miniimagenet_dir_out, labels_df
 
 
-def save_images_to_folder(images, filenames, output_dir, img_size=224, quality=90, num_workers=8):
+def save_images_to_folder(images, filenames, output_dir, img_size=224, quality=95, num_workers=8):
     """Save all images to the output directory with parallel processing"""
     os.makedirs(output_dir, exist_ok=True)
 
@@ -485,8 +492,7 @@ def process_miniimagenet_files(
     output_dir,
     hdf5_path,
     img_size=224,
-    quality=90,
-    num_workers=8,
+    quality=95,
     batch_size=1000,
 ):
     """Process miniImageNet files in batches to reduce memory usage."""
@@ -583,6 +589,133 @@ def process_miniimagenet_files(
     return images_processed
 
 
+def prepare_galaxyzoo(output_dir, datasets_dir="datasets", img_size=224, batch_size=1000):
+    """
+    Prepare the GalaxyZoo dataset from existing images and labels using batch processing.
+
+    Args:
+        output_dir: Base output directory
+        datasets_dir: Directory containing the galaxyzoo images and training_solutions_am_2.csv
+        img_size: Target image size
+        batch_size: Number of images to process in each batch
+
+    Returns:
+        Tuple of (None, None, labels_df, output_directory) - images saved directly to HDF5
+    """
+    logger.info("Preparing GalaxyZoo dataset from existing files with batch processing")
+
+    # Set up paths
+    galaxyzoo_images_dir = os.path.join(datasets_dir, "galaxyzoo")
+    labels_csv_path = os.path.join(datasets_dir, "galaxyzoo", "training_solutions_am_2.csv")
+
+    # Check if files exist
+    if not os.path.exists(galaxyzoo_images_dir):
+        logger.error(f"GalaxyZoo images directory {galaxyzoo_images_dir} not found")
+        return None, None, None, None
+
+    if not os.path.exists(labels_csv_path):
+        logger.error(f"GalaxyZoo labels file {labels_csv_path} not found")
+        return None, None, None, None
+
+    # Create output directory
+    galaxyzoo_output_dir = os.path.join(output_dir, "galaxyzoo")
+    os.makedirs(galaxyzoo_output_dir, exist_ok=True)
+
+    # Load the labels CSV
+    logger.info(f"Loading labels from {labels_csv_path}")
+    labels_df = pd.read_csv(labels_csv_path)
+
+    # Count valid images first
+    valid_indices = []
+    processed_labels = []
+
+    logger.info("Checking which images exist...")
+    for i, row in tqdm(labels_df.iterrows(), total=len(labels_df), desc="Validating images"):
+        original_filename = row["filename"]
+        img_path = os.path.join(galaxyzoo_images_dir, original_filename)
+
+        if os.path.exists(img_path):
+            valid_indices.append(i)
+
+            # Extract galaxy info for metadata
+            galaxy_id = row["GalaxyID"]
+            label = row["label"]
+
+            # Create processed label entry
+            processed_labels.append(
+                {
+                    "filename": original_filename,  # Use original filename to match HDF5 storage
+                    "original_filename": original_filename,
+                    "galaxy_id": galaxy_id,
+                    "label": "anomaly" if label == 1 else "normal",
+                    "label_idx": label,
+                    "anomaly_score_raw": row["anomaly_score_raw"],
+                    "nominal_score_raw": row["nominal_score_raw"],
+                    "split": "train",  # Default to train, could be modified for splits
+                }
+            )
+        else:
+            logger.warning(f"Image not found: {img_path}")
+
+    total_valid = len(valid_indices)
+    logger.info(f"Found {total_valid} valid images out of {len(labels_df)} total")
+
+    # Set up incremental HDF5 creation
+    hdf5_path = os.path.join(galaxyzoo_output_dir, "galaxyzoo_images.h5")
+    add_batch, finalize = create_hdf5_file_incrementally(
+        hdf5_path, total_valid, img_size=img_size, batch_size=batch_size
+    )
+
+    # Process images in batches
+    batch_images = []
+    batch_filenames = []
+    processed_count = 0
+
+    logger.info(f"Processing {total_valid} GalaxyZoo images in batches of {batch_size}...")
+
+    for idx_pos, row_idx in enumerate(tqdm(valid_indices, desc="Processing GalaxyZoo images")):
+        try:
+            row = labels_df.iloc[row_idx]
+            original_filename = row["filename"]
+            img_path = os.path.join(galaxyzoo_images_dir, original_filename)
+
+            # Load the image
+            img = Image.open(img_path).convert("RGB")
+
+            # Add to current batch using original filename for consistency
+            batch_images.append(img)
+            batch_filenames.append(original_filename)
+
+            # Process batch when it's full or at the end
+            if len(batch_images) >= batch_size or idx_pos == len(valid_indices) - 1:
+                add_batch(batch_images, batch_filenames)
+                processed_count += len(batch_images)
+
+                # Clear batch lists to free memory
+                batch_images = []
+                batch_filenames = []
+
+        except Exception as e:
+            logger.error(f"Error processing GalaxyZoo image at index {row_idx}: {e}")
+            continue
+
+    # Finalize HDF5 file
+    finalize()
+
+    # Create final labels dataframe
+    processed_labels_df = pd.DataFrame(processed_labels)
+
+    logger.info(f"Successfully processed {processed_count} GalaxyZoo images")
+    logger.info(f"Label distribution: {processed_labels_df['label'].value_counts().to_dict()}")
+
+    # Save labels to CSV
+    labels_output_path = os.path.join(galaxyzoo_output_dir, "galaxyzoo_labels.csv")
+    processed_labels_df.to_csv(labels_output_path, index=False)
+    logger.info(f"Saved labels to {labels_output_path}")
+
+    return None, None, processed_labels_df, galaxyzoo_output_dir
+
+
 def process_dataset(dataset_name, args):
     """Process a specific dataset"""
     img_size = args.img_size
@@ -600,9 +733,9 @@ def process_dataset(dataset_name, args):
         if images is None:
             return False
 
-        # Define output paths
-        hdf5_path = os.path.join(output_dir, f"galaxymnist_{img_size}.hdf5")
-        csv_path = os.path.join(output_dir, "labels_galaxymnist.csv")
+        # Define output paths - save in the same directory as the images
+        hdf5_path = os.path.join(dataset_dir, f"galaxymnist_{img_size}.hdf5")
+        csv_path = os.path.join(dataset_dir, "labels_galaxymnist.csv")
 
         # Save images to individual files
         save_images_to_folder(
@@ -636,9 +769,9 @@ def process_dataset(dataset_name, args):
         if dataset_dir is None:
             return False
 
-        # Define output paths
-        hdf5_path = os.path.join(output_dir, f"miniimagenet_{img_size}.hdf5")
-        csv_path = os.path.join(output_dir, "labels_miniimagenet.csv")
+        # Define output paths - save in the same directory as the images
+        hdf5_path = os.path.join(dataset_dir, f"miniimagenet_{img_size}.hdf5")
+        csv_path = os.path.join(dataset_dir, "labels_miniimagenet.csv")
 
         # Process files and build HDF5 incrementally
         process_miniimagenet_files(
@@ -647,9 +780,23 @@ def process_dataset(dataset_name, args):
             hdf5_path=hdf5_path,
             img_size=img_size,
             quality=args.jpeg_quality,
-            num_workers=args.num_workers,
             batch_size=1000,
         )
+
+    elif dataset_name == "galaxyzoo":
+        # Prepare GalaxyZoo dataset with batch processing
+        images, filenames, labels_df, dataset_dir = prepare_galaxyzoo(
+            output_dir=output_dir, datasets_dir=args.galaxyzoo_dir, img_size=img_size
+        )
+
+        if labels_df is None or dataset_dir is None:
+            return False
+
+        # Define output paths - save in the same directory as the images
+        csv_path = os.path.join(dataset_dir, "labels_galaxyzoo.csv")
+
+        # Labels are already saved during prepare_galaxyzoo, but also save to main output dir
+        labels_df.to_csv(csv_path, index=False)
 
     else:
         logger.error(f"Unknown dataset: {dataset_name}")
@@ -677,6 +824,9 @@ def main():
 
     if args.dataset in ["all", "miniimagenet"]:
         process_dataset("miniimagenet", args)
+
+    if args.dataset in ["all", "galaxyzoo"]:
+        process_dataset("galaxyzoo", args)
 
     logger.info("Dataset preparation complete!")
 

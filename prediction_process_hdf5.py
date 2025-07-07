@@ -3,27 +3,32 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import argparse
 import os
+import pickle
 import sys
+
+from dotmap import DotMap
 import torch
 import numpy as np
 from loguru import logger
-from dotmap import DotMap
 from concurrent.futures import ThreadPoolExecutor
 import time
-import toml
 import h5py
 from tqdm import tqdm
 
 from prediction_utils import (
     load_model,
     save_results,
-    get_transform,
     process_batch_predictions,
     jpeg_decoder,
 )
+
+from anomaly_match.image_processing.transforms import (
+    get_prediction_transforms,
+)
+from anomaly_match.data_io.load_images import process_image_array
 
 # Configure logging
 logs_dir = os.path.join(os.path.dirname(__file__), "logs")
@@ -40,8 +45,8 @@ logger.add(
 logger.add(sys.stderr, level="INFO")
 
 
-def read_and_decode_image_from_hdf5(image_data, size):
-    """Read image data from HDF5 and decode it."""
+def read_and_decode_image_from_hdf5(image_data, cfg):
+    """Read image data from HDF5 and decode it using centralized processing."""
     # Convert from vlen array back to bytes
     image_bytes = bytes(image_data)
 
@@ -49,6 +54,9 @@ def read_and_decode_image_from_hdf5(image_data, size):
         # Try decoding with TurboJPEG first (faster for JPEG)
         try:
             image = jpeg_decoder.decode(image_bytes)
+            # TurboJPEG decodes in BGR format, convert to RGB
+            if len(image.shape) == 3 and image.shape[2] == 3:
+                image = image[:, :, [2, 1, 0]]
         except Exception:
             # If TurboJPEG fails, fall back to PIL
             from PIL import Image
@@ -56,29 +64,24 @@ def read_and_decode_image_from_hdf5(image_data, size):
 
             image = np.array(Image.open(io.BytesIO(image_bytes)))
 
-        # If grayscale, convert to RGB
-        if len(image.shape) == 2 or image.shape[2] == 1:
-            image = np.stack((image,) * 3, axis=-1)
-        # Handle RGBA or other formats
-        elif len(image.shape) > 2 and image.shape[2] > 3:
-            image = image[:, :, :3]  # Keep only RGB channels
+        processed_image = process_image_array(image, cfg, convert_to_rgb=True, image_source="hdf5")
+        return processed_image
 
-        return image
     except Exception as e:
         logger.error(f"Error decoding image from HDF5: {e}")
         # Return a blank image as fallback
-        return np.zeros((size[0], size[1], 3), dtype=np.uint8)
+        return np.zeros((cfg.size[0], cfg.size[1], 3), dtype=np.uint8)
 
 
 def load_and_preprocess(args):
     """Load and preprocess a single image."""
-    image_data, size, transform = args
-    image = read_and_decode_image_from_hdf5(image_data, size)
+    image_data, transform, cfg = args
+    image = read_and_decode_image_from_hdf5(image_data, cfg)
     image = transform(image)
     return image
 
 
-def evaluate_images_in_hdf5(hdf5_path, cfg, top_n=1000, batch_size=2500, max_workers=1):
+def evaluate_images_in_hdf5(hdf5_path, cfg, top_n=1000, batch_size=1000, max_workers=4):
     """Evaluate images inside an HDF5 file and return top N scores."""
     logger.info(f"Opening HDF5 file {hdf5_path}")
 
@@ -90,7 +93,7 @@ def evaluate_images_in_hdf5(hdf5_path, cfg, top_n=1000, batch_size=2500, max_wor
 
         model = load_model(cfg)
         model.eval()
-        transform = get_transform()
+        transform = get_prediction_transforms()
 
         # Process images in batches
         scores_list = []
@@ -113,7 +116,7 @@ def evaluate_images_in_hdf5(hdf5_path, cfg, top_n=1000, batch_size=2500, max_wor
             # Process batch in parallel
             batch_process_start = time.time()
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                batch_args = [(data, cfg.size, transform) for data in batch_data]
+                batch_args = [(data, transform, cfg) for data in batch_data]
                 batch_images = list(executor.map(load_and_preprocess, batch_args))
 
             # Stack images into a batch tensor and get predictions
@@ -165,7 +168,14 @@ def main():
     args = parser.parse_args()
 
     logger.info(f"Loading config from {args.config_path}")
-    cfg = DotMap(toml.load(args.config_path))
+    # Load cfg from pkl
+    try:
+        with open(args.config_path, "rb") as f:
+            cfg = pickle.load(f)
+            cfg = DotMap(cfg)
+    except Exception as e:
+        logger.error(f"Failed to load config from {args.config_path}: {e}")
+        sys.exit(1)
 
     # Log key configuration parameters
     logger.debug("Configuration loaded with parameters:")

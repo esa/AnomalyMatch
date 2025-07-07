@@ -3,7 +3,7 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 """
 Generate example images with weak and strong augmentations from MiniImageNet.
 
@@ -22,9 +22,15 @@ from pathlib import Path
 from PIL import Image
 import torchvision.transforms as transforms
 
+
 sys.path.append("/media/home/AnomalyMatch")
 sys.path.append("../")
-from anomaly_match.datasets.augmentation.randaugment import RandAugment
+
+from anomaly_match.image_processing.transforms import (
+    get_weak_transforms,
+    get_strong_transforms,
+)
+
 
 # Constants
 HOURGLASS_CLASS_IDX = 57  # Class ID for hourglass images (anomaly)
@@ -130,21 +136,10 @@ def create_augmentations():
         tuple: (weak_transform, strong_transform)
     """
     # Define a simple weak transform (as used in BasicDataset)
-    weak_transform = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.RandomHorizontalFlip(p=0.5),
-        ]
-    )
+    weak_transform = get_weak_transforms()
 
     # Create strong transform (following BasicDataset approach)
-    strong_transform = transforms.Compose(
-        [
-            RandAugment(3, 5),  # Apply RandAugment as first step
-            transforms.ToTensor(),
-            transforms.RandomHorizontalFlip(p=0.5),
-        ]
-    )
+    strong_transform = get_strong_transforms()
 
     return weak_transform, strong_transform
 
@@ -211,7 +206,7 @@ def save_examples(samples, output_dir, weak_transform, strong_transform, image_s
 
             # Resize if needed
             if image_size:
-                image = image.resize(image_size, Image.LANCZOS)
+                image = image.resize(image_size, Image.BILINEAR)
 
             # Apply transformations
             original_tensor, weak_tensor, strong_tensor = apply_transforms(

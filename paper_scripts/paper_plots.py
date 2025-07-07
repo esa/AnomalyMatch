@@ -3,7 +3,7 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 """
 Plotting utilities for AnomalyMatch benchmarking
 
@@ -19,6 +19,31 @@ import seaborn as sns
 from sklearn.metrics import roc_curve
 from loguru import logger
 from paper_utils import save_plot_data
+from paper_scripts.plot_colors import (
+    BLUE,
+    RED,
+    GREEN,
+    ORANGE,
+    PURPLE,
+    PERFECT_LINE_COLOR,
+    PERFECT_LINE_STYLE,
+    PERFECT_LINE_ALPHA,
+    REFERENCE_LINE_COLOR,
+    REFERENCE_LINE_STYLE,
+    REFERENCE_LINE_ALPHA,
+    VLINE_COLOR,
+    VLINE_STYLE,
+    VLINE_ALPHA,
+    HLINE_COLOR,
+    HLINE_STYLE,
+    HLINE_ALPHA,
+    COLORMAP_NAME,
+    LAST_ITER_COLOR,
+    NORMAL_COLOR,
+    ANOMALY_COLOR,
+    HIST_ALPHA,
+)
+from paper_scripts.create_results import GALAXYZOO_THRESHOLDS
 
 # Scaling factor for all font sizes (adjust this to make all text larger or smaller)
 FONT_SCALE = 1.75
@@ -71,10 +96,22 @@ def plot_score_histogram(anomaly_scores, normal_scores, iteration, plots_dir):
 
     # Plot histograms with density=True for normalization
     sns.histplot(
-        normal_scores, color="blue", alpha=0.5, label="Normal", kde=True, bins=30, stat="density"
+        normal_scores,
+        color=NORMAL_COLOR,
+        alpha=HIST_ALPHA,
+        label="Normal",
+        kde=True,
+        bins=30,
+        stat="density",
     )
     sns.histplot(
-        anomaly_scores, color="red", alpha=0.5, label="Anomaly", kde=True, bins=30, stat="density"
+        anomaly_scores,
+        color=ANOMALY_COLOR,
+        alpha=HIST_ALPHA,
+        label="Anomaly",
+        kde=True,
+        bins=30,
+        stat="density",
     )
 
     # Add labels (no title for publication)
@@ -110,11 +147,9 @@ def plot_metrics_over_time(metrics_history, plots_dir, batch_size=None):
         x_label = "Training Batches"
     else:
         x_values = iterations
-        x_label = "Training Iteration"
-
-    # Plot metrics with emphasis on data points
-    plt.plot(x_values, auroc_values, "bo-", label="AUROC", markersize=8)
-    plt.plot(x_values, auprc_values, "ro-", label="AUPRC", markersize=8)
+        x_label = "Training Iteration"  # Plot metrics with emphasis on data points
+    plt.plot(x_values, auroc_values, "-", color=BLUE, marker="o", label="AUROC", markersize=8)
+    plt.plot(x_values, auprc_values, "-", color=RED, marker="o", label="AUPRC", markersize=8)
 
     # Add labels (no title for publication)
     plt.xlabel(x_label)
@@ -162,12 +197,18 @@ def plot_roc_prc_curves(metrics, iteration, plots_dir):
         [np.ones(len(metrics["anomaly_scores"])), np.zeros(len(metrics["normal_scores"]))]
     )
     y_scores = np.concatenate([metrics["anomaly_scores"], metrics["normal_scores"]])
-    fpr, tpr, _ = roc_curve(y_true, y_scores)
-
-    # 1. ROC Curve
+    fpr, tpr, _ = roc_curve(y_true, y_scores)  # 1. ROC Curve
     plt.figure(figsize=(8, 8))
-    plt.plot(fpr, tpr, "b-", linewidth=2, label=f'AUROC = {metrics["auroc"]:.3f}')
-    plt.plot([0, 1], [0, 1], "k--", linewidth=1.5, label="Random")
+    plt.plot(fpr, tpr, color=BLUE, linewidth=2, label=f'AUROC = {metrics["auroc"]:.3f}')
+    plt.plot(
+        [0, 1],
+        [0, 1],
+        color=REFERENCE_LINE_COLOR,
+        linestyle=REFERENCE_LINE_STYLE,
+        linewidth=1.5,
+        alpha=REFERENCE_LINE_ALPHA,
+        label="Random",
+    )
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
     plt.grid(True, alpha=0.3)
@@ -181,26 +222,22 @@ def plot_roc_prc_curves(metrics, iteration, plots_dir):
     roc_path = os.path.join(plots_dir, f"roc_curve_iter{iteration}.png")
     plt.tight_layout()
     plt.savefig(roc_path, dpi=DEFAULT_DPI)
-    plt.close()
-
-    # 2. Precision-Recall Curve
+    plt.close()  # 2. Precision-Recall Curve
     plt.figure(figsize=(8, 8))
     plt.plot(
         metrics["recall"],
         metrics["precision"],
-        "r-",
+        color=RED,
         linewidth=2,
         label=f'AUPRC = {metrics["auprc"]:.3f}',
     )
 
     # Note: We're removing the baseline from the PR curve as requested
     # The baseline would be the prevalence of positive class (n_pos / (n_pos + n_neg))
-    # but it's not necessary for paper publication
-
-    plt.xlabel("Recall")
+    # but it's not necessary for paper publication    plt.xlabel("Recall")
     plt.ylabel("Precision")
     plt.grid(True, alpha=0.3)
-    plt.legend(loc="upper right", frameon=True, framealpha=0.7)
+    plt.legend(loc="lower left", frameon=True, framealpha=0.7)
 
     # Set axis limits for PR curve
     plt.xlim([0, 1])
@@ -213,11 +250,17 @@ def plot_roc_prc_curves(metrics, iteration, plots_dir):
     plt.close()
 
     # 3. Combined figure (side by side)
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
-
-    # Plot ROC curve
-    ax1.plot(fpr, tpr, "b-", linewidth=2, label=f'AUROC = {metrics["auroc"]:.3f}')
-    ax1.plot([0, 1], [0, 1], "k--", linewidth=1.5, label="Random")
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))  # Plot ROC curve
+    ax1.plot(fpr, tpr, color=BLUE, linewidth=2, label=f'AUROC = {metrics["auroc"]:.3f}')
+    ax1.plot(
+        [0, 1],
+        [0, 1],
+        color=REFERENCE_LINE_COLOR,
+        linestyle=REFERENCE_LINE_STYLE,
+        linewidth=1.5,
+        alpha=REFERENCE_LINE_ALPHA,
+        label="Random",
+    )
     ax1.set_xlabel("False Positive Rate")
     ax1.set_ylabel("True Positive Rate")
     ax1.grid(True, alpha=0.3)
@@ -229,14 +272,14 @@ def plot_roc_prc_curves(metrics, iteration, plots_dir):
     ax2.plot(
         metrics["recall"],
         metrics["precision"],
-        "b-",
+        color=RED,
         linewidth=2,
         label=f'AUPRC = {metrics["auprc"]:.3f}',
     )
     ax2.set_xlabel("Recall")
     ax2.set_ylabel("Precision")
     ax2.grid(True, alpha=0.3)
-    ax2.legend(loc="upper right", frameon=True, framealpha=0.7)
+    ax2.legend(loc="lower left", frameon=True, framealpha=0.7)
     ax2.set_xlim([0, 1])
     ax2.set_ylim([0, 1])
 
@@ -424,13 +467,11 @@ def plot_top_n_anomaly_detection(
             )
 
     # Create square figure with log scale for publication (8x8 inches)
-    plt.figure(figsize=(8, 8))
-
-    # Plot the actual detection curve
+    plt.figure(figsize=(8, 8))  # Plot the actual detection curve
     plt.plot(
         inspection_points / total_samples * 100,
         anomalies_found,
-        "b-",
+        color=BLUE,
         linewidth=2,
         label="Anomaly detection rate",
     )
@@ -450,14 +491,22 @@ def plot_top_n_anomaly_detection(
     detection_rate_factor = 1.0 / anomaly_prevalence if anomaly_prevalence > 0 else 1.0
     y_perfect = np.minimum(x_perfect * detection_rate_factor, 100)
 
-    plt.plot(x_perfect, y_perfect, "r--", alpha=0.7, linewidth=1.5, label="Perfect detection")
+    plt.plot(
+        x_perfect,
+        y_perfect,
+        color=PERFECT_LINE_COLOR,
+        linestyle=PERFECT_LINE_STYLE,
+        alpha=PERFECT_LINE_ALPHA,
+        linewidth=1.5,
+        label="Perfect detection",
+    )
 
     # Calculate percentage of anomalies found at key inspection points
     percent_at_0_1pct = np.interp(0.1, inspection_points / total_samples * 100, anomalies_found)
-    percent_at_1pct = np.interp(1, inspection_points / total_samples * 100, anomalies_found)
-
-    # Add vertical line at 0.1% inspection
-    plt.axvline(x=0.1, color="g", linestyle="--", alpha=0.7)
+    percent_at_1pct = np.interp(
+        1, inspection_points / total_samples * 100, anomalies_found
+    )  # Add vertical line at 0.1% inspection
+    plt.axvline(x=0.1, color=VLINE_COLOR, linestyle=VLINE_STYLE, alpha=VLINE_ALPHA)
     plt.text(
         0.07,
         50,
@@ -475,7 +524,7 @@ def plot_top_n_anomaly_detection(
     )
 
     # Add vertical line at 1% inspection
-    plt.axvline(x=1, color="g", linestyle="--", alpha=0.7)
+    plt.axvline(x=1, color=VLINE_COLOR, linestyle=VLINE_STYLE, alpha=VLINE_ALPHA)
     plt.text(
         0.7,
         50,
@@ -490,10 +539,8 @@ def plot_top_n_anomaly_detection(
         f"found {percent_at_1pct:.1f}% \n of anomalies",
         ha="center",
         fontsize=8 * FONT_SCALE,
-    )
-
-    # Add labels - NO TITLE for publication
-    plt.xlabel("% of Data Inspected (ranked by anomaly score)")
+    )  # Add labels - NO TITLE for publication
+    plt.xlabel("% of top-scoring predictions inspected")
     plt.ylabel("% of Total Anomalies Found")
     plt.grid(True)
     plt.legend(loc="lower right", frameon=True, framealpha=0.7)
@@ -530,14 +577,20 @@ def plot_combined_anomaly_detection(detection_curves, plots_dir, anomaly_prevale
     logger.info("Creating combined Top-N anomaly detection plot for all iterations")
 
     # Create a square figure for publication
-    plt.figure(figsize=(8, 8))
+    plt.figure(
+        figsize=(8, 8)
+    )  # Define color map for iterations - use viridis for colorblind-friendly palette
+    colors = plt.cm.get_cmap(COLORMAP_NAME)(np.linspace(0, 1, len(detection_curves)))
 
-    # Define color map for iterations
-    colors = plt.cm.viridis(np.linspace(0, 1, len(detection_curves)))
-
-    # Plot each iteration's curve
-    for i, (iteration, (x, y)) in enumerate(detection_curves.items()):
-        plt.plot(x, y, color=colors[i], linewidth=2, label=f"Iteration {iteration}")
+    # Plot each iteration's curve, with the last iteration highlighted in our consistent blue
+    iterations = sorted(list(detection_curves.keys()))
+    for i, iteration in enumerate(iterations):
+        x, y = detection_curves[iteration]
+        # Use special color for last iteration to match anomaly detection rate
+        if iteration == iterations[-1]:  # if this is the last iteration
+            plt.plot(x, y, color=LAST_ITER_COLOR, linewidth=2.5, label=f"Iteration {iteration}")
+        else:
+            plt.plot(x, y, color=colors[i], linewidth=2, label=f"Iteration {iteration}")
 
     # Add reference line (perfect detection - if all anomalies come first)
     # Use very high resolution for the perfect line to avoid interpolation issues
@@ -563,18 +616,24 @@ def plot_combined_anomaly_detection(detection_curves, plots_dir, anomaly_prevale
             "Anomaly prevalence not provided, using simple diagonal for perfect detection curve"
         )
 
-    plt.plot(x_perfect, y_perfect, "r--", alpha=0.7, linewidth=1.5, label="Perfect detection")
+    plt.plot(
+        x_perfect,
+        y_perfect,
+        color=PERFECT_LINE_COLOR,
+        linestyle=PERFECT_LINE_STYLE,
+        alpha=PERFECT_LINE_ALPHA,
+        linewidth=1.5,
+        label="Perfect detection",
+    )
 
     # Add vertical line at 0.1% inspection
-    plt.axvline(x=0.1, color="g", linestyle="--", alpha=0.7)
-    plt.text(0.07, 70, "0.1% inspection", rotation=90, ha="left", fontsize=8 * FONT_SCALE)
+    plt.axvline(x=0.1, color=VLINE_COLOR, linestyle=VLINE_STYLE, alpha=VLINE_ALPHA)
 
     # Add vertical line at 1% inspection
-    plt.axvline(x=1, color="g", linestyle="--", alpha=0.7)
-    plt.text(0.7, 70, "1% inspection", rotation=90, ha="left", fontsize=8 * FONT_SCALE)
+    plt.axvline(x=1, color=VLINE_COLOR, linestyle=VLINE_STYLE, alpha=VLINE_ALPHA)
 
     # Add labels (no title for publication)
-    plt.xlabel("% of Data Inspected (ranked by anomaly score)")
+    plt.xlabel("% of top-scoring predictions inspected")
     plt.ylabel("% of Total Anomalies Found")
     plt.grid(True, alpha=0.3)
     plt.legend(loc="lower right", frameon=True, framealpha=0.7)
@@ -604,34 +663,40 @@ def plot_comparative_anomaly_detection(detection_curves, output_dir):
     logger.info("Creating comparative Top-N anomaly detection plot across anomaly classes")
 
     # Create square figure for publication
-    plt.figure(figsize=(8, 8))
-
-    # Define color map for different classes
-    colors = plt.cm.tab10(np.linspace(0, 1, len(detection_curves)))
+    plt.figure(
+        figsize=(8, 8)
+    )  # Define color map for different classes - use viridis for colorblind-friendly palette
+    colors = plt.cm.get_cmap(COLORMAP_NAME)(np.linspace(0, 1, len(detection_curves)))
 
     # Plot each class's curve
     for i, (anomaly_class, (x, y)) in enumerate(detection_curves.items()):
         plt.plot(x, y, color=colors[i], linewidth=2, label=f"Anomaly Class {anomaly_class}")
 
     # Add reference line (random detection)
-    plt.plot([0, 100], [0, 100], "k:", alpha=0.7, linewidth=1.5, label="Random detection")
-
-    # Add vertical line at 1% inspection
-    plt.axvline(x=1, color="g", linestyle="--", alpha=0.7)
+    plt.plot(
+        [0, 100],
+        [0, 100],
+        REFERENCE_LINE_STYLE,
+        color=REFERENCE_LINE_COLOR,
+        alpha=REFERENCE_LINE_ALPHA,
+        linewidth=1.5,
+        label="Random detection",
+    )  # Add vertical line at 1% inspection
+    plt.axvline(x=1, color=VLINE_COLOR, linestyle=VLINE_STYLE, alpha=VLINE_ALPHA)
     plt.text(1.1, 50, "1% inspection", rotation=90, va="center", fontsize=10)
 
     # Add horizontal lines at 50%, 80%, and 90% detection
-    plt.axhline(y=50, color="m", linestyle="--", alpha=0.7)
+    plt.axhline(y=50, color=HLINE_COLOR, linestyle=HLINE_STYLE, alpha=HLINE_ALPHA)
     plt.text(50, 51, "50% of anomalies", ha="center", fontsize=10)
 
-    plt.axhline(y=80, color="m", linestyle="--", alpha=0.7)
+    plt.axhline(y=80, color=HLINE_COLOR, linestyle=HLINE_STYLE, alpha=HLINE_ALPHA)
     plt.text(50, 81, "80% of anomalies", ha="center", fontsize=10)
 
-    plt.axhline(y=90, color="m", linestyle="--", alpha=0.7)
+    plt.axhline(y=90, color=HLINE_COLOR, linestyle=HLINE_STYLE, alpha=HLINE_ALPHA)
     plt.text(50, 91, "90% of anomalies", ha="center", fontsize=10)
 
     # Add labels (no title for publication)
-    plt.xlabel("% of Data Inspected (ranked by anomaly score)")
+    plt.xlabel("% of top-scoring predictions inspected")
     plt.ylabel("% of Total Anomalies Found")
     plt.grid(True, alpha=0.3)
     plt.legend(loc="lower right", frameon=True, framealpha=0.7)
@@ -824,3 +889,938 @@ def plot_comparative_metrics(class_metrics, output_dir):
     logger.info(f"Comparative results summary saved to {csv_path}")
 
     return summary_df
+
+
+# Galaxy Zoo specialized plotting functions
+def plot_top_n_with_thresholds(
+    scores, filenames, true_labels_df, iteration, plots_dir, thresholds=GALAXYZOO_THRESHOLDS
+):
+    """
+    Plot percentage of anomalies found in top N predictions with different anomaly thresholds.
+
+    Args:
+        scores: Anomaly scores for all predictions
+        filenames: Corresponding filenames
+        true_labels_df: DataFrame with ground truth labels
+        iteration: Current training iteration
+        plots_dir: Directory to save plots
+        thresholds: List of anomaly score thresholds to use
+    """
+    # Save plot data for later recreation
+    plot_data = {
+        "scores": scores,
+        "filenames": filenames,
+        "true_labels_df": true_labels_df,
+        "iteration": iteration,
+        "thresholds": thresholds,
+    }
+    save_plot_data(plot_data, "top_n_with_thresholds", iteration, plots_dir)
+
+    logger.info("Creating Top-N anomaly detection plot with different thresholds")
+
+    # Create a DataFrame with scores and filenames
+    pred_df = pd.DataFrame({"filename": filenames, "score": scores})
+
+    # Merge with true labels
+    merged_df = pd.merge(pred_df, true_labels_df, on="filename")
+
+    # Sort by score (highest to lowest)
+    sorted_df = merged_df.sort_values("score", ascending=False).reset_index(drop=True)
+
+    # Create square figure with log scale for publication
+    plt.figure(figsize=(8, 8))
+
+    # Set up colors for different thresholds
+    colors = [BLUE, GREEN, ORANGE]
+
+    for i, threshold in enumerate(thresholds):
+        # Create true binary labels based on the current threshold
+        merged_df["true_anomaly"] = (merged_df["anomaly_score_raw"] >= threshold).astype(int)
+
+        # Calculate total number of anomalies in the dataset for this threshold
+        total_anomalies = merged_df["true_anomaly"].sum()
+
+        if total_anomalies == 0:
+            logger.warning(f"No anomalies found with threshold {threshold}, skipping")
+            continue
+
+        # Sort by model score (highest to lowest)
+        sorted_df = merged_df.sort_values("score", ascending=False).reset_index(drop=True)
+
+        # Calculate cumulative sum of anomalies found
+        sorted_df["cum_anomalies"] = sorted_df["true_anomaly"].cumsum()
+
+        # Calculate percentage of total anomalies found
+        sorted_df["percent_anomalies_found"] = 100 * sorted_df["cum_anomalies"] / total_anomalies
+
+        # Create x-axis values for number of inspected samples
+        total_samples = len(sorted_df)
+
+        # More points in the lower ranges of the log scale
+        log_space_points = np.concatenate(
+            [
+                np.linspace(0.0001, 0.001, 20),  # 0.0001% to 0.001% (very fine-grained)
+                np.linspace(0.001, 0.01, 30),  # 0.001% to 0.01% (more fine-grained)
+                np.linspace(0.01, 0.1, 30),  # 0.01% to 0.1% (more fine-grained)
+                np.linspace(0.1, 1, 20),  # 0.1% to 1% (fine-grained)
+                np.linspace(1, 10, 10),  # 1% to 10%
+                np.linspace(10, 100, 10),  # 10% to 100%
+            ]
+        )
+
+        # Convert percentages to sample counts and ensure we get unique values
+        inspection_points = np.unique(
+            np.round((log_space_points * total_samples / 100)).astype(int)
+        )
+        inspection_points = inspection_points[inspection_points > 0]  # Remove zero
+        inspection_points = np.insert(inspection_points, 0, 0)  # Add zero at the beginning
+
+        if total_samples not in inspection_points:
+            inspection_points = np.append(
+                inspection_points, total_samples
+            )  # Add last point if needed
+
+        # Calculate percentage of anomalies found at each point
+        anomalies_found = []
+        for i_point in inspection_points:
+            if i_point == 0:
+                anomalies_found.append(0)
+            else:
+                anomalies_found.append(
+                    sorted_df.loc[min(i_point - 1, len(sorted_df) - 1), "percent_anomalies_found"]
+                )
+
+        # Plot the detection curve for this threshold
+        plt.plot(
+            inspection_points / total_samples * 100,
+            anomalies_found,
+            color=colors[i % len(colors)],
+            linewidth=2,
+            label=f"Threshold = {threshold:.1f}",
+        )
+
+        # Calculate anomaly prevalence for this threshold
+        anomaly_prevalence = total_anomalies / total_samples
+        logger.info(f"Anomaly prevalence with threshold {threshold}: {anomaly_prevalence:.4f}")
+
+    # Add perfect detection line based on the highest threshold
+    # Use very high resolution for the perfect line to avoid interpolation issues
+    threshold = thresholds[0]  # Use the highest threshold for perfect line
+    merged_df["true_anomaly"] = (merged_df["anomaly_score_raw"] >= threshold).astype(int)
+    total_anomalies = merged_df["true_anomaly"].sum()
+    anomaly_prevalence = total_anomalies / len(merged_df)
+
+    x_perfect = np.concatenate(
+        [
+            np.logspace(np.log10(0.0001), np.log10(0.1), 500),  # More points in the lower range
+            np.linspace(0.1, 100, 500),  # Linear in higher range
+        ]
+    )
+    x_perfect = np.unique(x_perfect)  # Remove duplicates
+
+    # Calculate perfect detection line
+    detection_rate_factor = 1.0 / anomaly_prevalence if anomaly_prevalence > 0 else 1.0
+    y_perfect = np.minimum(x_perfect * detection_rate_factor, 100)
+
+    plt.plot(
+        x_perfect,
+        y_perfect,
+        color=PERFECT_LINE_COLOR,
+        linestyle=PERFECT_LINE_STYLE,
+        alpha=PERFECT_LINE_ALPHA,
+        linewidth=1.5,
+        label="Perfect detection",
+    )
+
+    # Add labels - NO TITLE for publication
+    plt.xlabel("% of top-scoring predictions inspected")
+    plt.ylabel("% of Total Anomalies Found")
+    plt.grid(True)
+    plt.legend(loc="lower right", frameon=True, framealpha=0.7)
+
+    # Set axis limits and log scale
+    plt.xscale("log")
+    plt.xlim(0.008, 100)
+    plt.ylim(0, 100)
+
+    # Add x-axis ticks for log scale with larger fontsize
+    plt.xticks(
+        [0.01, 0.1, 1, 10, 100],
+        ["0.01%", "0.1%", "1%", "10%", "100%"],
+    )
+
+    # Save figure with high resolution for publication
+    output_path = os.path.join(plots_dir, f"top_n_detection_thresholds_iter{iteration}.png")
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=DEFAULT_DPI, bbox_inches="tight")
+    plt.close()
+
+    logger.info(f"Top-N anomaly detection plot with thresholds saved to {output_path}")
+
+
+def plot_roc_with_thresholds(
+    scores,
+    filenames,
+    true_labels_df,
+    anomaly_class,
+    iteration,
+    plots_dir,
+    thresholds=GALAXYZOO_THRESHOLDS,
+):
+    """
+    Plot ROC curves with different anomaly thresholds.
+
+    Args:
+        scores: Anomaly scores for all predictions
+        filenames: Corresponding filenames
+        true_labels_df: DataFrame with ground truth labels
+        anomaly_class: The class index to treat as anomaly
+        iteration: Current training iteration
+        plots_dir: Directory to save plots
+        thresholds: List of anomaly score thresholds to use
+    """
+    # Save plot data for later recreation
+    plot_data = {
+        "scores": scores,
+        "filenames": filenames,
+        "true_labels_df": true_labels_df,
+        "anomaly_class": anomaly_class,
+        "iteration": iteration,
+        "thresholds": thresholds,
+    }
+    save_plot_data(plot_data, "roc_with_thresholds", iteration, plots_dir)
+
+    # Create a dataframe with scores and filenames
+    scores_df = pd.DataFrame({"filename": filenames, "score": scores})
+
+    # Check if the true_labels_df has the required columns
+    if "anomaly_score_raw" not in true_labels_df.columns:
+        logger.info(f"No anomaly_score_raw in true_labels_df columns: {true_labels_df.columns}")
+        return
+
+    # Merge with true labels
+    merged_df = pd.merge(scores_df, true_labels_df, on="filename")
+
+    # Check if there are matching filenames
+    if len(merged_df) == 0:
+        logger.warning("No matching filenames between scores and true labels")
+        return  # Set up colors for different thresholds
+    colors = [BLUE, GREEN, ORANGE]
+
+    # Create ROC plot
+    plt.figure(figsize=(8, 8))
+
+    for i, threshold in enumerate(thresholds):
+        # Create binary labels based on threshold
+        merged_df["true_label"] = (merged_df["anomaly_score_raw"] >= threshold).astype(int)
+
+        # Calculate ROC curve
+        y_true = merged_df["true_label"].values
+        y_scores = merged_df["score"].values
+        fpr, tpr, _ = roc_curve(y_true, y_scores)
+
+        # Calculate AUROC
+        auroc = np.trapz(tpr, fpr)
+
+        # Plot ROC curve
+        plt.plot(
+            fpr,
+            tpr,
+            color=colors[i % len(colors)],
+            linewidth=2,
+            label=f"Threshold = {threshold:.1f}, AUROC = {auroc:.3f}",
+        )
+
+    # Add reference line
+    plt.plot(
+        [0, 1],
+        [0, 1],
+        color=REFERENCE_LINE_COLOR,
+        linestyle=REFERENCE_LINE_STYLE,
+        linewidth=1.5,
+        alpha=REFERENCE_LINE_ALPHA,
+        label="Random",
+    )
+
+    # Add labels and legend
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.grid(True, alpha=0.3)
+    plt.legend(loc="lower right", frameon=True, framealpha=0.7)
+
+    # Equal aspect ratio for ROC curve
+    plt.xlim([0, 1])
+    plt.ylim([0, 1])
+
+    # Save the ROC curve
+    output_path = os.path.join(plots_dir, f"roc_curve_thresholds_iter{iteration}.png")
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=DEFAULT_DPI)
+    plt.close()
+
+    logger.info(f"ROC curves with thresholds saved to {output_path}")
+
+
+def plot_astronomaly_comparison(
+    scores,
+    filenames,
+    true_labels_df,
+    anomaly_class,
+    iteration,
+    plots_dir,
+    thresholds=GALAXYZOO_THRESHOLDS,
+):
+    """
+    Create a plot comparing our results with the Astronomaly Figure 5a reference curve.
+
+    Args:
+        scores: Anomaly scores for all predictions
+        filenames: Corresponding filenames
+        true_labels_df: DataFrame with ground truth labels
+        anomaly_class: The class index to treat as anomaly
+        iteration: Current training iteration
+        plots_dir: Directory to save plots
+        thresholds: List of threshold values to plot (default=GALAXYZOO_THRESHOLDS)
+    """
+    # Save plot data for later recreation
+    plot_data = {
+        "scores": scores,
+        "filenames": filenames,
+        "true_labels_df": true_labels_df,
+        "anomaly_class": anomaly_class,
+        "iteration": iteration,
+        "thresholds": thresholds,
+    }
+    save_plot_data(plot_data, "astronomaly_comparison", iteration, plots_dir)
+
+    logger.info("Creating Astronomaly comparison plot")
+
+    # Check if the true_labels_df has the required columns
+    if "anomaly_score_raw" not in true_labels_df.columns:
+        logger.error(
+            "anomaly_score_raw not found in true_labels_df columns, cannot create Astronomaly comparison plot"
+        )
+        return
+
+    # Create a dataframe with scores and filenames
+    scores_df = pd.DataFrame({"filename": filenames, "score": scores})
+
+    # Merge with true labels
+    merged_df = pd.merge(scores_df, true_labels_df, on="filename")
+
+    # Check if there are matching filenames
+    if len(merged_df) == 0:
+        logger.warning("No matching filenames between scores and true labels")
+        return  # Load the Astronomaly Figure 5a data
+    try:
+        astronomaly_data = pd.read_csv(
+            os.path.join(os.path.dirname(__file__), "AstronomalyFigure5a.csv"), skiprows=[0]
+        )
+        astronomaly_x = astronomaly_data["xaxis"].values
+        astronomaly_y = astronomaly_data["yaxis"].values
+    except Exception as e:
+        logger.error(f"Error loading Astronomaly data: {e}")
+        return
+
+    # Create the figure
+    plt.figure(figsize=(8, 8))
+
+    # plot perfect prediction curve
+    plt.plot(
+        np.linspace(0, 2000, 10),
+        np.linspace(0, 2000, 10),
+        color=REFERENCE_LINE_COLOR,
+        linestyle=REFERENCE_LINE_STYLE,
+        linewidth=2,
+        label="Perfect Prediction",
+    )
+
+    # Plot lines for each threshold
+    colors = [BLUE, GREEN, ORANGE, PURPLE]
+    for i, threshold in enumerate(thresholds):
+        # Create binary labels based on threshold
+        merged_df["true_anomaly"] = (merged_df["anomaly_score_raw"] >= threshold).astype(int)
+
+        # Sort by model scores for inspection
+        filtered_df = merged_df.sort_values("score", ascending=False).reset_index(drop=True)
+
+        # Calculate cumulative sum of anomalies found
+        filtered_df["cum_anomalies"] = filtered_df["true_anomaly"].cumsum()
+
+        # Create x-axis values (0 to min(2000, len(filtered_df)))
+        inspection_indices = np.arange(0, min(2000, len(filtered_df)))
+
+        # Calculate number of anomalies found at each inspection point
+        anomalies_found = []
+        for idx in inspection_indices:
+            if idx == 0:
+                anomalies_found.append(0)
+            else:
+                anomalies_found.append(filtered_df.loc[idx - 1, "cum_anomalies"])
+
+        # Plot the line for this threshold
+        plt.plot(
+            inspection_indices,
+            anomalies_found,
+            color=colors[i % len(colors)],
+            linewidth=2,
+            label=f"AnomalyMatch (t={threshold})",
+        )
+
+    # Plot Astronomaly reference curve
+    plt.plot(
+        astronomaly_x,
+        astronomaly_y,
+        color=RED,
+        linestyle=PERFECT_LINE_STYLE,
+        linewidth=2,
+        label="Astronomaly (t=0.9)",
+    )
+
+    # Add labels and legend
+    plt.xlabel("Index in ranked list")
+    plt.ylabel("Number of anomalies detected")
+    plt.grid(True, alpha=0.3)
+    plt.legend(loc="lower right", frameon=True, framealpha=0.7)
+
+    # Set axis limits
+    plt.xlim([0, 2000])
+    plt.ylim([0, 300])
+
+    # Save figure
+    output_path = os.path.join(plots_dir, f"astronomaly_comparison_iter{iteration}.png")
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=DEFAULT_DPI)
+    plt.close()
+
+    logger.info(f"Astronomaly comparison plot saved to {output_path}")
+
+
+def plot_score_vs_user_score_grid(
+    scores, filenames, true_labels_df, iteration, plots_dir, data_dir, n_grid=15
+):
+    """
+    Create a grid plot that shows machine learning scores versus user scores with
+    representative image cutouts.
+
+    Args:
+        scores: Machine learning model anomaly scores for each image
+        filenames: Corresponding filenames
+        true_labels_df: DataFrame with ground truth labels including anomaly_score_raw
+        iteration: Current training iteration
+        plots_dir: Directory to save plots
+        data_dir: Directory containing the image files
+        n_grid: Number of grid cells in each dimension (default=15, producing 225 cells)
+    """
+    # Save plot data for later recreation
+    plot_data = {
+        "scores": scores,
+        "filenames": filenames,
+        "true_labels_df": true_labels_df,
+        "iteration": iteration,
+        "data_dir": data_dir,
+        "n_grid": n_grid,
+    }
+    save_plot_data(plot_data, "score_vs_user_score_grid", iteration, plots_dir)
+
+    logger.info("Creating score vs user score grid plot")
+
+    # Check if the true_labels_df has the required column
+    if "anomaly_score_raw" not in true_labels_df.columns:
+        logger.error(
+            "anomaly_score_raw not found in true_labels_df columns, cannot create score grid plot"
+        )
+        return
+
+    # Create a dataframe with scores and filenames
+    scores_df = pd.DataFrame({"filename": filenames, "ml_score": scores})
+
+    # Merge with true labels
+    merged_df = pd.merge(scores_df, true_labels_df, on="filename")
+
+    # Check if there are matching filenames
+    if len(merged_df) == 0:
+        logger.warning("No matching filenames between scores and true labels")
+        return
+
+    # Calculate percentile thresholds
+    user_score_80th = merged_df["anomaly_score_raw"].quantile(
+        0.80
+    )  # 80th percentile for user scores
+    user_score_50th = merged_df["anomaly_score_raw"].quantile(
+        0.50
+    )  # 50th percentile for user scores
+    ml_score_80th = merged_df["ml_score"].quantile(0.80)  # 80th percentile for ML scores
+    ml_score_50th = merged_df["ml_score"].quantile(0.50)  # 50th percentile for ML scores
+
+    # MAIN PLOT - Full grid view
+    create_grid_plot(
+        merged_df,
+        n_grid,
+        data_dir,
+        plots_dir,
+        iteration,
+        "full",
+        fig_title="ML Scores vs User Scores - Full Grid",
+    )
+
+    # PLOT 1 - Top Left Corner: High user scores (top 20%), low ML scores (bottom 50%)
+    filtered_df1 = merged_df[
+        (merged_df["anomaly_score_raw"] > user_score_80th)
+        & (merged_df["ml_score"] <= ml_score_50th)
+    ]
+    if len(filtered_df1) > 0:
+        create_grid_plot(
+            filtered_df1,
+            8,
+            data_dir,
+            plots_dir,
+            iteration,
+            "topleft",
+            fig_title="High User Scores (>P80), Low ML Scores (<P50)",
+        )
+    else:
+        logger.warning("No data points for top-left quadrant plot")
+
+    # PLOT 2 - Bottom Right Corner: Low user scores (bottom 50%), high ML scores (top 20%)
+    filtered_df2 = merged_df[
+        (merged_df["anomaly_score_raw"] <= user_score_50th)
+        & (merged_df["ml_score"] > ml_score_80th)
+    ]
+    if len(filtered_df2) > 0:
+        create_grid_plot(
+            filtered_df2,
+            8,
+            data_dir,
+            plots_dir,
+            iteration,
+            "bottomright",
+            fig_title="Low User Scores (<P50), High ML Scores (>P80)",
+        )
+    else:
+        logger.warning("No data points for bottom-right quadrant plot")
+
+    # PLOT 3 - Hexbin density plot with anomalies overlaid
+    create_rank_comparison_plot(merged_df, plots_dir, iteration)
+
+
+def create_grid_plot(merged_df, n_grid, data_dir, plots_dir, iteration, suffix, fig_title=None):
+    """
+    Create a grid plot for the given data.
+
+    Args:
+        merged_df: DataFrame with merged scores and filenames
+        n_grid: Number of grid cells in each dimension
+        data_dir: Directory containing the image files
+        plots_dir: Directory to save plots
+        iteration: Current training iteration
+        suffix: Suffix for the output filename
+        fig_title: Optional title for the figure
+    """
+    from PIL import Image
+    import matplotlib.gridspec as gridspec
+
+    # Create figure with equal width and height, accounting for histograms
+    fig = plt.figure(figsize=(12, 12))
+
+    # Create grid layout with space for axis labels, histograms, and colorbar
+    gs = gridspec.GridSpec(
+        n_grid + 2,  # Add 1 for x-axis labels + 1 for histogram
+        n_grid + 2,  # Add 1 for y-axis labels + 1 for histogram
+        width_ratios=[1] + [1] * n_grid + [1],  # Extra column for histogram
+        height_ratios=[1] + [1] * n_grid + [1],  # Extra row for histogram
+        wspace=0.0,
+        hspace=0.0,
+    )
+
+    # Calculate percentile bin edges for both scores
+    ml_percentiles = np.percentile(merged_df["ml_score"], np.linspace(0, 100, n_grid + 1))
+    user_percentiles = np.percentile(
+        merged_df["anomaly_score_raw"], np.linspace(0, 100, n_grid + 1)
+    )
+
+    # Calculate bin centers for labeling
+    ml_centers = [(ml_percentiles[i] + ml_percentiles[i + 1]) / 2 for i in range(n_grid)]
+    user_centers = [(user_percentiles[i] + user_percentiles[i + 1]) / 2 for i in range(n_grid)]
+
+    # Create empty grid to store axes
+    axes = np.empty((n_grid, n_grid), dtype=object)
+
+    # Create bins and initialize occupancy matrix for tracking which cells have images
+    bins = np.zeros((n_grid, n_grid), dtype=int)
+
+    # Dictionary to store the representative image for each cell
+    representative_images = {}
+
+    # Calculate total number of images for alpha scaling
+    total_images = len(merged_df)
+
+    for _, row in merged_df.iterrows():
+        ml_score = row["ml_score"]
+        user_score = row["anomaly_score_raw"]
+
+        # Determine bin indices based on percentiles
+        x_idx = np.searchsorted(ml_percentiles, ml_score) - 1
+        # Ensure the index is within bounds
+        x_idx = min(max(x_idx, 0), n_grid - 1)
+
+        y_idx = np.searchsorted(user_percentiles, user_score) - 1
+        # Ensure the index is within bounds
+        y_idx = min(max(y_idx, 0), n_grid - 1)
+
+        # Invert y_idx to make 0,0 at bottom left
+        y_idx_inverted = (n_grid - 1) - y_idx
+
+        # Update bin count
+        bins[y_idx_inverted, x_idx] += 1
+
+        # Calculate distance to bin center (using actual values, not indices)
+        ml_center = ml_centers[x_idx]
+        user_center = user_centers[y_idx]
+        distance = np.sqrt((ml_score - ml_center) ** 2 + (user_score - user_center) ** 2)
+
+        # Store image if it's the closest to the bin center so far
+        bin_key = (y_idx_inverted, x_idx)
+        if bin_key not in representative_images or distance < representative_images[bin_key][1]:
+            representative_images[bin_key] = (row["filename"], distance)
+
+    # Calculate maximum occupancy for alpha normalization
+    max_occupancy = max(1, np.max(bins))  # Avoid division by zero
+    min_occupancy = max(1, np.min(bins[bins > 0])) if np.any(bins > 0) else 1
+
+    # Define alpha scaling function - dynamic scaling based on distribution
+    # Use log scale for better visibility with potentially uneven distributions
+    def alpha_scaling(count, max_count, min_count, total_images):
+        if count == 0:
+            return 0
+
+        # Linear scaling in log space between min_count and max_count
+        # alpha = 0.05 when count = min_count, alpha = 1.0 when count = max_count
+        if max_count == min_count:
+            return 1.0  # All counts are the same
+
+        log_count = np.log10(count + 1)
+        log_min = np.log10(min_count + 1)
+        log_max = np.log10(max_count + 1)
+
+        # Linear interpolation in log space
+        alpha = 0.1 + 0.9 * (log_count - log_min) / (log_max - log_min)
+
+        return alpha
+
+    # Plot the grid
+    for y in range(n_grid):
+        for x in range(n_grid):
+            # Create subplot at the right position (add 1 to account for labels)
+            ax = plt.subplot(gs[y + 1, x + 1])
+            axes[y, x] = ax
+
+            # Get bin count
+            bin_count = bins[y, x]
+
+            # If we have an image for this cell, display it
+            bin_key = (y, x)
+            if bin_key in representative_images and bin_count > 0:
+                filename, _ = representative_images[bin_key]
+                try:
+                    img_path = os.path.join(data_dir, os.path.basename(filename))
+                    img = np.array(Image.open(img_path))
+
+                    # Make sure image is RGB
+                    if img.ndim == 2 or (img.ndim == 3 and img.shape[2] == 1):
+                        img = np.repeat(img[..., None], 3, axis=2)
+
+                    # Calculate alpha based on bin count
+                    img_alpha = alpha_scaling(bin_count, max_occupancy, min_occupancy, total_images)
+
+                    # Create a semi-transparent gray overlay
+                    overlay = np.ones_like(img) * 128  # Gray color
+                    overlay_alpha = 1.0 - img_alpha  # Invert alpha for overlay
+
+                    # Blend the image with the gray overlay
+                    blended_img = img * img_alpha + overlay * overlay_alpha
+                    blended_img = np.clip(blended_img, 0, 255).astype(np.uint8)
+
+                    # Display the blended image
+                    ax.imshow(blended_img)
+
+                    # Add count as small number in corner
+                    if bin_count > 1:
+                        ax.text(
+                            0.05,
+                            0.05,
+                            str(bin_count),
+                            transform=ax.transAxes,
+                            color="white",
+                            fontsize=6,
+                            bbox=dict(facecolor="black", alpha=0.7, pad=1),
+                        )
+                except Exception as e:
+                    logger.warning(f"Error loading image {filename}: {e}")
+                    ax.set_facecolor("black")
+            else:
+                # Empty cell
+                ax.set_facecolor("lightgray")
+
+            # Remove axis ticks and labels for grid cells
+            ax.set_xticks([])
+            ax.set_yticks([])  # Add y-axis labels (left side) with bin boundaries
+    for y in range(n_grid):
+        ax = plt.subplot(gs[y + 1, 0])
+        # Display bin boundaries for user scores (inverted y-axis)
+        y_idx = n_grid - 1 - y  # Invert to match the grid orientation
+        lower_bound = user_percentiles[y_idx]
+        upper_bound = user_percentiles[y_idx + 1]
+        ax.text(
+            0.25,
+            0.5,
+            f"{upper_bound:.2f}\nto\n{lower_bound:.2f}",
+            ha="center",
+            va="center",
+            fontsize=10 if n_grid <= 20 else 8,
+        )
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_facecolor("none")
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+    # Add x-axis labels (bottom) with bin boundaries
+    for x in range(n_grid):
+        ax = plt.subplot(gs[n_grid + 1, x + 1])
+        lower_bound = ml_percentiles[x]
+        upper_bound = ml_percentiles[x + 1]
+        ax.text(
+            0.5,
+            0.25,
+            f"{lower_bound:.2f}\nto\n{upper_bound:.2f}",
+            ha="center",
+            va="center",
+            rotation=90,
+            fontsize=10 if n_grid <= 20 else 8,
+        )
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_facecolor("none")
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+    # Add horizontal histogram (top) for anomaly distribution with one bar per grid column
+    ax_hist_top = plt.subplot(gs[0, 1 : n_grid + 1])
+
+    # Create anomaly mask based on threshold
+    threshold = 0.9
+    anomaly_mask = merged_df["anomaly_score_raw"] >= threshold
+
+    # Create histogram showing anomaly counts per ML score percentile bin
+    anomaly_counts = np.zeros(n_grid)
+    for i in range(n_grid):
+        # Find samples in this ML score percentile bin
+        if i == n_grid - 1:
+            bin_mask = (merged_df["ml_score"] >= ml_percentiles[i]) & (
+                merged_df["ml_score"] <= ml_percentiles[i + 1]
+            )
+        else:
+            bin_mask = (merged_df["ml_score"] >= ml_percentiles[i]) & (
+                merged_df["ml_score"] < ml_percentiles[i + 1]
+            )
+
+        # Count anomalies in this bin
+        anomaly_counts[i] = np.sum(anomaly_mask & bin_mask)
+
+    bar_positions = np.arange(n_grid) + 0.5  # Center of each grid cell
+    bar_width = 0.8  # Width of each bar (slightly less than 1 to have small gaps)
+
+    ax_hist_top.bar(
+        bar_positions,
+        anomaly_counts,
+        width=bar_width,
+        align="center",
+        color="orange",
+        edgecolor="darkorange",
+        alpha=0.7,
+    )
+
+    ax_hist_top.spines["top"].set_visible(False)
+    ax_hist_top.spines["right"].set_visible(False)
+    ax_hist_top.set_ylabel("Anomalies", fontsize=10)
+    ax_hist_top.yaxis.set_tick_params(labelsize=10)
+    ax_hist_top.set_title(f"ML Score Anomaly Distribution (threshold={threshold})", fontsize=12)
+    ax_hist_top.grid(alpha=0.3)
+    ax_hist_top.set_xticks([])  # Remove xticks
+
+    # Set x-axis limits to align with grid
+    ax_hist_top.set_xlim(0, n_grid)
+
+    # Add vertical histogram (right) for user scores with one bar per grid row
+    ax_hist_right = plt.subplot(gs[1 : n_grid + 1, n_grid + 1])
+
+    # Create histogram with exactly n_grid bars aligned with grid cells
+    hist_counts, _ = np.histogram(merged_df["anomaly_score_raw"], bins=user_percentiles)
+    # We need to invert the counts to match the inverted y-axis in the grid
+    hist_counts = hist_counts[::-1]
+    bar_positions = np.arange(n_grid) + 0.5  # Center of each grid cell
+    bar_width = 0.8  # Width of each bar (slightly less than 1 to have small gaps)
+
+    ax_hist_right.barh(
+        bar_positions,
+        hist_counts,
+        height=bar_width,
+        align="center",
+        color="lightgreen",
+        edgecolor="darkgreen",
+        alpha=0.7,
+    )
+
+    ax_hist_right.spines["top"].set_visible(False)
+    ax_hist_right.spines["right"].set_visible(False)
+    ax_hist_right.set_xlabel("Count", fontsize=12)
+    ax_hist_right.xaxis.set_tick_params(labelsize=10)
+    ax_hist_right.set_yticks([])  # Remove yticks
+
+    # Set y-axis limits to align with grid
+    ax_hist_right.set_ylim(0, n_grid)
+
+    # Replace the regular title with properly positioned text on the right side
+    # Remove the original title call
+    # ax_hist_right.set_title("User Score Distribution", fontsize=12)
+
+    # Add rotated text to the right of the histogram, flipped 180°
+    ax_hist_right.text(
+        1.15,
+        0.5,
+        "User Score Distribution",
+        rotation=270,  # Flipped 180° from original 90°
+        transform=ax_hist_right.transAxes,
+        ha="center",
+        va="center",
+        fontsize=12,
+    )
+
+    ax_hist_right.grid(alpha=0.3)
+
+    # Add axis titles
+    fig.text(0.5, 0.01, "AnomalyMatch Scores", ha="center", fontsize=16)
+    fig.text(0.01, 0.5, "User Scores", va="center", rotation=90, fontsize=16)
+
+    # Add figure title if provided
+    if fig_title:
+        fig.suptitle(fig_title, fontsize=16, y=0.99)
+
+    # Add a legend for the alpha transparency
+    ax_legend = plt.subplot(gs[n_grid + 1, 0])
+    ax_legend.set_xticks([])
+    ax_legend.set_yticks([])
+    ax_legend.set_facecolor("none")
+    for spine in ax_legend.spines.values():
+        spine.set_visible(False)
+
+    # Add text explaining the alpha transparency
+    ax_legend.text(
+        0.5,
+        0.5,
+        "Darker = \n More\nSamples",
+        ha="center",
+        va="center",
+        fontsize=10,
+        transform=ax_legend.transAxes,
+    )
+
+    # Save figure with high resolution
+    output_path = os.path.join(plots_dir, f"score_vs_user_score_grid_{suffix}_iter{iteration}.png")
+    plt.tight_layout()
+    if fig_title:
+        plt.subplots_adjust(top=0.95)  # Make room for the title
+    plt.savefig(output_path, dpi=DEFAULT_DPI)
+    plt.close()
+
+    logger.info(f"Score vs user score grid plot ({suffix}) saved to {output_path}")
+
+
+def create_rank_comparison_plot(merged_df, plots_dir, iteration):
+    """
+    Create a scatter plot comparing the rank positions of ML scores vs user scores.
+    A perfect correlation would show as a diagonal line.
+
+    Args:
+        merged_df: DataFrame with merged scores and filenames
+        plots_dir: Directory to save plots
+        iteration: Current training iteration
+    """
+    plt.figure(figsize=(8, 8))
+
+    # Calculate ranks for both scores
+    # Use 'first' method to handle ties consistently
+    ml_ranks = merged_df["ml_score"].rank(method="first")
+    user_ranks = merged_df["anomaly_score_raw"].rank(method="first")
+
+    # Convert to percentile ranks (0-100)
+    n_samples = len(merged_df)
+    ml_ranks_pct = (ml_ranks / n_samples) * 100
+    user_ranks_pct = (user_ranks / n_samples) * 100
+
+    # Plot vertical bars to perfect correlation line first
+    for ml_rank, user_rank in zip(ml_ranks_pct, user_ranks_pct):
+        # Calculate the point on the perfect correlation line
+        perfect_point = ml_rank
+        plt.plot(
+            [ml_rank, ml_rank],
+            [user_rank, perfect_point],
+            color="gray",
+            alpha=0.005,
+            linewidth=1,
+            zorder=1,
+        )
+
+    # Plot perfect correlation line
+    plt.plot(
+        [0, 100],
+        [0, 100],
+        color=PERFECT_LINE_COLOR,
+        linestyle=PERFECT_LINE_STYLE,
+        alpha=PERFECT_LINE_ALPHA,
+        linewidth=2,
+        label="Perfect Correlation",
+        zorder=2,
+    )
+
+    # Create scatter plot with small points
+    plt.scatter(
+        ml_ranks_pct, user_ranks_pct, s=5, color=BLUE, alpha=0.01, label="Samples", zorder=3
+    )
+
+    # Add grid and labels
+    plt.grid(alpha=0.3)
+    plt.xlabel("AnomalyMatch Score Rank (%)", fontsize=14)
+    plt.ylabel("User Score Rank (%)", fontsize=14)
+    plt.title("Comparison of AnomalyMatch and User Score Rankings", fontsize=16)
+
+    # Set axis limits
+    plt.xlim(0, 100)
+    plt.ylim(0, 100)
+
+    # Add legend
+    plt.legend(loc="lower right", frameon=True, framealpha=0.7)
+
+    # Calculate rank correlation coefficients
+    spearman_corr = merged_df["ml_score"].corr(merged_df["anomaly_score_raw"], method="spearman")
+    kendall_corr = merged_df["ml_score"].corr(merged_df["anomaly_score_raw"], method="kendall")
+
+    # Add correlation coefficients as text
+    plt.text(
+        5,
+        92,
+        f"Spearman ρ = {spearman_corr:.3f}\nKendall τ = {kendall_corr:.3f}",
+        fontsize=12,
+        bbox=dict(facecolor="white", alpha=0.7),
+    )
+
+    # Save the figure
+    output_path = os.path.join(plots_dir, f"score_rank_correlation_iter{iteration}.png")
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=DEFAULT_DPI)
+    plt.close()
+
+    logger.info(f"Rank correlation plot saved to {output_path}")
+    logger.info(f"Spearman correlation: {spearman_corr:.3f}")
+    logger.info(f"Kendall correlation: {kendall_corr:.3f}")

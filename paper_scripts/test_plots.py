@@ -3,7 +3,7 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 """
 Test script for visualizing paper plot improvements.
 Generates plots with dummy/mock data to quickly check visual changes.
@@ -17,12 +17,17 @@ import os
 import argparse
 import numpy as np
 import pandas as pd
+from PIL import Image
 from paper_plots import (
     plot_score_histogram,
     plot_metrics_over_time,
     plot_roc_prc_curves,
     plot_top_n_anomaly_detection,
     plot_combined_anomaly_detection,
+    plot_astronomaly_comparison,
+    plot_roc_with_thresholds,
+    plot_top_n_with_thresholds,
+    plot_score_vs_user_score_grid,
 )
 
 # Create output directory for test plots
@@ -41,6 +46,32 @@ def generate_score_data():
     # Generate anomaly scores (higher mean)
     anomaly_scores = np.random.beta(5, 2, 100)
     return normal_scores, anomaly_scores
+
+
+# For threshold-based plots (used by plot_top_n_with_thresholds, plot_roc_with_thresholds)
+def generate_threshold_data():
+    # Create mock data with raw anomaly scores
+    # First generate detection data
+    scores, filenames, true_labels_df, _, _, _, _ = generate_detection_data()
+
+    # Add a column for raw anomaly scores (between 0 and 1)
+    # This simulates the raw anomaly scores that would be used for thresholding
+    anomaly_indices = true_labels_df[true_labels_df["label_idx"] == 1].index
+
+    # Initialize with low scores
+    true_labels_df["anomaly_score_raw"] = np.random.beta(2, 5, len(true_labels_df))
+
+    # Set anomaly scores higher for true anomalies (with some noise)
+    true_labels_df.loc[anomaly_indices, "anomaly_score_raw"] = np.random.beta(
+        5, 2, len(anomaly_indices)
+    )
+
+    # Create metrics dictionary similar to what's used in the real plots
+    metrics = generate_roc_prc_data()
+    metrics["true_labels_df"] = true_labels_df
+    metrics["filenames"] = filenames
+
+    return scores, filenames, true_labels_df, metrics
 
 
 # For metrics over time
@@ -148,6 +179,49 @@ def generate_detection_data(total_samples=10000, total_anomalies=100):
     )
 
 
+# For score vs user score grid plot
+def generate_grid_mock_data(n_samples=500):
+    """Generate mock data for testing the score vs user score grid plot."""
+    # Generate random scores between 0 and 1
+    ml_scores = np.random.beta(2, 2, n_samples)  # Using beta distribution for better spread
+    user_scores = np.random.beta(2, 2, n_samples)
+
+    # Create random colors for mock images
+    # Each image will be a simple color square with color reflecting its position
+    filenames = []
+
+    # Create directory for test images
+    images_dir = os.path.join(output_dir, "mock_images")
+    os.makedirs(images_dir, exist_ok=True)
+
+    # Create mock images
+    for i in range(n_samples):
+        # Create simple colored image
+        # Color is based on the scores to help visually verify the grid placement
+        r = int(255 * ml_scores[i])
+        g = int(255 * user_scores[i])
+        b = 128  # Fixed middle blue value
+
+        # Create simple colored image
+        img = np.ones((64, 64, 3), dtype=np.uint8)
+        img[:, :, 0] = r
+        img[:, :, 1] = g
+        img[:, :, 2] = b
+
+        # Add a number to the image for easier identification
+        filename = f"img_{i:03d}_{ml_scores[i]:.2f}_{user_scores[i]:.2f}.png"
+        img_path = os.path.join(images_dir, filename)
+
+        # Save the image
+        Image.fromarray(img).save(img_path)
+        filenames.append(img_path)
+
+    # Create a dataframe with the data
+    df = pd.DataFrame({"filename": filenames, "score": ml_scores, "anomaly_score_raw": user_scores})
+
+    return ml_scores, filenames, df
+
+
 # ===========================
 # Test all plotting functions
 # ===========================
@@ -205,6 +279,25 @@ def test_all_plots():
     }
     plot_combined_anomaly_detection(detection_curves, output_dir, anomaly_prevalence)
     print("✓ Generated combined anomaly detection plot")
+
+    # Test the threshold-based plots
+    scores, filenames, true_labels_df, metrics = generate_threshold_data()
+
+    # Test plot_top_n_with_thresholds
+    plot_top_n_with_thresholds(scores, filenames, true_labels_df, 1, output_dir)
+    print("✓ Generated top-n with thresholds plot")  # Test plot_roc_with_thresholds
+    plot_roc_with_thresholds(scores, filenames, true_labels_df, 1, 1, output_dir)
+    print("✓ Generated ROC with thresholds plot")
+
+    # Test plot_astronomaly_comparison
+    plot_astronomaly_comparison(scores, filenames, true_labels_df, 1, 1, output_dir)
+    print("✓ Generated Astronomaly comparison plot")  # Test plot_score_vs_user_score_grid
+    grid_scores, grid_filenames, grid_true_labels_df = generate_grid_mock_data()
+    images_dir = os.path.join(output_dir, "mock_images")
+    plot_score_vs_user_score_grid(
+        grid_scores, grid_filenames, grid_true_labels_df, 1, output_dir, images_dir
+    )
+    print("✓ Generated score vs user score grid plot")
 
     print(f"\nAll test plots generated in: {os.path.abspath(output_dir)}")
 
@@ -279,6 +372,21 @@ def test_reload_plots(plot_data_dir):
                     data["detection_curves"], reload_dir, data.get("anomaly_prevalence")
                 )
                 print("✓ Recreated combined anomaly detection plot from saved data")
+
+            elif "score_vs_user_score_grid" in filename:
+                iteration = data.get("iteration", 1)
+                plot_score_vs_user_score_grid(
+                    data["scores"],
+                    data["filenames"],
+                    data["true_labels_df"],
+                    iteration,
+                    reload_dir,
+                    data.get("data_dir", ""),
+                    n_grid=data.get("n_grid", 20),
+                )
+                print(
+                    f"✓ Recreated score vs user score grid plot from saved data (iteration {iteration})"
+                )
 
         except Exception as e:
             print(f"Error processing {data_file}: {e}")

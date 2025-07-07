@@ -3,27 +3,31 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import argparse
 import os
+import pickle
+import sys
+
+from dotmap import DotMap
 import torch
 import numpy as np
 from loguru import logger
-from dotmap import DotMap
 from concurrent.futures import ThreadPoolExecutor
-from skimage.transform import resize
 import pandas as pd
 from tqdm import tqdm
 import time
-import toml
 
 from prediction_utils import (
     load_model,
     save_results,
-    get_transform,
     process_batch_predictions,
-    jpeg_decoder,
 )
+
+from anomaly_match.image_processing.transforms import (
+    get_prediction_transforms,
+)
+from anomaly_match.data_io.load_images import read_and_resize_image
 
 # Configure logging
 logs_dir = os.path.join(os.path.dirname(__file__), "logs")
@@ -37,46 +41,13 @@ logger.add(
 )
 
 
-def read_and_resize_image(filepath, size):
-    """Read an image file and resize it."""
-    try:
-        # Handle different file formats
-        file_ext = os.path.splitext(filepath.lower())[1]
-
-        if file_ext in [".jpg", ".jpeg"]:
-            # Use TurboJPEG for faster JPEG loading
-            with open(filepath, "rb") as infile:
-                jpeg_data = infile.read()
-            # Decode JPEG image to array
-            image = jpeg_decoder.decode(jpeg_data)
-        else:
-            # For other formats (png, tif, tiff), use imageio or PIL
-            from PIL import Image
-
-            image = np.array(Image.open(filepath))
-
-        # If grayscale, convert to RGB
-        if len(image.shape) == 2 or image.shape[2] == 1:
-            image = np.stack((image,) * 3, axis=-1)
-        # Handle RGBA images by removing alpha channel
-        elif len(image.shape) > 2 and image.shape[2] > 3:
-            image = image[:, :, :3]
-
-        # Resize if necessary
-        if image.shape[:2] != tuple(size):
-            image = resize(image, size, anti_aliasing=True, preserve_range=True)
-            image = image.astype(np.uint8)
-
-        return image
-    except Exception as e:
-        logger.error(f"Error reading image {filepath}: {e}")
-        # Return blank image as fallback
-        return np.zeros((size[0], size[1], 3), dtype=np.uint8)
-
-
 def load_and_preprocess(args):
-    filename, size, transform = args
-    image = read_and_resize_image(filename, size)
+    filename, transform, cfg = args
+    image = read_and_resize_image(
+        filename,
+        cfg=cfg,
+        convert_to_rgb=True,
+    )
     image = transform(image)
     return filename, image
 
@@ -85,8 +56,8 @@ def evaluate_files(file_list, cfg, top_n=1000, batch_size=1000, max_workers=1):
     """Evaluate files in batches and return top N scores."""
     logger.trace(f"{len(file_list)} unlabeled images remain.")
 
-    transform = get_transform()
-    args_list = [(filename, cfg.size, transform) for filename in file_list]
+    transform = get_prediction_transforms()
+    args_list = [(filename, transform, cfg) for filename in file_list]
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         results = list(
@@ -132,22 +103,34 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("config_path", type=str, help="Path to config file")
     parser.add_argument(
-        "file_list_path", type=str, help="Path to file containing list of files to evaluate"
+        "file_list_path",
+        type=str,
+        help="Path to file containing list of files to evaluate",
     )
     parser.add_argument("top_n", type=int, default=1000, help="Number of top scores to keep")
     args = parser.parse_args()
 
     logger.info(f"Loading config from {args.config_path}")
-    cfg = DotMap(toml.load(args.config_path))
+    # Load cfg from pkl
+    try:
+        with open(args.config_path, "rb") as f:
+            cfg = pickle.load(f)
+            cfg = DotMap(cfg)
+    except Exception as e:
+        logger.error(f"Failed to load config from {args.config_path}: {e}")
+        sys.exit(1)
 
     logger.info(f"Loading file list from {args.file_list_path}")
     with open(args.file_list_path, "r") as f:
+        group_list = [line.strip() for line in f]
+    assert len(group_list) == 1, "Only one file list is allowed"
+    with open(group_list[0], "r") as f:
         file_list = [line.strip() for line in f]
     logger.info(f"Found {len(file_list)} files to process")
 
     # Load existing results if they exist
-    output_csv_path = os.path.join(cfg.output_dir, f"{cfg.save_file}_top1000.csv")
-    output_npy_path = os.path.join(cfg.output_dir, f"{cfg.save_file}_top1000.npy")
+    output_csv_path = os.path.join(cfg.output_dir, f"{cfg.save_file}_top{args.top_n}.csv")
+    output_npy_path = os.path.join(cfg.output_dir, f"{cfg.save_file}_top{args.top_n}.npy")
 
     if os.path.exists(output_csv_path) and os.path.exists(output_npy_path):
         logger.info("Found existing results, loading...")

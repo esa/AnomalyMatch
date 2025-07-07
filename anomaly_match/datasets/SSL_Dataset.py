@@ -3,36 +3,16 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import torch
 from loguru import logger
 
 from .BasicDataset import BasicDataset
 from .AnomalyDetectionDataset import AnomalyDetectionDataset
-
-from torchvision import transforms
-
-
-def get_transform(train=True):
-    """Get weak augmentation transforms.
-
-    Args:
-        train (bool, optional): Whether training, in test only normalization is applied.
-
-    Returns:
-        torchvision.transforms.Compose: transforms.
-    """
-
-    if train:
-        return transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.RandomHorizontalFlip(),
-                transforms.RandomAffine(0, translate=(0, 0.125)),
-            ]
-        )
-    else:
-        return transforms.Compose([transforms.ToTensor()])
+from anomaly_match.image_processing.transforms import (
+    get_weak_transforms,
+    get_prediction_transforms,
+)
 
 
 class SSL_Dataset:
@@ -43,13 +23,8 @@ class SSL_Dataset:
 
     def __init__(
         self,
-        test_ratio,
-        N_to_load,
+        cfg,
         train=True,
-        data_dir="./data",
-        seed=42,
-        size=[300, 300],
-        label_file=None,
     ):
         """
         Args
@@ -63,15 +38,16 @@ class SSL_Dataset:
             label_file: path to the CSV file with labels. If None, 'labeled_data.csv' in data_dir is used
         """
 
-        self.seed = seed
-        self.test_ratio = test_ratio
-        self.N_to_load = N_to_load
+        self.seed = cfg.seed
+        self.test_ratio = cfg.test_ratio
+        self.N_to_load = cfg.N_to_load
         self.train = train
         self.num_classes = 2
-        self.size = size
-        self.data_dir = data_dir
-        self.label_file = label_file
+        self.size = cfg.size
+        self.data_dir = cfg.data_dir
+        self.label_file = cfg.label_file
         self.dset = None
+        self.cfg = cfg
 
     def get_data(self):
         """
@@ -79,12 +55,7 @@ class SSL_Dataset:
         """
         if self.dset is None:
             self.dset = AnomalyDetectionDataset(
-                test_ratio=self.test_ratio,
-                root_dir=self.data_dir,
-                seed=self.seed,
-                size=self.size,
-                N_to_load=self.N_to_load,
-                label_file=self.label_file,
+                cfg=self.cfg,
             )
         else:
             logger.debug("Dataset already loaded.")
@@ -94,10 +65,12 @@ class SSL_Dataset:
         if self.train:
             filenames, imgs, targets = self.dset.train_data
             unlabeled, unlabeled_filenames = self.dset.unlabeled
+            self.transform = get_weak_transforms()
         else:
             filenames, imgs, targets = self.dset.test_data
             unlabeled, unlabeled_filenames = None, None  # no unlabeled data in test
-        self.transform = get_transform(self.train)
+            self.transform = get_prediction_transforms()
+
         return imgs, targets, unlabeled, filenames, unlabeled_filenames
 
     def get_dset(self, use_strong_transform=False, strong_transform=None):
@@ -161,7 +134,9 @@ class SSL_Dataset:
             logger.warning(
                 f"Labeled data contain only one class (0: {targets.count(0)}, 1: {targets.count(1)})"
             )
-            logger.warning("Consider adding more labels for the missing class")
+            logger.warning(
+                "Consider adding more labels for the missing class, training will not be possible."
+            )
 
         lb_dset = BasicDataset(
             data,
@@ -226,6 +201,11 @@ class SSL_Dataset:
         if label_update is not None:
             logger.debug("Number of labeled training samples: {}".format(len(filenames)))
             logger.info(f"Label distribution (0: {targets.count(0)}, 1: {targets.count(1)})")
+            if targets.count(0) == 0 or targets.count(1) == 0:
+                raise ValueError(
+                    f"Labeled data contains only one class (0: {targets.count(0)}, 1: {targets.count(1)})"
+                    + "Consider adding more labels for the missing class and ensure correctly defined filepaths"
+                )
         logger.debug("Number of unlabeled samples: {}".format(len(unlabeled_filenames)))
 
         lb_dset = BasicDataset(

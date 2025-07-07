@@ -3,7 +3,7 @@
 #   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
-#   the terms contained in the file ‘LICENCE.txt’.
+#   the terms contained in the file 'LICENCE.txt'.
 import psutil
 import ipywidgets as widgets
 import asyncio
@@ -74,8 +74,8 @@ class MemoryMonitor:
                             f"</div>"
                         )
 
-                        # Log detailed memory info at DEBUG level
-                        logger.debug(f"Memory usage: RAM={sys_mem:.2f}GB{gpu_mem}")
+                        # Log detailed memory info at TRACE level
+                        logger.trace(f"Memory usage: RAM={sys_mem:.2f}GB{gpu_mem}")
 
                     except Exception as e:
                         logger.error(f"Error updating memory info: {str(e)}")
