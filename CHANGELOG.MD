@@ -5,6 +5,35 @@
 [//]: # (this file, may be copied, modified, propagated, or distributed except according to)
 [//]: # (the terms contained in the file 'LICENCE.txt'.)
 
+## [v1.2.0] – 2025-01-13
+
+### Added
+- **Cutana streaming integration** for catalogue-based predictions with parquet and CSV support
+- **FitsBolt integration** for consistent FITS normalization across training and prediction
+- **Iteration score storage** for tracking unlabeled and test data scores per iteration
+- **Automatic batch size estimation** using exponential and binary search for optimal GPU memory usage
+- **Full resolution image preview** button in the UI for detailed inspection
+- **Dead code detection** CI workflow using Vulture for codebase maintenance
+
+### Changed
+- **Refactored Widget architecture** by extracting PreviewWidget for better code organization
+- **FitsBolt config persistence** in model checkpoints for reproducible normalization
+- **Parquet format** for Cutana buffer instead of CSV for improved performance
+- **Black line-length** updated to 100 characters for better readability
+
+### Fixed
+- **Gallery filename display** for long filenames with improved shortening (#237)
+- **Duplicate result accumulation** in prediction process (#238)
+- **Error handling** for iteration score CSV saves (#236)
+- **FITS extension handling** in Cutana streaming
+- **Tensor handling** improvements throughout the codebase
+
+### Removed
+- **Dead code cleanup** removing unused functions and imports identified by Vulture
+- **IDE/editor files** from repository with updated .gitignore
+
+---
+
 ## [v1.1.0] – 2025-07-04
 
 ### Added

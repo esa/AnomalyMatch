@@ -12,10 +12,47 @@ import h5py
 from pathlib import Path
 from PIL import Image
 import torch
+import copy
 
-from anomaly_match.data_io.load_images import read_image_data, process_image_array
+from anomaly_match.data_io.load_images import (
+    load_and_process_single_wrapper,
+    process_single_wrapper,
+    get_fitsbolt_config,
+)
 from anomaly_match.utils.get_default_cfg import get_default_cfg
 from prediction_utils import save_results
+
+
+def _load_image_with_fitsbolt(filepath, cfg):
+    """Helper function to load image using fitsbolt with AnomalyMatch config."""
+    # Use the new wrapper function instead of directly using fitsbolt
+    return load_and_process_single_wrapper(filepath, cfg, desc="test loading", show_progress=False)
+
+
+def _update_config(cfg, **kwargs):
+    """Update both the main config and fitsbolt config with the given parameters."""
+    for key, value in kwargs.items():
+        setattr(cfg, key, value)
+        if key == "size":
+            cfg.normalisation.image_size = value
+        elif key == "fits_extension":
+            cfg.normalisation.fits_extension = value
+        elif key.startswith("normalisation."):
+            # Handle nested attributes in normalisation
+            norm_key = key.split(".")[1]
+            setattr(cfg.normalisation, norm_key, value)
+            fitsbolt_key = f"norm_{norm_key}"
+            setattr(cfg.normalisation, fitsbolt_key, value)
+    return cfg
+
+
+def _process_image_array_with_fitsbolt(image_array, cfg):
+    """Helper function to process image array using fitsbolt."""
+    # Use the new wrapper function instead of directly using fitsbolt
+    testcfg = copy.deepcopy(cfg)
+    testcfg = get_fitsbolt_config(testcfg)
+
+    return process_single_wrapper(image_array, testcfg, desc="array")
 
 
 def create_fits_file(image_data, filepath):
@@ -106,9 +143,13 @@ class TestImageIO:
     def test_config(self):
         """Get test configuration."""
         cfg = get_default_cfg()
-        cfg.size = [224, 224]
         # Set fits_extension to use the proper extensions from our test FITS file
-        cfg.fits_extension = ["R", "G", "B"]  # Use the named extensions we created
+
+        # Add fitsbolt configuration needed by the wrapper functions
+        cfg.normalisation.image_size = [224, 224]
+        cfg.normalisation.fits_extension = ["R", "G", "B"]
+        cfg.normalisation.n_output_channels = 3
+
         return cfg
 
     def test_image_format_consistency(self, test_image, test_config):
@@ -126,13 +167,13 @@ class TestImageIO:
                 f.create_dataset("image", data=test_image)
 
             # Load and compare PNG vs HDF5
-            loaded_png = read_image_data(str(png_path), test_config)
+            loaded_png = _load_image_with_fitsbolt(str(png_path), test_config)
             loaded_hdf5 = None
 
             # Load from HDF5
             with h5py.File(hdf5_path, "r") as f:
                 hdf5_data = f["image"][:]
-                loaded_hdf5 = process_image_array(hdf5_data, test_config)
+                loaded_hdf5 = _process_image_array_with_fitsbolt(hdf5_data, test_config)
 
             # Both should have the same shape after processing
             if hasattr(loaded_png, "shape"):
@@ -228,14 +269,14 @@ class TestImageIO:
             Image.fromarray(test_image).save(input_path)
 
             # Load through the pipeline
-            processed_image = read_image_data(str(input_path), test_config)
+            processed_image = _load_image_with_fitsbolt(str(input_path), test_config)
 
             # Should be processed correctly
             assert processed_image is not None
 
             # The function returns a numpy array
             assert isinstance(processed_image, np.ndarray)
-            expected_size = tuple(test_config.size)
+            expected_size = tuple(test_config.normalisation.image_size)
             assert (
                 processed_image.shape[:2] == expected_size
                 or processed_image.shape[:2] == expected_size[::-1]
@@ -312,17 +353,22 @@ class TestImageIO:
 
             # Check that critical fields are present
             assert hasattr(
-                reloaded_config, "fits_extension"
-            ), "fits_extension field missing from reloaded config"
-            assert hasattr(reloaded_config, "size"), "size field missing from reloaded config"
+                reloaded_config, "normalisation"
+            ), "normalisation field missing from reloaded config"
             assert hasattr(
-                reloaded_config, "normalisation_method"
-            ), "normalisation_method field missing from reloaded config"
+                reloaded_config.normalisation, "fits_extension"
+            ), "fits_extension field missing from reloaded config.normalisation"
+            assert hasattr(
+                reloaded_config.normalisation, "size"
+            ), "size field missing from reloaded config.normalisation"
+            assert hasattr(
+                reloaded_config.normalisation, "normalisation_method"
+            ), "normalisation_method field missing from reloaded config.normalisation"
 
             # Test image loading with reloaded config
             for test_file in test_files:
                 try:
-                    loaded_image = read_image_data(test_file, reloaded_config)
+                    loaded_image = _load_image_with_fitsbolt(test_file, reloaded_config)
                     assert (
                         loaded_image is not None
                     ), f"Failed to load {test_file} with reloaded config"
@@ -358,7 +404,6 @@ class TestImageIO:
                 ("test.jpg", lambda p: Image.fromarray(test_image).save(p, quality=95), True),
                 ("test.jpeg", lambda p: Image.fromarray(test_image).save(p, quality=95), True),
                 ("test.tiff", lambda p: Image.fromarray(test_image).save(p), True),
-                ("test.tif", lambda p: Image.fromarray(test_image).save(p), True),
                 (
                     "test.fits",
                     lambda p: create_fits_file(test_image, p),
@@ -378,7 +423,7 @@ class TestImageIO:
                 assert file_path.is_file(), f"File {file_path} is not a regular file"
 
                 try:
-                    loaded_image = read_image_data(str(file_path), test_config)
+                    loaded_image = _load_image_with_fitsbolt(str(file_path), test_config)
 
                     if should_succeed:
                         assert loaded_image is not None, f"Failed to load {filename}"

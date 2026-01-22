@@ -20,7 +20,7 @@ dependencies:
   - loguru
   - matplotlib
   - numpy
-  - pandas
+  - pandas<3
   - python=3.11
   - pytorch
   - pytorch-cuda=12.4
@@ -37,3 +37,5 @@ dependencies:
       - efficientnet_lite_pytorch
       - efficientnet_lite0_pytorch_model
       - opencv-python-headless
+      - fitsbolt>=0.1.6
+      - cutana>=0.2.1

@@ -41,7 +41,6 @@ def get_prediction_dataloader(dset, batch_size=None, num_workers=4, pin_memory=T
         transform=transform,
         use_strong_transform=False,
         strong_transform=transform,
-        use_ms_augmentations=False,
     )
 
     return DataLoader(

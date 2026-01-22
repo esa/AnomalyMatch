@@ -227,7 +227,7 @@ def setup_mock_ui():
     return out, progress_bar
 
 
-def setup_pipeline(args, data_dir, labeled_data_path, run_dir, output_widget, progress_bar):
+def setup_pipeline(args, data_dir, labeled_data_path, run_dir, output_widget, seed, progress_bar):
     """Set up the AnomalyMatch pipeline for training."""
     model_path = os.path.join(run_dir, "models", "model.pth")
 
@@ -237,20 +237,21 @@ def setup_pipeline(args, data_dir, labeled_data_path, run_dir, output_widget, pr
     cfg.model_path = model_path
     cfg.data_dir = data_dir
     cfg.label_file = labeled_data_path
-    cfg.size = [args.size, args.size]
+    cfg.normalisation.image_size = [args.size, args.size]
     cfg.N_to_load = args.n_to_load  # Use parameter for number of images to load
     cfg.test_ratio = 0.0  # No test evaluation within the session
     cfg.output_dir = str(run_dir)
     cfg.num_train_iter = args.train_iterations
-    cfg.progress_bar = progress_bar
     cfg.num_workers = 4
     cfg.pin_memory = True
+    cfg.seed = seed
 
     # Configure logging
     am.set_log_level("info", cfg)
 
     # Create session
     session = am.Session(cfg)
+
     # change the output path of io to the run directory
     session.session_io.base_save_path = Path(run_dir)
 

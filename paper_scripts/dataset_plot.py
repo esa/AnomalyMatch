@@ -196,7 +196,7 @@ def get_galaxyzoo_samples(df, data_dir, anomaly_samples=6, normal_samples=6):
         )
 
         for _, row in anomaly_sample_rows.iterrows():
-            img_path = os.path.join(data_dir, row["filename"])
+            img_path = os.path.join(data_dir, row["original_filename"])
             if os.path.exists(img_path):
                 samples.append(
                     {
@@ -215,7 +215,7 @@ def get_galaxyzoo_samples(df, data_dir, anomaly_samples=6, normal_samples=6):
         normal_sample_rows = normal_df.sample(min(normal_samples, len(normal_df)), random_state=42)
 
         for _, row in normal_sample_rows.iterrows():
-            img_path = os.path.join(data_dir, row["filename"])
+            img_path = os.path.join(data_dir, row["original_filename"])
             if os.path.exists(img_path):
                 samples.append(
                     {
@@ -305,17 +305,17 @@ def create_compact_figure(
             ax.imshow(img)
 
             # Add class name as annotation inside the image
-            rect = Rectangle((0, 0), img.shape[1], 20, color="black", alpha=0.6)
+            rect = Rectangle((0, 0), img.shape[1], img.shape[1] * 0.25, color="black", alpha=0.6)
             ax.add_patch(rect)
 
             ax.text(
                 img.shape[1] / 2,
-                10,
+                img.shape[1] * 0.005,
                 sample["class_name"],
                 color="white",
                 fontsize=8,
                 ha="center",
-                va="center",
+                va="top",
             )
 
             # Remove ticks and add border
@@ -336,11 +336,17 @@ def create_compact_figure(
         img = np.array(Image.open(sample["path"]))
         ax.imshow(img)
 
-        rect = Rectangle((0, 0), img.shape[1], 20, color="red", alpha=0.6)
+        rect = Rectangle((0, 0), img.shape[1], img.shape[1] * 0.13, color="red", alpha=0.6)
         ax.add_patch(rect)
 
         ax.text(
-            img.shape[1] / 2, 10, "Anomaly", color="white", fontsize=8, ha="center", va="center"
+            img.shape[1] / 2,
+            img.shape[1] * 0.01,
+            "Anomaly",
+            color="white",
+            fontsize=8,
+            ha="center",
+            va="top",
         )
 
         ax.set_xticks([])
@@ -357,10 +363,18 @@ def create_compact_figure(
         img = np.array(Image.open(sample["path"]))
         ax.imshow(img)
 
-        rect = Rectangle((0, 0), img.shape[1], 20, color="black", alpha=0.6)
+        rect = Rectangle((0, 0), img.shape[1], img.shape[1] * 0.13, color="black", alpha=0.6)
         ax.add_patch(rect)
 
-        ax.text(img.shape[1] / 2, 10, "Normal", color="white", fontsize=8, ha="center", va="center")
+        ax.text(
+            img.shape[1] / 2,
+            img.shape[1] * 0.01,
+            "Normal",
+            color="white",
+            fontsize=8,
+            ha="center",
+            va="top",
+        )
 
         ax.set_xticks([])
         ax.set_yticks([])
@@ -378,17 +392,17 @@ def create_compact_figure(
         img = np.array(Image.open(sample["path"]))
         ax.imshow(img)
 
-        rect = Rectangle((0, 0), img.shape[1], 20, color="red", alpha=0.6)
+        rect = Rectangle((0, 0), img.shape[1], img.shape[1] * 0.13, color="red", alpha=0.6)
         ax.add_patch(rect)
 
         ax.text(
             img.shape[1] / 2,
-            10,
+            img.shape[1] * 0.01,
             sample["class_name"],
             color="white",
             fontsize=8,
             ha="center",
-            va="center",
+            va="top",
         )
 
         ax.set_xticks([])
@@ -407,11 +421,17 @@ def create_compact_figure(
             img = np.array(Image.open(sample["path"]))
             ax.imshow(img)
 
-            rect = Rectangle((0, 0), img.shape[1], 20, color="black", alpha=0.6)
+            rect = Rectangle((0, 0), img.shape[1], img.shape[1] * 0.13, color="black", alpha=0.6)
             ax.add_patch(rect)
 
             ax.text(
-                img.shape[1] / 2, 10, "Nominal", color="white", fontsize=8, ha="center", va="center"
+                img.shape[1] / 2,
+                img.shape[1] * 0.01,
+                "Nominal",
+                color="white",
+                fontsize=8,
+                ha="center",
+                va="top",
             )
 
             ax.set_xticks([])
@@ -431,17 +451,19 @@ def create_compact_figure(
                 img = np.array(Image.open(sample["path"]))
                 ax.imshow(img)
 
-                rect = Rectangle((0, 0), img.shape[1], 20, color="black", alpha=0.6)
+                rect = Rectangle(
+                    (0, 0), img.shape[1], img.shape[1] * 0.13, color="black", alpha=0.6
+                )
                 ax.add_patch(rect)
 
                 ax.text(
                     img.shape[1] / 2,
-                    10,
+                    img.shape[1] * 0.01,
                     "Nominal",
                     color="white",
                     fontsize=8,
                     ha="center",
-                    va="center",
+                    va="top",
                 )
 
                 ax.set_xticks([])
@@ -452,12 +474,13 @@ def create_compact_figure(
                 normal_idx += 1
 
     # Add dataset labels
-    fig.text(0.01, 0.96, "GalaxyMNIST", fontsize=12, fontweight="bold", ha="left")
-    fig.text(0.01, 0.76, "GalaxyZoo", fontsize=12, fontweight="bold", ha="left")
+    fig.text(0.01, 0.94, "GalaxyMNIST", fontsize=12, fontweight="bold", ha="left")
+    fig.text(0.01, 0.75, "Galaxy Zoo 2", fontsize=12, fontweight="bold", ha="left")
     fig.text(0.01, 0.56, "MiniImageNet", fontsize=12, fontweight="bold", ha="left")
 
     # Add "Anomaly Classes in Red" annotation at top right
-    fig.text(0.99, 0.96, "Anomaly Classes in Red", fontsize=10, color="red", ha="right")
+    fig.text(0.99, 0.75, "Anomaly Classes in Red", fontsize=10, color="red", ha="right")
+    fig.text(0.99, 0.56, "Anomaly Classes in Red", fontsize=10, color="red", ha="right")
 
     return fig
 
@@ -465,12 +488,12 @@ def create_compact_figure(
 def main():
     """Main function to create and save the dataset visualization."""
     # Define base paths
-    datasets_dir = os.path.join("datasets/")
+    datasets_dir = os.path.join("/media/team_workspaces/AnomalyMatch/paper_datasets/")
 
     # Define paths for dataset files
     galaxymnist_csv_path = os.path.join(datasets_dir, "labels_galaxymnist.csv")
     miniimagenet_csv_path = os.path.join(datasets_dir, "labels_miniimagenet.csv")
-    galaxyzoo_csv_path = os.path.join(datasets_dir, "labels_galaxyzoo.csv")
+    galaxyzoo_csv_path = os.path.join(datasets_dir, "galaxyzoo_labels.csv")
 
     galaxymnist_image_dir = os.path.join(datasets_dir, "galaxymnist")
     miniimagenet_image_dir = os.path.join(datasets_dir, "miniimagenet")

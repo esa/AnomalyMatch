@@ -6,12 +6,12 @@
 #   the terms contained in the file 'LICENCE.txt'.
 from torchvision import transforms
 from torch.utils.data import Dataset
-from .augmentation.randaugment import RandAugment
 
 from PIL import Image
 import numpy as np
 import torch
-import copy
+
+from anomaly_match.image_processing.transforms import get_strong_transforms
 
 
 class BasicDataset(Dataset):
@@ -31,8 +31,6 @@ class BasicDataset(Dataset):
         transform=None,
         use_strong_transform=False,
         strong_transform=None,
-        *args,
-        **kwargs,
     ):
         """
         Args
@@ -74,17 +72,13 @@ class BasicDataset(Dataset):
 
         self.num_classes = num_classes
         self.use_strong_transform = use_strong_transform
-        self.use_ms_augmentations = False
 
         self.transform = transform
         if use_strong_transform:
             if strong_transform is None:
-                self.strong_transform = copy.deepcopy(transform)
-                self.strong_transform.transforms.insert(
-                    0, RandAugment(3, 5, use_ms_augmentations=self.use_ms_augmentations)
-                )
-        else:
-            self.strong_transform = strong_transform
+                self.strong_transform = get_strong_transforms()
+            else:
+                self.strong_transform = strong_transform
 
     def __getitem__(self, idx):
         """
@@ -112,46 +106,3 @@ class BasicDataset(Dataset):
 
     def __len__(self):
         return len(self.data)
-
-    def plot_example_imgs(self, N=16, img_size=(256, 256)):
-        """Plot N example images from the dataset with a fixed image size."""
-        import matplotlib.pyplot as plt
-        from PIL import Image
-
-        images_per_row = 8
-        # Calculate the number of rows needed
-        num_rows = (N + images_per_row - 1) // images_per_row
-
-        plt.figure(
-            figsize=(images_per_row * 2, num_rows * 2 * self.num_classes),
-            dpi=150,
-            facecolor="black",
-        )
-        for class_idx in range(self.num_classes):
-            idxs = np.where(self.targets == class_idx)[0]
-            np.random.shuffle(idxs)
-            for i, idx in enumerate(idxs[:N]):
-                row = i // images_per_row
-                col = i % images_per_row
-                plt.subplot(
-                    self.num_classes * num_rows,
-                    images_per_row,
-                    class_idx * num_rows * images_per_row + row * images_per_row + col + 1,
-                )
-                img = Image.fromarray(self.data[idx].numpy())
-                img = img.resize(img_size, Image.LANCZOS)
-                plt.imshow(img)
-                # Annotate filename in img
-                plt.text(
-                    0,
-                    0,
-                    self.filenames[idx],
-                    color="white",
-                    backgroundcolor="black",
-                    fontsize=5,
-                )
-                plt.axis("off")
-                if i == 0:
-                    plt.title(f"Class {class_idx}", color="white", fontsize=10)
-        plt.tight_layout()
-        plt.show()

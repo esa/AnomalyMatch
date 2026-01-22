@@ -19,18 +19,13 @@ def pipeline_config():
         ),
         style={"color": "white"},
     )
-    progress_bar = widgets.FloatProgress(
-        value=0.0,
-        min=0.0,
-        max=1.0,
-    )
 
     cfg = am.get_default_cfg()
     am.set_log_level("trace", cfg)
     cfg.data_dir = "tests/test_data/"
-    cfg.size = [64, 64]
+    cfg.normalisation.image_size = [64, 64]
+    cfg.normalisation.n_output_channels = 3
     cfg.num_train_iter = 10
-    cfg.progress_bar = progress_bar
     return cfg, out
 
 

@@ -85,6 +85,8 @@ jpeg_decoder = TurboJPEG()
 USE_TURBOJPEG = True
 logger.info("Using TurboJPEG for faster image decoding")
 
+from anomaly_match.utils.set_seeds import set_seeds
+
 
 def read_and_decode_image(image_data):
     """Decode image data from HDF5 with optimized handling."""
@@ -276,8 +278,18 @@ def get_prediction_scores(session, labeled_filenames, hdf5_path, progress_bar=No
         all_filenames = all_filenames[: len(all_scores)]
 
     # Filter out labeled files
-    labeled_set = set(labeled_filenames)
-    unlabeled_indices = [i for i, fname in enumerate(all_filenames) if fname not in labeled_set]
+    # Normalise paths before comparison to handle different path formats
+    from os.path import basename, normpath
+
+    # Convert paths to a standardized format
+    normalised_labeled = set(basename(normpath(fname)) for fname in labeled_filenames)
+
+    # Get indices of unlabeled files
+    unlabeled_indices = [
+        i
+        for i, fname in enumerate(all_filenames)
+        if basename(normpath(fname)) not in normalised_labeled
+    ]
 
     logger.info(f"Filtered out {len(all_filenames) - len(unlabeled_indices)} labeled samples")
     logger.info(f"Remaining unlabeled samples: {len(unlabeled_indices)}")
@@ -321,6 +333,8 @@ def get_available_filenames(session):
 
 def run_benchmark(args):
     """Run the full benchmarking process."""
+    set_seeds(args.seed, deterministic=True)  # initialise torch, np and random seed
+
     # Set up directories
     run_dir, model_dir, plots_dir = setup_directories(args)
     logger.info(f"Results will be saved to {run_dir}")
@@ -370,6 +384,7 @@ def run_benchmark(args):
         labeled_data_path,
         run_dir,
         output_widget,
+        args.seed,
         None if args.skip_mock_ui else progress_bar,
     )
 
@@ -728,21 +743,27 @@ def run_benchmark(args):
 
         logger.info(f"Found {len(corrections)} mislabeled samples to correct")
 
-        # Apply corrections by labeling the samples in the session
-        for _, row in corrections.iterrows():
-            filename = row["filename"]
-            label = row["label"]
+        # if this is the last iteration we will not apply corrections
+        if iteration == args.training_runs - 1:
+            logger.info("Skipping corrections in the last iteration")
+        else:
+            # Apply corrections by labeling the samples in the session
+            for _, row in corrections.iterrows():
+                filename = row["filename"]
+                label = row["label"]
 
-            # Find index of this filename in session.filenames
-            try:
-                idx = session.filenames.tolist().index(filename)
-                session.label_image(idx, label)
-                logger.debug(f"Labeled {filename} as {label}")
-            except ValueError:
-                logger.warning(f"Could not find {filename} in session filenames")
+                # Find index of this filename in session.filenames
+                try:
+                    idx = session.filenames.tolist().index(filename)
+                    session.label_image(idx, label)
+                    logger.debug(f"Labeled {filename} as {label}")
+                except ValueError:
+                    logger.warning(f"Could not find {filename} in session filenames")
 
         # Save updated labels
         session.save_labels()
+        session_path = session.session_io.get_session_save_path(session.session_tracker)
+        labeled_data_path = session_path / "labeled_data.csv"
 
         # Update labeled_df with new labels
         labeled_df = pd.read_csv(labeled_data_path)
@@ -754,6 +775,8 @@ def run_benchmark(args):
 
         # Copy newly labeled images to output directory after each iteration
         copy_labeled_images(labeled_df, data_dir, iter_dir)
+
+        # End of iterations
 
     # Plot metrics over time with training batches as x-axis
     plot_metrics_over_time(metrics_history, plots_dir, batch_size=args.train_iterations)
@@ -823,6 +846,7 @@ def run_multi_class_benchmark(args):
     Args:
         args: Command line arguments
     """
+    set_seeds(args.seed, deterministic=True)  # initialise torch, np and random seed
     # Store metrics for each anomaly class
     all_class_metrics = {}
 
@@ -898,6 +922,7 @@ def run_multi_class_benchmark(args):
             labeled_data_path,
             run_dir,
             output_widget,
+            args.seed,
             None if args.skip_mock_ui else progress_bar,
         )
 
@@ -1251,21 +1276,27 @@ def run_multi_class_benchmark(args):
 
             logger.info(f"Found {len(corrections)} mislabeled samples to correct")
 
-            # Apply corrections by labeling the samples in the session
-            for _, row in corrections.iterrows():
-                filename = row["filename"]
-                label = row["label"]
+            # if this is the last iteration we will not apply corrections
+            if iteration == args.training_runs - 1:
+                logger.info("Skipping corrections in the last iteration")
+            else:
+                # Apply corrections by labeling the samples in the session
+                for _, row in corrections.iterrows():
+                    filename = row["filename"]
+                    label = row["label"]
 
-                # Find index of this filename in session.filenames
-                try:
-                    idx = session.filenames.tolist().index(filename)
-                    session.label_image(idx, label)
-                    logger.debug(f"Labeled {filename} as {label}")
-                except ValueError:
-                    logger.warning(f"Could not find {filename} in session filenames")
+                    # Find index of this filename in session.filenames
+                    try:
+                        idx = session.filenames.tolist().index(filename)
+                        session.label_image(idx, label)
+                        logger.debug(f"Labeled {filename} as {label}")
+                    except ValueError:
+                        logger.warning(f"Could not find {filename} in session filenames")
 
             # Save updated labels
             session.save_labels()
+            session_path = session.session_io.get_session_save_path(session.session_tracker)
+            labeled_data_path = session_path / "labeled_data.csv"
 
             # Update labeled_df with new labels
             labeled_df = pd.read_csv(labeled_data_path)
@@ -1277,6 +1308,8 @@ def run_multi_class_benchmark(args):
 
             # Copy newly labeled images to output directory after each iteration
             copy_labeled_images(labeled_df, data_dir, iter_dir)
+
+            # End of training iterations for this anomaly class
 
         # Plot metrics over time with training batches as x-axis
         plot_metrics_over_time(metrics_history, plots_dir, batch_size=args.train_iterations)

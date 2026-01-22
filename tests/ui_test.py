@@ -6,7 +6,7 @@
 #   the terms contained in the file 'LICENCE.txt'.
 import pytest
 import ipywidgets as widgets
-from anomaly_match.ui.Widget import Widget
+from anomaly_match.ui.Widget import Widget, shorten_filename
 from anomaly_match.pipeline.session import Session
 import anomaly_match as am
 import os
@@ -18,6 +18,59 @@ from PIL import Image
 matplotlib.use("Agg")  # Prevent matplotlib windows from opening
 
 
+class TestShortenFilename:
+    """Tests for the shorten_filename helper function."""
+
+    def test_short_filename_unchanged(self):
+        """Filenames within max length should remain unchanged."""
+        assert shorten_filename("short.fits", max_length=25) == "short.fits"
+        assert shorten_filename("image.jpg", max_length=25) == "image.jpg"
+
+    def test_long_filename_shortened(self):
+        """Long filenames should be shortened to max_length."""
+        long_name = "very_long_filename_that_exceeds_limit.fits"
+        result = shorten_filename(long_name, max_length=25)
+        assert len(result) <= 25
+        assert result.endswith(".fits")
+        assert "..." in result
+
+    def test_filename_with_multiple_dots(self):
+        """Filenames with multiple dots should preserve only the extension."""
+        name = "image.2024.01.15.observation.fits"
+        result = shorten_filename(name, max_length=25)
+        assert len(result) <= 25
+        assert result.endswith(".fits")
+        assert "..." in result
+
+    def test_filename_without_extension(self):
+        """Filenames without extension should still be shortened correctly."""
+        name = "very_long_filename_without_any_extension"
+        result = shorten_filename(name, max_length=25)
+        assert len(result) <= 25
+        assert "..." in result
+
+    def test_exact_max_length(self):
+        """Filename exactly at max_length should be unchanged."""
+        name = "exactly_25_chars_long.fit"
+        assert len(name) == 25
+        assert shorten_filename(name, max_length=25) == name
+
+    def test_very_short_max_length(self):
+        """Very short max_length should still produce valid output."""
+        name = "some_filename.fits"
+        result = shorten_filename(name, max_length=10)
+        assert len(result) <= 10
+        assert "..." in result
+
+    def test_preserves_start_and_end(self):
+        """Shortened name should contain parts of the original start and end."""
+        name = "START_middle_content_END.fits"
+        result = shorten_filename(name, max_length=20)
+        assert result.startswith("START")
+        # Should contain some part of the end before the extension
+        assert "END" in result or "..." in result
+
+
 @pytest.fixture(scope="session")
 def base_config():
     out = widgets.Output(
@@ -25,20 +78,15 @@ def base_config():
             border="1px solid white", height="400px", background_color="black", overflow="auto"
         ),
     )
-    progress_bar = widgets.FloatProgress(
-        value=0.0,
-        min=0.0,
-        max=1.0,
-    )
 
     cfg = am.get_default_cfg()
     am.set_log_level("debug", cfg)
     cfg.data_dir = "tests/test_data/"
-    cfg.size = [64, 64]
+    cfg.normalisation.image_size = [64, 64]
+    cfg.normalisation.n_output_channels = 3
     cfg.num_train_iter = 2
     cfg.test_ratio = 0.5
     cfg.output_dir = "tests/test_output"
-    cfg.progress_bar = progress_bar
     cfg.prediction_search_dir = "tests/test_data/"  # Set a default search directory
     cfg.top_N = 10
     return cfg, out
@@ -85,7 +133,7 @@ class TestUIInitialization:
 
     def test_normalization_dropdown(self, ui_widget):
         # Get the initial normalization method
-        initial_method = ui_widget.session.cfg.normalisation_method
+        initial_method = ui_widget.session.cfg.normalisation.normalisation_method
 
         # Get the dropdown options and find a different method
         dropdown_options = ui_widget.ui["normalisation_dropdown"].options
@@ -100,20 +148,20 @@ class TestUIInitialization:
         ui_widget.ui["normalisation_dropdown"].value = new_method
 
         # Assert that the session config was updated
-        assert ui_widget.session.cfg.normalisation_method == new_method
+        assert ui_widget.session.cfg.normalisation.normalisation_method == new_method
 
 
 class TestUINavigation:
     def test_next_image(self, ui_widget):
-        initial_index = ui_widget.current_index
+        initial_index = ui_widget.preview.current_index
         ui_widget.next_image()
-        assert ui_widget.current_index == initial_index + 1
+        assert ui_widget.preview.current_index == initial_index + 1
 
     def test_previous_image(self, ui_widget):
         ui_widget.next_image()  # Move to next image first
-        initial_index = ui_widget.current_index
+        initial_index = ui_widget.preview.current_index
         ui_widget.previous_image()
-        assert ui_widget.current_index == initial_index - 1
+        assert ui_widget.preview.current_index == initial_index - 1
 
 
 class TestUISorting:
@@ -142,22 +190,22 @@ class TestUISorting:
 
 class TestUIImageProcessing:
     def test_toggle_invert_image(self, ui_widget):
-        initial_invert_state = ui_widget.invert
+        initial_invert_state = ui_widget.preview.invert
         ui_widget.toggle_invert_image()
-        assert ui_widget.invert != initial_invert_state
+        assert ui_widget.preview.invert != initial_invert_state
 
     def test_toggle_unsharp_mask(self, ui_widget):
-        initial_unsharp_mask_state = ui_widget.unsharp_mask_applied
+        initial_unsharp_mask_state = ui_widget.preview.unsharp_mask_applied
         ui_widget.toggle_unsharp_mask()
-        assert ui_widget.unsharp_mask_applied != initial_unsharp_mask_state
+        assert ui_widget.preview.unsharp_mask_applied != initial_unsharp_mask_state
 
     def test_adjust_brightness_contrast(self, ui_widget):
         initial_brightness = ui_widget.ui["brightness_slider"].value
         initial_contrast = ui_widget.ui["contrast_slider"].value
         ui_widget.ui["brightness_slider"].value = initial_brightness + 0.1
         ui_widget.ui["contrast_slider"].value = initial_contrast + 0.1
-        assert ui_widget.brightness == initial_brightness + 0.1
-        assert ui_widget.contrast == initial_contrast + 0.1
+        assert ui_widget.preview.brightness == initial_brightness + 0.1
+        assert ui_widget.preview.contrast == initial_contrast + 0.1
 
 
 class TestUIModelOperations:

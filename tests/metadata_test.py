@@ -10,6 +10,8 @@ import shutil
 import tempfile
 import pandas as pd
 import pytest
+import numpy as np
+from PIL import Image
 from dotmap import DotMap
 
 from anomaly_match.datasets.AnomalyDetectionDataset import AnomalyDetectionDataset
@@ -30,12 +32,14 @@ class TestMetadata:
         os.makedirs(data_dir, exist_ok=True)
         os.makedirs(output_dir, exist_ok=True)
 
-        # Create dummy image files
+        # Create dummy image files - create actual valid images instead of empty files
         for i in range(3):
-            # Create an empty file
+            # Create a simple test image
+            img_data = np.zeros((100, 100, 3), dtype=np.uint8)
+            # Use modulo to cycle through RGB channels (0, 1, 2)
+            img_data[25:75, 25:75, i % 3] = 255  # Different colored squares for each image
             img_path = os.path.join(data_dir, f"test_image_{i}.jpg")
-            with open(img_path, "w") as f:
-                f.write("")
+            Image.fromarray(img_data).save(img_path)
 
         # Create labeled_data.csv - label only the first two images
         label_file = os.path.join(test_dir, "labeled_data.csv")
@@ -72,26 +76,26 @@ class TestMetadata:
     def test_metadata_loading(self, setup_test_files, monkeypatch):
         """Test that metadata is correctly loaded in AnomalyDetectionDataset."""
 
-        # Mock image reading functions
-        def mock_read_and_resize(*args, **kwargs):
-            import numpy as np
-
-            return np.zeros((224, 224, 3), dtype=np.uint8)
-
-        def mock_get_image_names(dir_path, recursive=False):
-            return [os.path.join(dir_path, f"test_image_{i}.jpg") for i in range(3)]
+        # Mock the load_and_process_wrapper function to avoid actual image processing
+        def mock_load_and_process_wrapper(
+            filepaths, cfg, desc="Loading images", show_progress=True
+        ):
+            # Return a list of (filepath, mock_image) tuples
+            results = []
+            for filepath in filepaths:
+                mock_image = np.zeros((224, 224, 3), dtype=np.uint8)
+                results.append((filepath, mock_image))
+            return results
 
         monkeypatch.setattr(
-            "anomaly_match.data_io.load_images.read_and_resize_image", mock_read_and_resize
-        )
-        monkeypatch.setattr(
-            "anomaly_match.data_io.find_images_in_folder.get_image_names_from_folder",
-            mock_get_image_names,
+            "anomaly_match.data_io.load_images.load_and_process_wrapper",
+            mock_load_and_process_wrapper,
         )
 
         # Set up configuration
         paths = setup_test_files
         cfg = get_default_cfg()
+        cfg.normalisation.image_size = [64, 64]
         cfg.data_dir = paths["data_dir"]
         cfg.label_file = paths["label_file"]
         cfg.metadata_file = paths["metadata_file"]
@@ -115,21 +119,20 @@ class TestMetadata:
     def test_metadata_saving_in_session(self, setup_test_files, monkeypatch):
         """Test that metadata is included when saving labels in Session."""
 
-        # Mock required functions
-        def mock_read_and_resize(*args, **kwargs):
-            import numpy as np
-
-            return np.zeros((224, 224, 3), dtype=np.uint8)
-
-        def mock_get_image_names(dir_path, recursive=False):
-            return [os.path.join(dir_path, f"test_image_{i}.jpg") for i in range(3)]
+        # Mock the load_and_process_wrapper function to avoid actual image processing
+        def mock_load_and_process_wrapper(
+            filepaths, cfg, desc="Loading images", show_progress=True
+        ):
+            # Return a list of (filepath, mock_image) tuples
+            results = []
+            for filepath in filepaths:
+                mock_image = np.zeros((224, 224, 3), dtype=np.uint8)
+                results.append((filepath, mock_image))
+            return results
 
         monkeypatch.setattr(
-            "anomaly_match.data_io.load_images.read_and_resize_image", mock_read_and_resize
-        )
-        monkeypatch.setattr(
-            "anomaly_match.data_io.find_images_in_folder.get_image_names_from_folder",
-            mock_get_image_names,
+            "anomaly_match.data_io.load_images.load_and_process_wrapper",
+            mock_load_and_process_wrapper,
         )
 
         # Patch model initialization to avoid issues
@@ -142,6 +145,7 @@ class TestMetadata:
         # Set up configuration
         paths = setup_test_files
         cfg = get_default_cfg()
+        cfg.normalisation.image_size = [64, 64]
         cfg.data_dir = paths["data_dir"]
         cfg.label_file = paths["label_file"]
         cfg.metadata_file = paths["metadata_file"]
@@ -165,35 +169,35 @@ class TestMetadata:
             assert col in saved_data.columns
 
         # Check that values were preserved
-        assert (
-            saved_data[saved_data["filename"] == "test_image_0.jpg"]["sourceID"].values[0]
-            == "source_0"
-        )
-        assert saved_data[saved_data["filename"] == "test_image_1.jpg"]["ra"].values[0] == 11.0
+        test_img_0_data = saved_data[saved_data["filename"] == "test_image_0.jpg"]
+        assert test_img_0_data["sourceID"].values[0] == "source_0"
+
+        test_img_1_data = saved_data[saved_data["filename"] == "test_image_1.jpg"]
+        assert test_img_1_data["ra"].values[0] == 11.0
 
     def test_missing_metadata_file(self, setup_test_files, monkeypatch):
         """Test behavior when metadata file is specified but doesn't exist."""
 
-        # Mock required functions
-        def mock_read_and_resize(*args, **kwargs):
-            import numpy as np
-
-            return np.zeros((224, 224, 3), dtype=np.uint8)
-
-        def mock_get_image_names(dir_path, recursive=False):
-            return [os.path.join(dir_path, f"test_image_{i}.jpg") for i in range(3)]
+        # Mock the load_and_process_wrapper function to avoid actual image processing
+        def mock_load_and_process_wrapper(
+            filepaths, cfg, desc="Loading images", show_progress=True
+        ):
+            # Return a list of (filepath, mock_image) tuples
+            results = []
+            for filepath in filepaths:
+                mock_image = np.zeros((224, 224, 3), dtype=np.uint8)
+                results.append((filepath, mock_image))
+            return results
 
         monkeypatch.setattr(
-            "anomaly_match.data_io.load_images.read_and_resize_image", mock_read_and_resize
-        )
-        monkeypatch.setattr(
-            "anomaly_match.data_io.find_images_in_folder.get_image_names_from_folder",
-            mock_get_image_names,
+            "anomaly_match.data_io.load_images.load_and_process_wrapper",
+            mock_load_and_process_wrapper,
         )
 
         # Set up configuration
         paths = setup_test_files
         cfg = get_default_cfg()
+        cfg.normalisation.image_size = [64, 64]
         cfg.data_dir = paths["data_dir"]
         cfg.label_file = paths["label_file"]
         cfg.metadata_file = os.path.join(paths["test_dir"], "nonexistent_metadata.csv")

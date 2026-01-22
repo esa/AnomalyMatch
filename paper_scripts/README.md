@@ -97,6 +97,11 @@ python create_results.py --galaxymnist --input-dir /path/to/datasets --output-di
 
 # Run all experiments with a different seed
 python create_results.py --all --seed 123
+
+# Run the experiments for the astronomaly comparison with multi seeds
+# all settings are optional
+python galaxyzoo_multi_seed.py --input_dir X --output_dir Y --seeds [1,2,3,4,5]
+
 ```
 
 ## Additional Visualizations

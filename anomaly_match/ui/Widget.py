@@ -17,18 +17,58 @@ import datetime
 
 from skimage.util import img_as_ubyte
 
+from anomaly_match.data_io.load_images import load_and_process_single_wrapper
+from anomaly_match.ui.preview_widget import PreviewWidget
+
 # Import the newly created UI elements
 from anomaly_match.ui.ui_elements import (
     create_ui_elements,
     attach_click_listeners,
     HTML_setup,
 )
-from anomaly_match.image_processing.display_transforms import (
-    apply_transforms_ui,
-    display_image_normalisation,
-)
-from anomaly_match.utils.numpy_to_byte_stream import numpy_array_to_byte_stream
-from anomaly_match.data_io.load_images import read_and_resize_image
+
+
+def shorten_filename(filename: str, max_length: int = 25) -> str:
+    """
+    Shorten a filename to fit within the specified maximum length.
+
+    Preserves the extension and shows beginning/end of the basename.
+
+    Args:
+        filename: The filename to shorten.
+        max_length: Maximum total length of the result.
+
+    Returns:
+        Shortened filename if needed, original otherwise.
+    """
+    if len(filename) <= max_length:
+        return filename
+
+    # Split into base and extension, handling multiple dots
+    if "." in filename:
+        # Find the last dot for extension
+        last_dot_idx = filename.rfind(".")
+        basename = filename[:last_dot_idx]
+        extension = filename[last_dot_idx:]  # includes the dot
+    else:
+        basename = filename
+        extension = ""
+
+    # Calculate available space for basename
+    # Format: "start...end" + extension
+    ellipsis = "..."
+    available = max_length - len(extension) - len(ellipsis)
+
+    if available <= 6:
+        # Very short max_length, just truncate
+        return filename[: max_length - 3] + "..."
+
+    # Split available space: more at start, less at end
+    start_len = (available * 2) // 3
+    end_len = available - start_len
+
+    shortened = basename[:start_len] + ellipsis + basename[-end_len:] + extension
+    return shortened
 
 
 class Widget:
@@ -45,24 +85,38 @@ class Widget:
         self.session = session
         self.cfg = session.cfg
 
+        # Create the preview widget (handles image display and transforms)
+        self.preview = PreviewWidget(session)
+
         # Create all UI elements (moved from the big monolithic class)
         self.ui = create_ui_elements()
 
-        # This is to keep track of the current image index
-        self.current_index = 0
+        # Replace the ui_elements image/text widgets with preview widget's versions
+        self.ui["image_widget"] = self.preview.image_widget
+        self.ui["filename_text"] = self.preview.filename_text
 
-        # Initialize transformation states
-        self.invert = False
-        self.brightness = 1.0
-        self.contrast = 1.0
-        self.unsharp_mask_applied = False
-        self.original_image = None
-        self.modified_image = None
+        # Rebuild center_row with preview widget's components
+        from ipywidgets import VBox
+        import ipywidgets as widgets
 
-        # Initialize RGB channel states
-        self.show_r = True
-        self.show_g = True
-        self.show_b = True
+        self.ui["center_row"] = VBox(
+            [self.preview.filename_text, self.preview.image_widget],
+            layout=widgets.Layout(background_color="black"),
+        )
+
+        # Update main_layout to use the new center_row with preview widget's components.
+        # The main_layout VBox has this structure:
+        #   [0] model_controls, [1] top_row, [2] center_row, [3:] transform_controls + bottom rows
+        # We replace center_row (index 2) with our new one containing the preview widget.
+        main_layout = self.ui["main_layout"]
+        model_controls = main_layout.children[0]
+        top_row = main_layout.children[1]
+        remaining_rows = main_layout.children[3:]  # transform_controls, bottom_row1-5
+
+        main_layout.children = (model_controls, top_row, self.ui["center_row"], *remaining_rows)
+
+        # Set the full resolution button reference
+        self.preview.set_full_res_button(self.ui["transform_buttons"]["full_res"])
 
         # Attach the output widget so the session logs go there
         session.set_terminal_out(self.ui["out"])
@@ -124,6 +178,16 @@ class Widget:
         """
         Helps compose final layout for display.
         """
+
+        # Reduce font size on buttons using widget styling
+        for _, widget in self.ui.items():
+            if hasattr(widget, "style") and hasattr(widget, "description"):
+                widget.style.font_size = "90%"  # Slightly smaller font for buttons
+
+        # Adjust the image widget size
+        self.ui["image_widget"].layout.width = "auto"
+        self.ui["image_widget"].layout.height = "auto"
+
         return HBox([main_layout, side_display])
 
     def search_all_files(self):
@@ -191,16 +255,20 @@ class Widget:
             )
             # update models last_normalisation_method only after successful eval
             if self.session.model.last_normalisation_method is None:
-                self.session.model.last_normalisation_method = self.session.cfg.normalisation_method
+                self.session.model.last_normalisation_method = (
+                    self.session.cfg.normalisation.normalisation_method
+                )
             elif (
                 self.session.model.last_normalisation_method
-                != self.session.cfg.normalisation_method
+                != self.session.cfg.normalisation.normalisation_method
             ):
                 logger.warning(
-                    f"Evaluated with a new normalisation {self.session.cfg.normalisation_method.name} method "
+                    f"Evaluated with a new normalisation {self.session.cfg.normalisation.normalisation_method.name} method "
                     + f"not previously used with the model: {self.session.model.last_normalisation_method.name}"
                 )
-                self.session.model.last_normalisation_method = self.session.cfg.normalisation_method
+                self.session.model.last_normalisation_method = (
+                    self.session.cfg.normalisation.normalisation_method
+                )
 
             # Display will be updated by the callback when completed
             self.display_top_files_scores()
@@ -208,210 +276,85 @@ class Widget:
 
     def display_top_files_scores(self):
         """Displays the top files and their scores."""
-        self.current_index = 0
-        self.update_image_display()
+        self.preview.set_index(0)
+        self.preview.update_display()
         self.ui["progress_bar"].style = {"bar_color": "green"}
         self.display_gallery()
 
     def update_image_display(self):
         """Updates the display of the current image."""
-
-        filename = self.session.filenames[self.current_index]
-        score = self.session.scores[self.current_index]
-        if self.session.cfg.normalisation_method != self.session.cached_image_normalisation_enum:
-            try:
-                logger.debug(
-                    f"Re-Loading image from {filename} with norm {self.session.cfg.normalisation_method}"
-                )
-
-                # Load the image using the centralized function
-                filepath = os.path.join(self.session.cfg.data_dir, filename)
-
-                img = read_and_resize_image(
-                    filepath,
-                    cfg=self.session.cfg,
-                    convert_to_rgb=True,
-                )
-
-                # Normalise the image array to 0-1 range, then to 255 and convert to PIL Image
-                self.original_image = display_image_normalisation(img)
-            except Exception as e:
-                logger.error(f"Error loading image {filepath}: {e}")
-                return
-        # If no reload is necessary, use cached images
-        else:
-            img = self.session.img_catalog[self.current_index]
-
-            # Normalise the image array to 0-1 range, then to 255 and convert to PIL Image
-            self.original_image = display_image_normalisation(img)
-
-        # Apply other transforms
-        self.modified_image = apply_transforms_ui(
-            self.original_image,
-            invert=self.invert,
-            brightness=self.brightness,
-            contrast=self.contrast,
-            unsharp_mask_applied=self.unsharp_mask_applied,
-            show_r=self.show_r,
-            show_g=self.show_g,
-            show_b=self.show_b,
-        )
-
-        self.display_image(self.modified_image, filename, score)
-
-    def display_image(self, img, filename=None, score=None):
-        """Displays the given PIL image in the widget."""
-        image_byte_stream = numpy_array_to_byte_stream(np.array(img))
-        self.ui["image_widget"].value = image_byte_stream
-        self.update_image_UI_label(filename, score)
+        self.preview.update_display()
 
     def update_image_UI_label(self, filename=None, score=None):
         """Updates the UI label with the current image's filename, score, and label."""
-        label_color = "white"
-        label_text = "None"
-        label = self.session.get_label(self.current_index)
-        if label == "anomaly":
-            label_color = "red"
-            label_text = "Anomalous"
-        elif label == "normal":
-            label_color = "green"
-            label_text = "Nominal"
-
-        # Get counts for anomalies and nominal samples
-        normal_count, anomalous_count = self.session.get_label_distribution()
-
-        # Calculate newly annotated samples (those in active_learning_df) using cached method
-        new_nominal, new_anomalous = self.session.get_active_learning_counts()
-
-        # Format the file name (shortened version)
-        fname = self.session.filenames[self.current_index]
-        fname_short = os.path.basename(fname)  # Just show filename without path
-        # Shorten the filename if it's too long
-        if len(fname_short) > 32:
-            fname_short = fname_short[:15] + "..." + fname_short[-14:]
-        sc = self.session.scores[self.current_index]
-        total_len = len(self.session.img_catalog) - 1
-
-        self.ui["filename_text"].value = (
-            # first line ─ Name left, Score & Index right
-            f'<span style="color:white;">'
-            f"Name: {fname_short}"
-            f"</span>"
-            f'<span style="float:right; text-align:right; color:white;">'
-            f"Score: {sc:.2f} | Index: {self.current_index}/{total_len}"
-            f"</span>"
-            # clear the float so the next line starts cleanly
-            f'<br style="clear:both;">'
-            # second line ─ Label left, overall stats right
-            f'<span style="color:white">Label: </span>'
-            f'<span style="color:{label_color}">{label_text}</span>'
-            # right-aligned block
-            f'<span style="float:right; text-align:right;">'
-            f'<span style="color:red">Anomalies: {anomalous_count}(+{new_anomalous})</span> | '
-            f'<span style="color:green">Nominal: {normal_count}(+{new_nominal})</span>'
-            f"</span>"
-        )
+        self.preview.update_label_only()
 
     # ======== Sorting Methods ========
     def sort_by_anomalous(self):
         """Sorts the images by their anomalous scores and updates the display."""
         self.session.sort_by_anomalous()
-        self.current_index = 0
-        self.update_image_display()
+        self.preview.set_index(0)
+        self.preview.update_display()
 
     def sort_by_nominal(self):
         """Sorts the images by their nominal scores and updates the display."""
         self.session.sort_by_nominal()
-        self.current_index = 0
-        self.update_image_display()
+        self.preview.set_index(0)
+        self.preview.update_display()
 
     def sort_by_mean(self):
         """Sorts the images by distance to mean score and updates the display."""
         self.session.sort_by_mean()
-        self.current_index = 0
-        self.update_image_display()
+        self.preview.set_index(0)
+        self.preview.update_display()
 
     def sort_by_median(self):
         """Sorts the images by distance to median score and updates the display."""
         self.session.sort_by_median()
-        self.current_index = 0
-        self.update_image_display()
+        self.preview.set_index(0)
+        self.preview.update_display()
 
     # ======== Navigation ========
     def next_image(self):
         """Displays the next image in the catalog."""
-        self.current_index = min(len(self.session.img_catalog) - 1, self.current_index + 1)
-        self.update_image_display()
+        new_index = min(len(self.session.img_catalog) - 1, self.preview.current_index + 1)
+        self.preview.reset_full_resolution_mode()
+        self.preview.set_index(new_index)
+        self.preview.update_display()
 
     def previous_image(self):
         """Displays the previous image in the catalog."""
-        self.current_index = max(0, self.current_index - 1)
-        self.update_image_display()
+        new_index = max(0, self.preview.current_index - 1)
+        self.preview.reset_full_resolution_mode()
+        self.preview.set_index(new_index)
+        self.preview.update_display()
 
     # ======== Image Transformations ========
     def restore_image(self):
         """Restores the current image to its original state."""
-        self.invert = False
         self.ui["brightness_slider"].value = 1.0
         self.ui["contrast_slider"].value = 1.0
-        self.unsharp_mask_applied = False
-
-        # Reset RGB channels
-        self.show_r = True
-        self.show_g = True
-        self.show_b = True
         self.ui["red_channel_checkbox"].value = True
         self.ui["green_channel_checkbox"].value = True
         self.ui["blue_channel_checkbox"].value = True
-
-        self.modified_image = self.original_image
-        self.display_image(self.modified_image)
+        self.preview.restore()
 
     def toggle_invert_image(self):
         """Toggles the inversion of the current image."""
-        self.invert = not self.invert
-        self.modified_image = apply_transforms_ui(
-            self.original_image,
-            invert=self.invert,
-            brightness=self.brightness,
-            contrast=self.contrast,
-            unsharp_mask_applied=self.unsharp_mask_applied,
-            show_r=self.show_r,
-            show_g=self.show_g,
-            show_b=self.show_b,
-        )
-        self.display_image(self.modified_image)
+        self.preview.toggle_invert()
 
     def toggle_unsharp_mask(self):
         """Toggles the application of an unsharp mask."""
-        self.unsharp_mask_applied = not self.unsharp_mask_applied
-        self.modified_image = apply_transforms_ui(
-            self.original_image,
-            invert=self.invert,
-            brightness=self.brightness,
-            contrast=self.contrast,
-            unsharp_mask_applied=self.unsharp_mask_applied,
-            show_r=self.show_r,
-            show_g=self.show_g,
-            show_b=self.show_b,
-        )
-        self.display_image(self.modified_image)
+        self.preview.toggle_unsharp_mask()
+
+    def show_full_resolution(self):
+        """Toggles full resolution mode and updates the display."""
+        self.preview.toggle_full_resolution()
 
     def adjust_brightness_contrast(self, _):
         """Adjusts brightness and contrast of the current image."""
-        self.brightness = self.ui["brightness_slider"].value
-        self.contrast = self.ui["contrast_slider"].value
-        self.modified_image = apply_transforms_ui(
-            self.original_image,
-            invert=self.invert,
-            brightness=self.brightness,
-            contrast=self.contrast,
-            unsharp_mask_applied=self.unsharp_mask_applied,
-            show_r=self.show_r,
-            show_g=self.show_g,
-            show_b=self.show_b,
-        )
-        self.display_image(self.modified_image)
+        self.preview.set_brightness(self.ui["brightness_slider"].value)
+        self.preview.set_contrast(self.ui["contrast_slider"].value)
 
     def display_gallery(self):
         """Displays a small gallery of either mispredicted or top anomalous/nominal images."""
@@ -441,13 +384,19 @@ class Widget:
                         path = os.path.join(self.cfg.data_dir, filename)
                         if os.path.exists(path):
                             try:
-                                img_array = read_and_resize_image(
-                                    path, cfg=self.session.cfg, convert_to_rgb=True
+                                img_array = load_and_process_single_wrapper(
+                                    path,
+                                    self.session.cfg,
+                                    desc="widget loading image",
+                                    show_progress=False,
                                 )
+
                                 img = Image.fromarray(img_array)
                                 mispredicted_images.append(img_array)
+                                display_name = shorten_filename(filename)
+
                                 image_text.append(
-                                    f"{filename}\nPred: {pred:.2f} | Label: {label:.2f}"
+                                    f"{display_name}\nPred: {pred:.2f} | Label: {label:.2f}"
                                 )
 
                             except Exception as e:
@@ -538,8 +487,9 @@ class Widget:
                         pil_img = Image.fromarray(img_arr)
                         images.append(pil_img)
                         filename = self.session.filenames[idx]
+                        display_name = shorten_filename(filename)
                         score = scores[idx]
-                        image_text.append(f"{filename}\nScore: {score:.4f}")
+                        image_text.append(f"{display_name}\nScore: {score:.4f}")
 
                     for idx in top_nominal_indices:
                         img_arr = self.session.img_catalog[idx]
@@ -551,8 +501,9 @@ class Widget:
                         pil_img = Image.fromarray(img_arr)
                         images.append(pil_img)
                         filename = self.session.filenames[idx]
+                        display_name = shorten_filename(filename)
                         score = scores[idx]
-                        image_text.append(f"{filename}\nScore: {score:.4f}")
+                        image_text.append(f"{display_name}\nScore: {score:.4f}")
 
                     num_images = len(images)
                     plt.figure(figsize=(12, 6), facecolor="black")
@@ -580,7 +531,7 @@ class Widget:
 
     def remember_current_file(self, _):
         """Remembers the currently displayed file."""
-        self.session.remember_current_file(self.session.filenames[self.current_index])
+        self.session.remember_current_file(self.session.filenames[self.preview.current_index])
 
     def save_model(self):
         """Saves the model using the session."""
@@ -589,15 +540,19 @@ class Widget:
     def load_model(self):
         """Loads the model using the session."""
         with self.ui["out"]:
-            logger.debug(f"Loading model, cfg norm: {self.session.cfg.normalisation_method}, ")
+            logger.debug(
+                f"Loading model, cfg norm: {self.session.cfg.normalisation.normalisation_method}, "
+            )
         self.session.load_model()
 
         # Update the normalization dropdown to match the session's method
-        self.ui["normalisation_dropdown"].value = self.session.cfg.normalisation_method
+        self.ui["normalisation_dropdown"].value = (
+            self.session.cfg.normalisation.normalisation_method
+        )
 
         with self.ui["out"]:
             logger.debug(
-                f"Loaded model, cfg norm: {self.session.cfg.normalisation_method},"
+                f"Loaded model, cfg norm: {self.session.cfg.normalisation.normalisation_method},"
                 + f" model norm: {self.session.model.last_normalisation_method}"
             )
         self.update()
@@ -608,14 +563,13 @@ class Widget:
         with self.ui["out"]:
             logger.debug(
                 f"Session norm: {self.session.cached_image_normalisation_enum}, "
-                f"selected norm: {self.session.cfg.normalisation_method}"
+                f"selected norm: {self.session.cfg.normalisation.normalisation_method}"
             )
 
         with self.ui["out"]:
             logger.debug("Starting training...")
             self.ui["progress_bar"].style = {"bar_color": "blue"}
             self.ui["progress_bar"].value = 0.0
-            self.cfg.progress_bar = self.ui["progress_bar"]
 
             self.cfg.num_train_iter = self.ui["train_iteration_slider"].value
             logger.debug(
@@ -669,16 +623,20 @@ class Widget:
 
             # update models last_normalisation_method after successful training
             if self.session.model.last_normalisation_method is None:
-                self.session.model.last_normalisation_method = self.session.cfg.normalisation_method
+                self.session.model.last_normalisation_method = (
+                    self.session.cfg.normalisation.normalisation_method
+                )
             elif (
                 self.session.model.last_normalisation_method
-                != self.session.cfg.normalisation_method
+                != self.session.cfg.normalisation.normalisation_method
             ):
                 logger.warning(
-                    f"Trained with a new normalisation {self.session.cfg.normalisation_method.name} method "
+                    f"Trained with a new normalisation {self.session.cfg.normalisation.normalisation_method.name} method "
                     + f"not previously used with the model: {self.session.model.last_normalisation_method.name}"
                 )
-                self.session.model.last_normalisation_method = self.session.cfg.normalisation_method
+                self.session.model.last_normalisation_method = (
+                    self.session.cfg.normalisation.normalisation_method
+                )
 
             # Calculate total time taken
             total_time = time.time() - start_time
@@ -693,7 +651,7 @@ class Widget:
         """Updates the UI components and performs evaluation."""
         self.ui["progress_bar"].style = {"bar_color": "cyan"}
         self.session.update_predictions()
-        self.current_index = 0
+        self.preview.set_index(0)
 
         if self.cfg.test_ratio > 0:
             if self.session.eval_performance is not None:
@@ -745,29 +703,24 @@ class Widget:
     # Add channel toggle methods
     def toggle_red_channel(self, change):
         """Toggles the red channel on/off."""
-        self.show_r = change["new"]
-        self.update_image_display()
+        self.preview.set_rgb_channels(r=change["new"])
 
     def toggle_green_channel(self, change):
         """Toggles the green channel on/off."""
-        self.show_g = change["new"]
-        self.update_image_display()
+        self.preview.set_rgb_channels(g=change["new"])
 
     def toggle_blue_channel(self, change):
         """Toggles the blue channel on/off."""
-        self.show_b = change["new"]
-        self.update_image_display()
+        self.preview.set_rgb_channels(b=change["new"])
 
     def select_normalisation(self, change):
         """Updates the normalization method when dropdown selection changes."""
         new_value = change["new"]
-        if new_value != self.cfg.normalisation_method:
+        if new_value != self.cfg.normalisation.normalisation_method:
             self.session.set_normalisation_method(new_value)
-            self.update_image_display()
+            self.preview.update_display()
 
     def unlabel_current_image(self):
         """Removes the label from the currently displayed image."""
-        # Call session's unlabel_image method
-        self.session.unlabel_image(self.current_index)
-        # Update the UI to reflect the change
-        self.update_image_UI_label()
+        self.session.unlabel_image(self.preview.current_index)
+        self.preview.update_label_only()

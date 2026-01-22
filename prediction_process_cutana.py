@@ -15,10 +15,8 @@ import numpy as np
 from loguru import logger
 from concurrent.futures import ThreadPoolExecutor
 import time
-import zarr
-import pandas as pd
-from pathlib import Path
 from tqdm import tqdm
+import cutana
 
 from anomaly_match.data_io.load_images import process_single_wrapper
 
@@ -73,92 +71,74 @@ def load_and_preprocess_zarr(args):
     return read_and_preprocess_image_from_zarr(image_data, cfg)
 
 
-def evaluate_images_in_zarr(zarr_path, cfg, top_n=1000, batch_size=1000, max_workers=4):
-    """Evaluate images inside a Zarr file and return top N scores."""
-    logger.info(f"Opening Zarr file {zarr_path}")
+def evaluate_images_from_cutana(
+    cutana_sources_path, cfg, top_n=1000, batch_size=1000, max_workers=4
+):
+    """Evaluate images provided by Cutana stream and return top N scores."""
 
-    zarr_path = Path(zarr_path)
+    cutana_config = cutana.get_default_config()
 
-    # Open Zarr store
+    cutana_config.target_resolution = cfg.normalisation.image_size[0]
+    cutana_config.source_catalogue = cutana_sources_path
+
+    # Configure FITS extensions from AM config, default to PRIMARY if not specified
+    # fits_extension can be: None, str/int, list of str/int, or list of tuples (name, ext_type)
+    fits_ext = cfg.normalisation.fits_extension
+    if fits_ext is None:
+        fits_ext = ["PRIMARY"]
+    elif isinstance(fits_ext, (str, int)):
+        fits_ext = [fits_ext]
+
+    # Build selected_extensions - handle both simple names and (name, ext_type) tuples
+    selected_extensions = []
+    extension_names = []
+    for ext in fits_ext:
+        if isinstance(ext, tuple):
+            name, ext_type = ext
+            selected_extensions.append({"name": str(name), "ext": ext_type})
+            extension_names.append(name)
+        else:
+            selected_extensions.append({"name": str(ext), "ext": "PrimaryHDU"})
+            extension_names.append(ext)
+
+    cutana_config.fits_extensions = extension_names
+    cutana_config.selected_extensions = selected_extensions
+
+    # Pass channel combination - required for multi-extension data
+    if cfg.normalisation.channel_combination is not None:
+        cutana_config.channel_weights = cfg.normalisation.channel_combination
+    elif len(fits_ext) > 1:
+        raise ValueError(
+            "cfg.normalisation.channel_combination must be set when using multiple FITS extensions. "
+            "This defines how extensions are combined into RGB channels."
+        )
+
+    # Pass AnomalyMatch's fitsbolt_cfg directly to cutana for normalization
+    # This ensures cutana uses the exact same normalization settings as training
+    if hasattr(cfg, "fitsbolt_cfg") and cfg.fitsbolt_cfg is not None:
+        cutana_config.external_fitsbolt_cfg = cfg.fitsbolt_cfg
+        logger.debug("Passed fitsbolt_cfg to cutana for normalization")
+
     try:
-        root = zarr.open_group(str(zarr_path), mode="r")
+        logger.info(f"Creating Cutana orchestrator, streaming from {cutana_sources_path}")
+        logger.debug(
+            f"Cutana config: target_resolution={cutana_config.target_resolution}, "
+            f"fits_extensions={cutana_config.fits_extensions}, "
+            f"selected_extensions={cutana_config.selected_extensions}"
+        )
+
+        cutana_orchestrator = cutana.StreamingOrchestrator(cutana_config)
+
+        cutana_orchestrator.init_streaming(
+            batch_size=batch_size, write_to_disk=False, synchronised_loading=False
+        )
     except Exception as e:
-        logger.error(f"Failed to open Zarr store: {e}")
+        logger.error(f"Failed to initialize Cutana orchestrator: {e}")
         raise
 
-    if "images" not in root:
-        raise ValueError(f"No 'images' array found in Zarr store {zarr_path}")
+    logger.info("Cutana orchestrator streaming mode initalized")
 
-    images_array = root["images"]
-    num_images = images_array.shape[0]
-    logger.info(f"Found {num_images} images in the Zarr file")
-    logger.info(f"Image array shape: {images_array.shape}")
-    logger.info(f"Image array dtype: {images_array.dtype}")
-
-    # Try to load metadata
-    filenames = []
-    metadata_file = None
-
-    # Generate a unique prefix for this zarr file to avoid filename collisions
-    # Use the parent directory name for batch folders, or the zarr file name itself
-    if zarr_path.name == "images.zarr":
-        # For batch folders, use the parent directory name
-        zarr_prefix = zarr_path.parent.name
-    else:
-        # For direct zarr files, use the zarr file name
-        zarr_prefix = zarr_path.stem
-
-    # Check for metadata file in Zarr attributes
-    if "metadata_file" in root.attrs:
-        metadata_file = Path(root.attrs["metadata_file"])
-        if not metadata_file.is_absolute():
-            # Try relative to zarr file
-            metadata_file = zarr_path.parent / metadata_file.name
-
-    # Fallback: look for metadata parquet file next to zarr
-    if metadata_file is None or not metadata_file.exists():
-        # First try: <zarr_name>_metadata.parquet next to zarr file
-        potential_metadata = zarr_path.parent / f"{zarr_path.stem}_metadata.parquet"
-        if potential_metadata.exists():
-            metadata_file = potential_metadata
-        # Second try: For batch folders with images.zarr subdirectory,
-        # look for images_metadata.parquet in parent directory
-        elif zarr_path.name == "images.zarr":
-            potential_metadata = zarr_path.parent / "images_metadata.parquet"
-            if potential_metadata.exists():
-                metadata_file = potential_metadata
-
-    if metadata_file and metadata_file.exists():
-        logger.info(f"Loading metadata from {metadata_file}")
-        try:
-            metadata_df = pd.read_parquet(metadata_file)
-            if "original_filename" in metadata_df.columns:
-                filenames = metadata_df["original_filename"].tolist()
-            elif "filename" in metadata_df.columns:
-                filenames = metadata_df["filename"].tolist()
-            elif "source_id" in metadata_df.columns:
-                # Use source_id as filename if available
-                filenames = metadata_df["source_id"].tolist()
-                logger.info("Using source_id column as filenames")
-            else:
-                logger.warning(
-                    "No filename column found in metadata, using indices with zarr prefix"
-                )
-                filenames = [f"{zarr_prefix}__image_{i:06d}" for i in range(num_images)]
-        except Exception as e:
-            logger.warning(f"Failed to load metadata: {e}")
-            logger.info("Using image indices with zarr prefix as fallback")
-            filenames = [f"{zarr_prefix}__image_{i:06d}" for i in range(num_images)]
-    else:
-        logger.info("No metadata file found, using image indices with zarr prefix as filenames")
-        filenames = [f"{zarr_prefix}__image_{i:06d}" for i in range(num_images)]
-
-    # Ensure we have the right number of filenames
-    if len(filenames) != num_images:
-        logger.warning(
-            f"Filename count ({len(filenames)}) doesn't match image count ({num_images}), regenerating with zarr prefix"
-        )
-        filenames = [f"{zarr_prefix}__image_{i:06d}" for i in range(num_images)]
+    logger.info(f"Available batches in cutana: {cutana_orchestrator.get_batch_count()}")
 
     model = load_model(cfg)
     model.eval()
@@ -172,14 +152,47 @@ def evaluate_images_in_zarr(zarr_path, cfg, top_n=1000, batch_size=1000, max_wor
     last_log_time = start_time
     processed_since_last_log = 0
 
-    for batch_idx, batch_start in enumerate(
-        tqdm(range(0, num_images, batch_size), desc="Processing batches")
-    ):
-        batch_end = min(batch_start + batch_size, num_images)
-        batch_size_actual = batch_end - batch_start
+    # Require fitsbolt config from model checkpoint for consistent predictions
+    # Note: DotMap auto-creates empty DotMaps when accessing missing keys
+    # So we check for 'size' key which must exist in a valid fitsbolt config
+    fitsbolt_cfg = cfg.fitsbolt_cfg
+    if fitsbolt_cfg is None or (isinstance(fitsbolt_cfg, DotMap) and "size" not in fitsbolt_cfg):
+        raise ValueError(
+            "fitsbolt_cfg not found in model checkpoint. "
+            "Models must be saved with fitsbolt config for prediction. "
+            "Please retrain and save the model to include fitsbolt config."
+        )
+    logger.debug("Using fitsbolt config loaded from model checkpoint")
 
-        # Read batch data from Zarr
-        batch_data = images_array[batch_start:batch_end]
+    batches_count = cutana_orchestrator.get_batch_count()
+
+    num_images = 0
+    filenames = []
+
+    for batch_idx in tqdm(range(batches_count), desc="Processing batches"):
+
+        loaded_batch = cutana_orchestrator.next_batch()
+        batch_data = loaded_batch["cutouts"]
+
+        # Debug: Log what we received
+        logger.debug(
+            f"Batch {batch_idx}: cutouts type={type(batch_data).__name__}, "
+            f"metadata count={len(loaded_batch.get('metadata', []))}"
+        )
+
+        # Handle empty batches (cutana returns [] if all cutouts failed)
+        if isinstance(batch_data, list):
+            if len(batch_data) == 0:
+                logger.warning(f"Batch {batch_idx} returned empty cutouts (list), skipping")
+                continue
+            # Convert list to numpy array if needed
+            batch_data = np.array(batch_data)
+
+        batch_size_actual = batch_data.shape[0]
+        num_images += batch_size_actual
+
+        batch_filenames = (source["source_id"] for source in loaded_batch["metadata"])
+        filenames.extend(batch_filenames)
 
         # I/O and preprocessing in ThreadPool (returns numpy arrays)
         # CUDA operations are kept on main thread to prevent memory fragmentation
@@ -188,9 +201,9 @@ def evaluate_images_in_zarr(zarr_path, cfg, top_n=1000, batch_size=1000, max_wor
             batch_args = [(batch_data[i], cfg) for i in range(batch_size_actual)]
             numpy_images = list(executor.map(load_and_preprocess_zarr, batch_args))
 
-        # Tensor conversion on main thread (not in ThreadPool)
+        # Tensor conversion on main thread (not in ThreadPool) to avoid CUDA context issues
         stack_start = time.time()
-        batch_tensors = [transform(img) for img in numpy_images]
+        batch_tensors = [transform(img).detach() for img in numpy_images]
         images = torch.stack(batch_tensors, dim=0)
         del numpy_images, batch_tensors  # Free memory before CUDA ops
 
@@ -221,6 +234,8 @@ def evaluate_images_in_zarr(zarr_path, cfg, top_n=1000, batch_size=1000, max_wor
             last_log_time = current_time
             processed_since_last_log = 0
 
+    cutana_orchestrator.cleanup()
+
     total_time = time.time() - start_time
     logger.info(
         f"Total processing time: {total_time:.1f}s, "
@@ -240,7 +255,9 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("config_path", type=str, help="Path to config file")
-    parser.add_argument("zarr_path", type=str, help="Path to the Zarr file containing images")
+    parser.add_argument(
+        "cutana_sources_path", type=str, help="Path to the directory to stream from"
+    )
     parser.add_argument("top_n", type=int, default=1000, help="Number of top scores to keep")
     args = parser.parse_args()
 
@@ -275,10 +292,12 @@ def main():
     # Create output directory if it doesn't exist
     os.makedirs(cfg.output_dir, exist_ok=True)
 
-    logger.info(f"Processing Zarr file: {args.zarr_path}")
+    logger.info(f"Streaming from directory: {args.cutana_sources_path}")
 
     try:
-        evaluate_images_in_zarr(args.zarr_path, cfg, batch_size=batch_size, top_n=args.top_n)
+        evaluate_images_from_cutana(
+            args.cutana_sources_path, cfg, batch_size=batch_size, top_n=args.top_n
+        )
         elapsed_time = time.time() - start_time
         logger.success(f"Script completed in {elapsed_time:.2f} seconds")
     except Exception as e:
@@ -287,14 +306,15 @@ def main():
 
 
 if __name__ == "__main__":
+
     # Configure logging
     logs_dir = os.path.join(os.path.dirname(__file__), "logs")
     os.makedirs(logs_dir, exist_ok=True)
 
     # Remove default handler and set up file logging
     logger.remove()
-    logger.add(
-        os.path.join(logs_dir, "prediction_zarr_{time}.log"),
+    script_logger_id = logger.add(
+        os.path.join(logs_dir, "prediction_cutana_{time}.log"),
         rotation="1 MB",
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
         level="DEBUG",

@@ -14,11 +14,11 @@ import torch
 from loguru import logger
 
 from .Label import Label
-from anomaly_match.data_io.load_images import (
-    read_and_resize_image,
-    load_images_parallel,
-)
 
+from anomaly_match.data_io.load_images import (
+    load_and_process_single_wrapper,
+    load_and_process_wrapper,
+)
 from anomaly_match.data_io.find_images_in_folder import get_image_names_from_folder
 from anomaly_match.data_io.metadata_handler import MetadataHandler
 
@@ -53,9 +53,8 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
         logger.debug(f"Loading AnomalyDetectionDataset from {cfg.data_dir}")
 
         # Initialize key variables
-        self.classes = ["normal", "anomaly"]
         self.seed = cfg.seed
-        self.size = cfg.size
+        self.size = cfg.normalisation.image_size
         self.num_channels = 3
         self.root_dir = cfg.data_dir
         self.transform = transform
@@ -107,7 +106,6 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
         else:
             self._load_initial_data()
             self.mean, self.std = self.compute_mean_std()
-            # self._save_split_hdf5()
 
         # Load the labels from the CSV file
         self._load_csv_and_apply_labels()
@@ -132,16 +130,18 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
 
         # Check that labels are valid
         assert set(labeled_data["label"].unique()) <= set(
-            ["normal", "anomaly"]
-        ), "Labels should be either 'normal' or 'anomaly' but found" + str(
+            ["normal", "anomaly", "removed"]
+        ), "Labels should be either 'normal', 'anomaly' or 'removed' but found" + str(
             set(labeled_data["label"].unique())
         )
 
         # Label distribution in the new CSV
         normal_count = labeled_data["label"].value_counts().get("normal", 0)
         anomaly_count = labeled_data["label"].value_counts().get("anomaly", 0)
+        removed_count = labeled_data["label"].value_counts().get("removed", 0)
         logger.debug(
-            f"Label distribution in CSV file: Normal: {normal_count}, Anomaly: {anomaly_count}"
+            f"Label distribution in CSV file: Normal: {normal_count}, Anomaly: {anomaly_count}, "
+            f"Removed: {removed_count}"
         )
 
         # Update the dataset with new labels
@@ -149,11 +149,7 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
 
     def _read_and_resize_image(self, filepath):
         """Read an image file and resize it. Used in testing"""
-        return read_and_resize_image(
-            filepath,
-            cfg=self.cfg,
-            convert_to_rgb=True,
-        )
+        return load_and_process_single_wrapper(filepath, self.cfg, desc="ADD loading image")
 
     def _load_initial_data(self):
         """Load labeled data and first batch of unlabeled data."""
@@ -167,11 +163,8 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
         ]  # 1. First load all images in parallel using our centralized image loading function
         labeled_filepaths = [os.path.join(self.root_dir, filename) for filename in labeled_files]
 
-        loading_results = load_images_parallel(
-            labeled_filepaths,
-            cfg=self.cfg,
-            desc="Loading labeled data",
-            max_workers=None,
+        loading_results = load_and_process_wrapper(
+            labeled_filepaths, cfg=self.cfg, desc="Loading labeled images"
         )
 
         # 2. Then apply labels to the loaded images
@@ -209,11 +202,8 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
         batch_filepaths = [os.path.join(self.root_dir, filename) for filename in batch_files]
 
         # Load the images in parallel
-        loading_results = load_images_parallel(
-            batch_filepaths,
-            cfg=self.cfg,
-            desc=f"Loading batch {self.current_batch_idx}",
-            max_workers=None,
+        loading_results = load_and_process_wrapper(
+            batch_filepaths, cfg=self.cfg, desc=f"Loading batch {self.current_batch_idx}"
         )
 
         # Add the loaded images to the data dictionary with UNKNOWN labels
@@ -347,12 +337,6 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
     def get_nr_of_unlabeled_images(self):
         return len(self.all_filenames) - len(self.train_data[0]) - len(self.test_data[0])
 
-    def get_nr_of_batches(self):
-        return int(np.ceil(self.get_nr_of_unlabeled_images() / self.N_to_load))
-
-    def reset_batch_idx(self):
-        self.current_batch_idx = 0
-
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
@@ -387,6 +371,8 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
                 label_enum = Label.NORMAL
             elif label == "anomaly":
                 label_enum = Label.ANOMALY
+            elif label == "removed":
+                continue
             else:
                 raise ValueError(f"Invalid label {label} for {filename}")
 
@@ -476,43 +462,6 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
                 self.mean, self.std = self.compute_mean_std()
 
         logger.info(f"Dataset loaded from {hdf5_path}")
-
-    def _save_split_hdf5(self):
-        """Save labeled and unlabeled data in separate HDF5 files."""
-        # Save labeled data
-        with h5py.File(self.labeled_hdf5, "w") as f:
-            labeled_data = {k: v for k, v in self.data_dict.items() if v[1] != Label.UNKNOWN}
-            dtype = h5py.special_dtype(vlen=str)
-            data_dtype = np.dtype(
-                [
-                    ("filename", dtype),
-                    ("image", h5py.vlen_dtype(np.dtype("uint8"))),
-                    ("label", np.int8),
-                ]
-            )
-
-            data = [(k, v[0].flatten(), v[1]) for k, v in labeled_data.items()]
-            dset = f.create_dataset("data", (len(data),), dtype=data_dtype)
-            for i, (filename, image, label) in enumerate(data):
-                dset[i] = (filename, image, label)
-
-            f.create_dataset("mean", data=self.mean)
-            f.create_dataset("std", data=self.std)
-
-        # Save current unlabeled batch
-        batch_file = self.batch_hdf5_template.format(self.current_batch_idx)
-        with h5py.File(batch_file, "w") as f:
-            unlabeled_data = {k: v for k, v in self.data_dict.items() if v[1] == Label.UNKNOWN}
-            data = [(k, v[0].flatten()) for k, v in unlabeled_data.items()]
-
-            dtype = h5py.special_dtype(vlen=str)
-            data_dtype = np.dtype(
-                [("filename", dtype), ("image", h5py.vlen_dtype(np.dtype("uint8")))]
-            )
-
-            dset = f.create_dataset("data", (len(data),), dtype=data_dtype)
-            for i, (filename, image) in enumerate(data):
-                dset[i] = (filename, image)
 
     def _load_labeled_from_hdf5(self):
         """Load labeled data from HDF5."""

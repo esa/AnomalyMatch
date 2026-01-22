@@ -7,9 +7,10 @@
 from dotmap import DotMap
 
 import os
+import numpy as np
 
 from .create_model_string import create_model_string
-from anomaly_match.image_processing.NormalisationMethod import NormalisationMethod
+from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 
 
 def get_default_cfg():
@@ -33,31 +34,60 @@ def get_default_cfg():
     cfg.save_path = os.path.join(cfg.save_dir)
     cfg.save_file = create_model_string(cfg) + ".pth"
     cfg.model_path = None  # Will be set by SessionIOHandler when session is active
+    cfg.N_batch_prediction = None  # User specified batch size for evaluating a directory, if None: determined automatically
+    cfg.subprocess_buffer_size = (
+        100_000  # Number of sources packed into intermediate files for subprocesses
+    )
 
     cfg.seed = 42
     cfg.test_ratio = 0.0
 
     # DataLoader settings
     cfg.N_to_load = 1000
-    cfg.size = [224, 224]
-    cfg.num_workers = 4
     cfg.pin_memory = True
     cfg.oversample = True
-    cfg.interpolation_order = 1  # order of interpolation for resizing with skimage, 0-5
-    # Normalisation settings
-    cfg.normalisation_method = NormalisationMethod.CONVERSION_ONLY
-    # Optional normalisation settings
+
+    cfg.num_workers = 4
+    # normalisation settings for fitsbolt settings
     cfg.normalisation = DotMap()
-    cfg.normalisation.maximum_value = None  # None or float
-    cfg.normalisation.minimum_value = None  # None or float
-    cfg.normalisation.crop_for_maximum_value = None  # None or integer tuple (height, width)
-    # Bool, if False assumes min value to be 0 or cfg.normalisation.minimum_value if not None
-    cfg.normalisation.log_calculate_minimum_value = False
-    # only used if cfg.normalisation_method == NormalisationMethod.ASINH:
-    # asinh_scale list of 3 floats > 0, defining the scale for each channel (lower = higher stretch):
-    cfg.normalisation.asinh_scale = [0.7, 0.7, 0.7]
-    # asinh_clip list of 3 floats in ]0.,100.], defining the clip for each channel:
-    cfg.normalisation.asinh_clip = [99.8, 99.8, 99.8]
+    cfg.normalisation.output_dtype = np.uint8  # output dtype of the images
+    # NOTE: image_size has no default - user must explicitly set it
+    cfg.normalisation.n_output_channels = 3  # number of output channels (e.g. 3 for RGB)
+
+    # FITS file handling settings
+    # fits_extension: Extension(s) to use when loading FITS files
+    # (can be int, string, or list of int/string, or list of lists of int/string)
+    cfg.normalisation.fits_extension = None
+
+    # channel_combination: (np.array) combine FITS extensions into n_output (3 = RGB) channels, shape n_out x n_input = len
+    # cfg.normalisation.fits_extension, or None if only one extension is used or n_out=n_input
+    cfg.normalisation.channel_combination = None
+
+    # further interpolation and normalisation settings
+    cfg.normalisation.interpolation_order = (
+        1  # order of interpolation for resizing with skimage, 0-5
+    )
+    cfg.normalisation.normalisation_method = NormalisationMethod.CONVERSION_ONLY
+    # settings for normalisation:
+    cfg.normalisation.norm_maximum_value = None  # None or float
+    cfg.normalisation.norm_minimum_value = None  # None or float
+    cfg.normalisation.norm_crop_for_maximum_value = None  # None or integer tuple (height, width)
+    # Bool, if False assumes min value to be 0 or cfg.normalisation.norm_minimum_value if not None
+    cfg.normalisation.norm_log_calculate_minimum_value = False
+    # only used if cfg.normalisation.normalisation_method == NormalisationMethod.ASINH: asinh_scale list of n_output_channel -
+    # floats > 0, defining the scale for each channel (lower = higher stretch):
+    cfg.normalisation.norm_asinh_scale = [
+        0.7,
+        0.7,
+        0.7,
+    ]
+    # norm_asinh_clip: asinh_clip list of n_output_channel floats in ]0.,100.], defining the clip for each channel:
+    cfg.normalisation.norm_asinh_clip = [
+        99.8,
+        99.8,
+        99.8,
+    ]
+    # end of fitsbolt settings
 
     # FixMatch settings
     cfg.ema_m = 0.99
@@ -82,8 +112,5 @@ def get_default_cfg():
     # Backbone settings
     cfg.pretrained = True
     cfg.net = "efficientnet-lite0"
-
-    # FITS file handling settings
-    cfg.fits_extension = None  # Extension(s) to use when loading FITS files (can be int, string, or list of int/string)
 
     return cfg

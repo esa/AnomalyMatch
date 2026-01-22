@@ -31,7 +31,6 @@ class FixMatch:
         lambda_u,
         hard_label=True,
         logger=None,
-        current_normalisation_method=None,
         session_tracker=None,
     ):
         """FixMatch implementation for semi-supervised learning.
@@ -54,7 +53,6 @@ class FixMatch:
         super(FixMatch, self).__init__()
 
         # Store parameters
-        self.loader = {}
         self.num_classes = num_classes
         self.ema_m = ema_m
 
@@ -64,7 +62,6 @@ class FixMatch:
         self.T = T
         self.p_cutoff = p_cutoff
         self.lambda_u = lambda_u
-        self.use_hard_label = hard_label
 
         # initialise the normalisation method "last" used
         self.last_normalisation_method = None
@@ -173,7 +170,7 @@ class FixMatch:
 
         logger.info(
             f"Starting FixMatch training for {cfg.num_train_iter} iterations on {ngpus_per_node} GPUs"
-            + f" with normalisation {cfg.normalisation_method.name}"
+            + f" with normalisation {cfg.normalisation.normalisation_method.name}"
         )
 
         self.it = 0
@@ -274,10 +271,6 @@ class FixMatch:
             if progress_callback:
                 progress_callback(self.it, cfg.num_train_iter)
             progressbar.refresh()
-
-            # Update widget progress bar if provided
-            if cfg.progress_bar:
-                cfg.progress_bar.value = (self.it + 1.0) / cfg.num_train_iter
 
             # Periodic evaluation
             if cfg.num_eval_iter > 0 and self.it % cfg.num_eval_iter == 0 and self.it > 0:

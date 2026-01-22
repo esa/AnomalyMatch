@@ -21,20 +21,15 @@ def base_config():
             border="1px solid white", height="400px", background_color="black", overflow="auto"
         ),
     )
-    progress_bar = widgets.FloatProgress(
-        value=0.0,
-        min=0.0,
-        max=1.0,
-    )
 
     cfg = am.get_default_cfg()
     am.set_log_level("debug", cfg)
     cfg.data_dir = "tests/test_data/"
-    cfg.size = [64, 64]
+    cfg.normalisation.image_size = [64, 64]
+    cfg.normalisation.n_output_channels = 3
     cfg.num_train_iter = 2
     cfg.test_ratio = 0.5
     cfg.output_dir = "tests/test_output"
-    cfg.progress_bar = progress_bar
     return cfg, out
 
 
@@ -669,3 +664,88 @@ def test_no_double_counting_after_load_next_batch(base_config):
     active_normal_after, active_anomalous_after = session.get_active_learning_counts()
     assert active_normal_after == 0
     assert active_anomalous_after == 0
+
+
+def test_iteration_scores_saved_after_training(base_config):
+    """Test that unlabelled and test scores are saved after training with correct mappings."""
+    cfg, out = base_config
+
+    # Create a fresh session for this test
+    session = Session(cfg)
+    session.out = out
+
+    # Train the model
+    session.train(cfg)
+
+    # Check that session tracker has the iteration
+    assert len(session.session_tracker.session_iterations) >= 1
+
+    # Get the latest iteration
+    latest_iteration = session.session_tracker.session_iterations[-1]
+
+    # Verify unlabelled scores file was created and path stored
+    assert latest_iteration.unlabelled_scores_file is not None
+    assert os.path.exists(latest_iteration.unlabelled_scores_file)
+
+    # Load and verify unlabelled scores
+    unlabelled_df = pd.read_csv(latest_iteration.unlabelled_scores_file)
+    assert "filename" in unlabelled_df.columns
+    assert "score" in unlabelled_df.columns
+    assert len(unlabelled_df) > 0
+
+    # Verify score values are valid probabilities
+    assert unlabelled_df["score"].min() >= 0.0
+    assert unlabelled_df["score"].max() <= 1.0
+
+    # Verify that filenames in the CSV match the session's filenames
+    csv_filenames = set(unlabelled_df["filename"].tolist())
+    session_filenames = set(session.filenames.tolist())
+    assert csv_filenames == session_filenames, "Saved filenames don't match session filenames"
+
+    # Verify score mapping: check a few samples match between CSV and session
+    for idx, (filename, score) in enumerate(zip(session.filenames[:5], session.scores[:5])):
+        csv_score = unlabelled_df[unlabelled_df["filename"] == filename]["score"].values[0]
+        assert (
+            abs(csv_score - score) < 1e-6
+        ), f"Score mismatch for {filename}: {csv_score} vs {score}"
+
+    # If test_ratio > 0, verify test scores were also saved
+    if cfg.test_ratio > 0:
+        assert latest_iteration.test_scores_file is not None
+        assert os.path.exists(latest_iteration.test_scores_file)
+
+        # Load and verify test scores
+        test_df = pd.read_csv(latest_iteration.test_scores_file)
+        assert "filename" in test_df.columns
+        assert "score" in test_df.columns
+        assert len(test_df) > 0
+
+        # Verify test score values are valid probabilities
+        assert test_df["score"].min() >= 0.0
+        assert test_df["score"].max() <= 1.0
+
+
+def test_iteration_scores_no_test_set(base_config):
+    """Test that only unlabelled scores are saved when test_ratio is 0."""
+    cfg, out = base_config
+
+    # Modify config to have no test set
+    cfg_no_test = cfg.copy()
+    cfg_no_test.test_ratio = 0.0
+
+    # Create a fresh session
+    session = Session(cfg_no_test)
+    session.out = out
+
+    # Train the model
+    session.train(cfg_no_test)
+
+    # Get the latest iteration
+    latest_iteration = session.session_tracker.session_iterations[-1]
+
+    # Unlabelled scores should still be saved
+    assert latest_iteration.unlabelled_scores_file is not None
+    assert os.path.exists(latest_iteration.unlabelled_scores_file)
+
+    # Test scores should not be saved (no test set)
+    assert latest_iteration.test_scores_file is None

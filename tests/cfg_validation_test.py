@@ -23,6 +23,8 @@ def test_default_cfg_validation(caplog):
     """Test that the default configuration passes validation without warnings."""
     # Get default config
     cfg = get_default_cfg()
+    # image_size has no default - must be set by user
+    cfg.normalisation.image_size = [224, 224]
 
     # Run validation
     validate_config(cfg)
