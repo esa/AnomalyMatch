@@ -99,6 +99,8 @@ def recreate_plots_from_data(results_dir, plot_type=None, custom_thresholds=None
     # Find all plot data files
     all_plot_files = []
     for plot_data_dir in glob.glob(str(results_dir / "**" / "plot_data"), recursive=True):
+        if "plots_recreated" in plot_data_dir:
+            continue
         plot_files = glob.glob(os.path.join(plot_data_dir, "*.pkl"))
         all_plot_files.extend(plot_files)
 
@@ -172,7 +174,7 @@ def recreate_plots_from_data(results_dir, plot_type=None, custom_thresholds=None
                 elif plot_type_name == "roc_prc_curves":
                     logger.info(f"Recreating ROC/PRC curves for iteration {iteration}")
                     # The function expects a metrics dictionary
-                    plot_roc_prc_curves(plot_data, iteration, plots_dir)
+                    plot_roc_prc_curves(plot_data["metrics"], plot_data["iteration"], plots_dir)
                 elif plot_type_name == "top_n_anomaly_detection":
                     logger.info(f"Recreating top-N anomaly detection for iteration {iteration}")
                     plot_top_n_anomaly_detection(
@@ -333,7 +335,7 @@ def plot_active_learning_comparison(results_dir):
 
     # Look for directories matching the expected names
     for exp_name in experiment_dirs.keys():
-        matching_dirs = list(al_dir.glob(f"**/*{exp_name}*"))
+        matching_dirs = list(al_dir.glob(f"**/*{exp_name}/"))
         if matching_dirs:
             experiment_dirs[exp_name] = matching_dirs[0]
             logger.info(f"Found {exp_name} directory: {matching_dirs[0]}")

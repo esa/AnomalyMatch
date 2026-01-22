@@ -9,7 +9,7 @@ from dotmap import DotMap
 from loguru import logger
 
 import os
-from anomaly_match.image_processing.NormalisationMethod import NormalisationMethod
+from fitsbolt.cfg.create_config import create_config as fb_create_cfg
 
 
 def _return_required_and_optional_keys():
@@ -37,7 +37,7 @@ def _return_required_and_optional_keys():
         # Required file parameters
         "label_file": ["file", None, None, False, None],
         "metadata_file": ["file", None, None, True, None],  # Optional, can be None
-        # Required numeric parameters
+        # Required numeric parameter"
         "seed": [float, None, None, False, None],  # accepts int or float
         # Required positive integers
         "num_workers": [int, 1, None, False, None],
@@ -48,6 +48,7 @@ def _return_required_and_optional_keys():
         # Required integers >= 10
         "N_to_load": [int, 10, None, False, None],
         "top_N": [int, 10, None, False, None],
+        "subprocess_buffer_size": [int, 100, None, False, None],
         # Required floats in range [0, 1]
         "test_ratio": [float, 0.0, 1.0, False, None],
         "ema_m": [float, 0.0, 1.0, False, None],
@@ -63,7 +64,6 @@ def _return_required_and_optional_keys():
         "oversample": [bool, None, None, False, None],
         "hard_label": [bool, None, None, False, None],
         "pretrained": [bool, None, None, False, None],
-        "normalisation.log_calculate_minimum_value": [bool, None, None, False, None],
         # Required parameters with allowed values
         "opt": [str, None, None, False, ["SGD", "Adam"]],
         "net": [str, None, None, False, ["efficientnet-lite0"]],
@@ -75,21 +75,13 @@ def _return_required_and_optional_keys():
             ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "TRACE"],
         ],
         # Required special parameters
-        "size": ["special_size", None, None, False, None],
         "num_eval_iter": ["special_eval_iter", None, None, False, None],
-        "normalisation_method": ["special_normalisation_method", None, None, False, None],
-        "normalisation": ["special_normalisation", None, None, False, None],
-        "normalisation.asinh_scale": ["special_asinh_scale", None, None, False, None],
-        "normalisation.asinh_clip": ["special_asinh_clip", None, None, False, None],
-        "interpolation_order": [int, 0, 5, False, None],  # 0-5 for skimage interpolation"
         # Optional directory parameters
         "prediction_search_dir": ["directory", None, None, True, None],
-        # Optional numeric parameters
-        "normalisation.maximum_value": [float, None, None, True, None],
-        "normalisation.minimum_value": [float, None, None, True, None],
-        # Optional special parameters
-        "normalisation.crop_for_maximum_value": ["special_crop", None, None, True, None],
-        "fits_extension": ["special_fits_extension", None, None, True, None],
+        "N_batch_prediction": [int, 1, None, True, None],
+        # fitsbolt config parameters - only validate that it's a DotMap and check size
+        "normalisation": ["special_fitsbolt", None, None, False, None],
+        "normalisation.image_size": ["special_size", None, None, False, None],
     }
 
     return config_spec
@@ -254,11 +246,12 @@ def validate_config(cfg: DotMap, check_paths: bool = True) -> None:
 
         # Handle special validation cases
         elif dtype == "special_size":
-            if not isinstance(value, (list, tuple)) or len(value) != 2:
-                raise ValueError(
-                    f"{param_name} must be a list or tuple of length 2, got {type(value).__name__}"
-                    + f"with length {len(value) if hasattr(value, '__len__') else 'unknown'}"
-                )
+            if value is not None:
+                if not isinstance(value, (list, tuple)) or len(value) != 2:
+                    raise ValueError(
+                        f"{param_name} must be a list or tuple of length 2, got {type(value).__name__}"
+                        + f"with length {len(value) if hasattr(value, '__len__') else 'unknown'}"
+                    )
 
         elif dtype == "special_eval_iter":
             if not isinstance(value, int) or (value != -1 and value <= 0):
@@ -266,111 +259,54 @@ def validate_config(cfg: DotMap, check_paths: bool = True) -> None:
                     f"{param_name} must be an integer > 0 or -1, got {value} (type: {type(value).__name__})"
                 )
 
-        elif dtype == "special_normalisation_method":
-            if not isinstance(value, NormalisationMethod):
-                raise ValueError(
-                    f"{param_name} must be a NormalisationMethod enum value, got {type(value).__name__}"
-                )
-
-        elif dtype == "special_normalisation":
+        elif dtype == "special_fitsbolt":
+            # The fitsbolt DotMap will be validated by fb_create_cfg
             if not isinstance(value, DotMap):
                 raise ValueError(f"{param_name} must be a DotMap, got {type(value).__name__}")
-
-        elif dtype == "special_asinh_scale":
-            if not isinstance(value, (list, tuple, int, float)):
-                raise ValueError(
-                    f"{param_name} must be a number or list/tuple of 3 numbers > 0, got {type(value).__name__}"
-                )
-            if isinstance(value, (list, tuple)):
-                if len(value) != 3:
-                    raise ValueError(
-                        f"{param_name} if list/tuple, must have length 3, got length {len(value)}"
-                    )
-                if not all(isinstance(x, (int, float)) for x in value):
-                    raise ValueError(
-                        f"{param_name} values must be numbers, got types: {[type(x).__name__ for x in value]}"
-                    )
-                if not all(0 < x for x in value):
-                    raise ValueError(f"{param_name} values must be > 0, got: {value}")
-            else:
-                # Single value
-                if not isinstance(value, (int, float)):
-                    raise ValueError(
-                        f"{param_name} must be a number > 0, got {type(value).__name__}"
-                    )
-                if not (0 < value):
-                    raise ValueError(f"{param_name} must > 0, got: {value}")
-
-        elif dtype == "special_asinh_clip":
-            if not isinstance(value, (list, tuple, int, float)):
-                raise ValueError(
-                    f"{param_name} must be a number or list/tuple of 3 numbers in ]0,100.], got {type(value).__name__}"
-                )
-            if isinstance(value, (list, tuple)):
-                if len(value) != 3:
-                    raise ValueError(
-                        f"{param_name} if list/tuple, must have length 3, got length {len(value)}"
-                    )
-                if not all(isinstance(x, (int, float)) for x in value):
-                    raise ValueError(
-                        f"{param_name} values must be numbers, got types: {[type(x).__name__ for x in value]}"
-                    )
-                if not all(0 < x <= 100 for x in value):
-                    raise ValueError(f"{param_name} values must be in range ]0,100.], got: {value}")
-            else:
-                # Single value
-                if not isinstance(value, (int, float)):
-                    raise ValueError(
-                        f"{param_name} must be a number in ]0,100.], got {type(value).__name__}"
-                    )
-                if not (0 < value <= 100):
-                    raise ValueError(f"{param_name} must be in range ]0,100.], got: {value}")
-
-        elif dtype == "special_crop":
-            if value is not None:
-                if not isinstance(value, (tuple, list)) or len(value) != 2:
-                    raise ValueError(
-                        f"{param_name} if set, must be a tuple of two integers, got {type(value).__name__}"
-                    )
-                if not all(isinstance(x, int) for x in value):
-                    raise ValueError(
-                        f"{param_name} values must be integers, got types: {[type(x).__name__ for x in value]}"
-                    )
-
-        elif dtype == "special_fits_extension":
-            if value is not None:
-                if isinstance(value, list):
-                    if len(value) not in [1, 3]:
-                        raise ValueError(
-                            f"{param_name} must be a str/int or list of strings/ints of length 1 or 3,"
-                            + f" got list of length {len(value)}"
-                        )
-                    for v in value:
-                        if not isinstance(v, (str, int)):
-                            raise ValueError(
-                                f"{param_name} list elements must be str or int, got {type(v).__name__}"
-                            )
-                elif not isinstance(value, (str, int)):
-                    raise ValueError(
-                        f"{param_name} must be a str/int or list of strings/ints, got {type(value).__name__}"
-                    )
-
         else:
             raise ValueError(f"Unknown data type for {param_name}: {dtype}")
 
-    # Custom cross-parameter validation
-    if "normalisation" in cfg:
-        if (
-            hasattr(cfg.normalisation, "maximum_value")
-            and hasattr(cfg.normalisation, "minimum_value")
-            and isinstance(cfg.normalisation.maximum_value, (int, float))
-            and isinstance(cfg.normalisation.minimum_value, (int, float))
-        ):
-            if cfg.normalisation.maximum_value <= cfg.normalisation.minimum_value:
-                raise ValueError(
-                    f"normalisation.maximum_value {cfg.normalisation.maximum_value} must be larger than "
-                    f"normalisation.minimum_value {cfg.normalisation.minimum_value}"
-                )
+    # Also validate normalisation configuration with its own validation function if possible
+    if hasattr(cfg, "normalisation"):
+        try:
+            # Use fitsbolt's own validation by calling its create_config function
+            _ = fb_create_cfg(
+                output_dtype=cfg.normalisation.output_dtype,
+                size=cfg.normalisation.image_size,
+                fits_extension=cfg.normalisation.fits_extension,
+                interpolation_order=cfg.normalisation.interpolation_order,
+                normalisation_method=cfg.normalisation.normalisation_method,
+                channel_combination=cfg.normalisation.channel_combination,
+                num_workers=cfg.num_workers,
+                norm_maximum_value=cfg.normalisation.norm_maximum_value,
+                norm_minimum_value=cfg.normalisation.norm_minimum_value,
+                norm_log_calculate_minimum_value=cfg.normalisation.norm_log_calculate_minimum_value,
+                norm_crop_for_maximum_value=cfg.normalisation.norm_crop_for_maximum_value,
+                norm_asinh_scale=cfg.normalisation.norm_asinh_scale,
+                norm_asinh_clip=cfg.normalisation.norm_asinh_clip,
+            )
+            logger.debug("fitsbolt configuration validated successfully")
+            # add the fitsbolt keys to expected keys used in above function call to expected_keys
+            expected_keys.update(
+                [
+                    "normalisation.output_dtype",
+                    "normalisation.image_size",
+                    "normalisation.n_output_channels",
+                    "normalisation.fits_extension",
+                    "normalisation.interpolation_order",
+                    "normalisation.normalisation_method",
+                    "normalisation.channel_combination",
+                    "normalisation.norm_maximum_value",
+                    "normalisation.norm_minimum_value",
+                    "normalisation.norm_log_calculate_minimum_value",
+                    "normalisation.norm_crop_for_maximum_value",
+                    "normalisation.norm_asinh_scale",
+                    "normalisation.norm_asinh_clip",
+                ]
+            )
+        except Exception as e:
+            logger.error(f"normalisation configuration validation failed: {e}")
+            raise ValueError(f"normalisation configuration validation failed: {e}")
 
     # Check for unexpected keys
     actual_keys = _get_all_keys(cfg)

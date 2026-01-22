@@ -75,8 +75,14 @@ session_name_timestamp/
 ├── session_metadata.json    # Complete session tracking data
 ├── labeled_data.csv         # All labelled samples
 ├── config.toml              # Final configuration
-└── model.pth                # Model checkpoint
+├── model.pth                # Model checkpoint
+└── iteration_scores/        # Per-iteration prediction scores
+    ├── iteration_1_unlabelled_scores.csv
+    ├── iteration_1_test_scores.csv
+    └── ...
 ```
+
+**Iteration Scores:** After each training iteration, AnomalyMatch stores prediction scores for both unlabelled and test data (if `test_ratio > 0`). These CSV files contain filenames and their corresponding anomaly scores, enabling analysis of how predictions evolve across training iterations.
 
 You can view any saved session using:
 ```python
@@ -178,11 +184,46 @@ cfg.prediction_search_dir = "/path/to/directory/containing/zarr/files"
 
 AnomalyMatch will automatically discover all `.zarr` files in the specified directory and process them efficiently in parallel. Each Zarr file should contain image data with optional metadata in a corresponding `.parquet` file.
 
+#### Multiple Zarr Files for Prediction
+
+When running predictions on large datasets split across multiple Zarr files, AnomalyMatch automatically discovers and processes all Zarr stores in `prediction_search_dir`. Two folder structures are supported:
+
+**Option 1: Direct Zarr files**
+```
+prediction_search_dir/
+├── dataset_part1.zarr/
+│   └── images/           # Zarr array with shape (N, H, W, C)
+├── dataset_part1_metadata.parquet
+├── dataset_part2.zarr/
+│   └── images/
+└── dataset_part2_metadata.parquet
+```
+
+**Option 2: Batch folders with images.zarr subdirectory**
+```
+prediction_search_dir/
+├── batch_001/
+│   ├── images.zarr/
+│   │   └── images/
+│   └── images_metadata.parquet
+├── batch_002/
+│   ├── images.zarr/
+│   │   └── images/
+│   └── images_metadata.parquet
+```
+
+**Metadata requirements:**
+- Parquet files should contain a `filename`, `original_filename`, or `source_id` column
+- For direct zarr files: `<zarr_name>_metadata.parquet` in the same directory
+- For batch folders: `images_metadata.parquet` in the batch folder
+
+**Filename handling:** To prevent collisions across zarr files, filenames are automatically prefixed with the zarr/batch folder name (e.g., `batch_001__image_000042`).
+
 ### FITS File Handling
 
 - By default, the first extension (index 0) is used when loading FITS files
 - You can specify a particular extension using the `fits_extension` parameter in the configuration:
-  - Set `cfg.fits_extension` in your code to control which FITS extensions to use
+  - Set `cfg.normalisation.fits_extension` in your code to control which FITS extensions to use
   - Integer values (e.g., `0`, `1`, `2`) to access extensions by index
   - String values (e.g., `"PRIMARY"`, `"SCIENCE"`) to access extensions by name
   - List of integers or strings (e.g., `[0, 1, 2]` or `["PRIMARY", "SCIENCE", "ERROR"]`) to combine multiple extensions
@@ -198,9 +239,23 @@ AnomalyMatch will automatically discover all `.zarr` files in the specified dire
 
 When working with FITS files containing multiple images or data products, specify which extension(s) to use in the configuration.
 
+### Cutana Streaming Integration
+
+AnomalyMatch supports streaming predictions via [Cutana](https://github.com/esa/cutana), which enables on-the-fly cutout extraction from FITS tiles. This is particularly useful for Euclid mission data, which Cutana primarily targets.
+
+**How to use Cutana streaming:**
+
+1. Prepare a Cutana-compatible source catalogue (CSV or Parquet) with columns for coordinates and FITS file paths
+2. Set `cfg.prediction_search_dir` to a folder containing your catalogue files
+3. AnomalyMatch will automatically detect the catalogues and stream cutouts via Cutana
+
+**FITS extension configuration:** When using Cutana streaming, ensure `cfg.normalisation.fits_extension` matches the FITS extensions referenced in your catalogue. For multi-band Euclid data, this might be `["VIS", "NIR-H", "NIR-J"]` or similar, depending on your catalogue structure.
+
+For more details on catalogue format and Cutana configuration, see the [Cutana documentation](https://github.com/esa/cutana).
+
 ## Normalisation and Stretching
 - Normalisation can be selected in the UI via a drop-down. Alternatively it can be changed by setting e.g.
-    `cfg.normalisation_method = am.NormalisationMethod.ZSCALE`
+    `cfg.normalisation.normalisation_method = am.NormalisationMethod.ZSCALE`
 - Current options are
     - `CONVERSION_ONLY`: no normalisation
     - `LOG`: [logarithmic normalisation](https://docs.astropy.org/en/stable/api/astropy.visualization.LogStretch.html#astropy.visualization.LogStretch)
@@ -218,8 +273,9 @@ When working with FITS files containing multiple images or data products, specif
 - `logLevel`: Controls verbosity of training/session logs.
 - `test_ratio`: Proportion of data used for evaluation (0.0 disables test evaluation, > 0 shows AUROC/AUPRC curves).
 - `size`: Dimensions to which images are resized (below 96x96 is not recommended).
-- `N_to_load`: Number of unlabeled images loaded into the training dataset at once.
+- `N_to_load`: Number of unlabeled images loaded into the training dataset at once. From this (`uratio`*`batch_size`*`num_train_iter`) (5*16*200) unlabeled images will be sampled for training.
 - `output_dir`: Folder for storing results (e.g., labeled_data.csv or final logs).
+- `prediction_batch_size`: Batch size for prediction. If not set, AnomalyMatch automatically estimates an optimal batch size based on available GPU memory.
 
 ## Advanced CFG Parameters
 
@@ -249,6 +305,7 @@ The following advanced parameters can be configured:
 
 ### Additional Parameters
 - `fits_extension`: Extension(s) to use for FITS files, can be int, string, or list of int/string (default: None)
+- `fits_combination`: Dictonary with keys `R`,`G`,`B` of lists of length of `fits_extension` denoting how the specified fits_extensions are (linearly) mapped to the R,G,B channels. 
 - `interpolation_order`: 0-5 corresponding to [skimage resize interpolation orders](https://scikit-image.org/docs/stable/api/skimage.transform.html#skimage.transform.warp) (default: 1 (Bi-linear))
 - `normalisation_method`: Normalisation method to be applied during file loading. Can also be selected in the UI dropdown. Correspons to an entry from the class NormalisationMethod (default: `NormalisationMethod.CONVERSION_ONLY`)
 

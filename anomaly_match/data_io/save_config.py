@@ -11,7 +11,7 @@ from typing import Union, Dict, Any
 from dotmap import DotMap
 from loguru import logger
 
-from anomaly_match.image_processing.NormalisationMethod import NormalisationMethod
+from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 
 
 def _critical_optional_fields() -> list:

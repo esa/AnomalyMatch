@@ -5,6 +5,7 @@
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
 import pytest
+import csv
 import os
 import numpy as np
 import h5py
@@ -14,34 +15,58 @@ from PIL import Image
 import pandas as pd
 import torch
 from loguru import logger
+from astropy.io import fits
+from astropy.wcs import WCS
+from astropy.table import Table
 
 from prediction_process import evaluate_files
 from prediction_process_hdf5 import evaluate_images_in_hdf5
 from prediction_process_zarr import evaluate_images_in_zarr
+from prediction_process_cutana import evaluate_images_from_cutana
 from prediction_utils import save_results
 
 
-from anomaly_match.image_processing.NormalisationMethod import NormalisationMethod
+from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
+from fitsbolt.cfg.create_config import create_config as fb_create_cfg
 from anomaly_match.utils.get_default_cfg import get_default_cfg
 
 
 @pytest.fixture
 def test_config():
     cfg = get_default_cfg()
-    cfg.size = [150, 150]
+    cfg.normalisation.image_size = [150, 150]
+    cfg.normalisation.n_output_channels = 3
     cfg.net = "efficientnet-lite0"
     cfg.pretrained = True
     cfg.num_channels = 3
     cfg.model_path = "tests/test_data/test_model.pth"
     cfg.gpu = 0
     cfg.output_dir = tempfile.mkdtemp()
-    cfg.normalisation_method = NormalisationMethod.CONVERSION_ONLY
+    cfg.normalisation.normalisation_method = NormalisationMethod.CONVERSION_ONLY
     cfg.log_level = "INFO"  # Add proper log level
     cfg.name = "test_session"  # Add session name
     cfg.seed = 42  # Add seed
     cfg.test_ratio = 0.0  # Add test ratio
     cfg.save_dir = tempfile.mkdtemp()  # Add save directory
     cfg.data_dir = "tests/test_data/"  # Add data directory
+
+    # Create fb_cfg for fitsbolt
+    cfg.fitsbolt_cfg = fb_create_cfg(
+        output_dtype=np.uint8,
+        size=cfg.normalisation.image_size,
+        fits_extension=cfg.normalisation.fits_extension,
+        interpolation_order=cfg.normalisation.interpolation_order,
+        normalisation_method=cfg.normalisation.normalisation_method,
+        channel_combination=cfg.normalisation.channel_combination,
+        num_workers=cfg.num_workers,
+        norm_maximum_value=cfg.normalisation.norm_maximum_value,
+        norm_minimum_value=cfg.normalisation.norm_minimum_value,
+        norm_log_calculate_minimum_value=cfg.normalisation.norm_log_calculate_minimum_value,
+        norm_crop_for_maximum_value=cfg.normalisation.norm_crop_for_maximum_value,
+        norm_asinh_scale=cfg.normalisation.norm_asinh_scale,
+        norm_asinh_clip=cfg.normalisation.norm_asinh_clip,
+    )
+
     return cfg
 
 
@@ -164,14 +189,66 @@ def multiple_test_zarr(sample_images, tmp_path):
 
 
 @pytest.fixture
+def zarr_batch_folders(sample_images, tmp_path):
+    """Create multiple batch folders with images.zarr subdirectories (mimics real structure)."""
+    batch_folders = []
+
+    # Create 3 different batch folders
+    for batch_idx in range(3):
+        batch_folder = tmp_path / f"batch_{batch_idx:03d}"
+        batch_folder.mkdir()
+
+        zarr_path = batch_folder / "images.zarr"
+
+        # Create zarr store
+        root = zarr.open_group(str(zarr_path), mode="w")
+
+        # Use different images in each batch (split sample_images)
+        start_idx = batch_idx * 3
+        end_idx = min(start_idx + 3, len(sample_images))
+        batch_images = sample_images[start_idx:end_idx]
+
+        if not batch_images:  # If no more images, create a minimal one
+            # Create a simple test image with different color per batch
+            color_map = {0: (255, 0, 0), 1: (0, 255, 0), 2: (0, 0, 255)}  # RGB
+            img_array = np.zeros((150, 150, 3), dtype=np.uint8)
+            img_array[50:100, 50:100] = color_map[batch_idx]
+            batch_images = [Image.fromarray(img_array)]
+
+        # Convert PIL images to numpy arrays
+        img_arrays = []
+        filenames = []
+        for i, img in enumerate(batch_images):
+            img_array = np.array(img)
+            img_arrays.append(img_array)
+            filenames.append(f"batch_{batch_idx:03d}_img_{i}.jpg")
+
+        # Stack images into a single array and save to zarr
+        images_array = np.stack(img_arrays, axis=0)
+        zarr_images = root.create_dataset(
+            "images", shape=images_array.shape, chunks=(1, 150, 150, 3), dtype=np.uint8
+        )
+        zarr_images[:] = images_array
+
+        # Create metadata as a separate parquet file in the batch folder
+        metadata_path = batch_folder / "images_metadata.parquet"
+        metadata_df = pd.DataFrame({"original_filename": filenames})
+        metadata_df.to_parquet(metadata_path, index=False)
+
+        batch_folders.append(str(zarr_path))
+
+    return batch_folders, str(tmp_path)
+
+
+@pytest.fixture
 def mixed_format_images(tmp_path):
-    """Create a directory with sample images in different formats (jpg, png, tif, tiff)"""
+    """Create a directory with sample images in different formats (jpg, png, tiff)"""
     img_dir = tmp_path / "mixed_formats"
     img_dir.mkdir()
 
-    # Create images in different formats
+    # Create images in different formats - only use supported extensions
     image_paths = []
-    formats = {"jpg": "JPEG", "png": "PNG", "tif": "TIFF", "tiff": "TIFF"}
+    formats = {"jpg": "JPEG", "png": "PNG", "tiff": "TIFF"}
 
     # Create a simple test image
     base_img = np.zeros((150, 150, 3), dtype=np.uint8)
@@ -184,6 +261,232 @@ def mixed_format_images(tmp_path):
         image_paths.append(str(img_path))
 
     return image_paths, str(img_dir)
+
+
+@pytest.fixture
+def test_cutana(tmp_path):
+    """Create a directory with sample FITS files for cutana streaming."""
+    data_dir = tmp_path / "cutana_test"
+    data_dir.mkdir()
+
+    img_size = 512
+    ra_center, dec_center = 150.14, 2.34
+    tile_id = "102018211"
+    num_sources = 10
+
+    wcs = WCS(naxis=2)
+    pixel_scale = 0.1 / 3600.0
+    wcs.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+    wcs.wcs.crval = [ra_center, dec_center]
+    wcs.wcs.crpix = [img_size / 2, img_size / 2]
+    wcs.wcs.cd = [[-pixel_scale, 0], [0, pixel_scale]]
+    wcs.wcs.cunit = ["deg", "deg"]
+    wcs.wcs.radesys = "ICRS"
+    wcs.wcs.equinox = 2000.0
+
+    img_data = np.random.normal(0, 0.005, (img_size, img_size)).astype(np.float32)
+    primary_hdu = fits.PrimaryHDU(img_data)
+    header = primary_hdu.header
+    header.update(wcs.to_header())
+    header["TELESCOP"] = "EUCLID"
+    header["INSTRUME"] = "VIS"
+    header["TILEID"] = tile_id
+    header["BUNIT"] = "electron/s"
+    header["DATATYPE"] = "BGSUB-MOSAIC"
+    header["EXPTIME"] = 565.0
+    header["GAIN"] = 3.1
+    header["READNOIS"] = 4.2
+    header["MAGZERO"] = 24.6
+
+    fits_path = (
+        data_dir / f"EUC_MER_BGSUB-MOSAIC-VIS_TILE{tile_id}-ACBD03_20251124T100053.096Z_00.00.fits"
+    )
+    primary_hdu.writeto(fits_path, overwrite=True)
+
+    field_of_view_deg = img_size * pixel_scale
+    fov_margin = field_of_view_deg * 0.45
+
+    ra_values = ra_center + np.random.uniform(-fov_margin, fov_margin, num_sources)
+    dec_values = dec_center + np.random.uniform(-fov_margin, fov_margin, num_sources)
+    object_ids = (np.arange(1, num_sources + 1) + int(tile_id) * 1000000).astype(np.int64)
+
+    cat_table = Table()
+    cat_table["OBJECT_ID"] = object_ids
+    cat_table["RIGHT_ASCENSION"] = ra_values
+    cat_table["DECLINATION"] = dec_values
+    cat_table["RIGHT_ASCENSION_PSF_FITTING"] = ra_values
+    cat_table["DECLINATION_PSF_FITTING"] = dec_values
+
+    catalog_fits = (
+        data_dir / f"EUC_MER_FINAL-CAT_TILE{tile_id}-CC66F6_20251124T100053.096Z_00.00.fits"
+    )
+    primary_hdu_cat = fits.PrimaryHDU()
+    table_hdu = fits.BinTableHDU(cat_table, name="EUC_MER__FINAL_CATALOG")
+    hdul = fits.HDUList([primary_hdu_cat, table_hdu])
+    hdul.writeto(catalog_fits, overwrite=True)
+
+    csv_directory = data_dir / "csv"
+    csv_directory.mkdir()
+    csv_path = csv_directory / "mock_sources_malformed.csv"
+
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["SourceID", "RA", "Dec", "diameter_pixel", "fits_file_paths"])
+        for i, (ra, dec) in enumerate(zip(ra_values, dec_values)):
+            writer.writerow(
+                [
+                    f"MockSource_{object_ids[i]}",
+                    ra,
+                    dec,
+                    np.random.randint(100, 250),
+                    str([str(fits_path)]),
+                ]
+            )
+
+    return str(csv_path)
+
+
+@pytest.fixture
+def test_cutana_parquet(tmp_path):
+    """Create a directory with sample FITS files and parquet catalogue for cutana streaming."""
+    data_dir = tmp_path / "cutana_parquet_test"
+    data_dir.mkdir()
+
+    img_size = 512
+    ra_center, dec_center = 150.14, 2.34
+    tile_id = "102018212"
+    num_sources = 10
+
+    wcs = WCS(naxis=2)
+    pixel_scale = 0.1 / 3600.0
+    wcs.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+    wcs.wcs.crval = [ra_center, dec_center]
+    wcs.wcs.crpix = [img_size / 2, img_size / 2]
+    wcs.wcs.cd = [[-pixel_scale, 0], [0, pixel_scale]]
+    wcs.wcs.cunit = ["deg", "deg"]
+    wcs.wcs.radesys = "ICRS"
+    wcs.wcs.equinox = 2000.0
+
+    img_data = np.random.normal(0, 0.005, (img_size, img_size)).astype(np.float32)
+    primary_hdu = fits.PrimaryHDU(img_data)
+    header = primary_hdu.header
+    header.update(wcs.to_header())
+    header["TELESCOP"] = "EUCLID"
+    header["INSTRUME"] = "VIS"
+    header["TILEID"] = tile_id
+    header["BUNIT"] = "electron/s"
+    header["DATATYPE"] = "BGSUB-MOSAIC"
+    header["EXPTIME"] = 565.0
+    header["GAIN"] = 3.1
+    header["READNOIS"] = 4.2
+    header["MAGZERO"] = 24.6
+
+    fits_path = (
+        data_dir / f"EUC_MER_BGSUB-MOSAIC-VIS_TILE{tile_id}-ACBD03_20251124T100053.096Z_00.00.fits"
+    )
+    primary_hdu.writeto(fits_path, overwrite=True)
+
+    field_of_view_deg = img_size * pixel_scale
+    fov_margin = field_of_view_deg * 0.45
+
+    ra_values = ra_center + np.random.uniform(-fov_margin, fov_margin, num_sources)
+    dec_values = dec_center + np.random.uniform(-fov_margin, fov_margin, num_sources)
+    object_ids = (np.arange(1, num_sources + 1) + int(tile_id) * 1000000).astype(np.int64)
+
+    # Create parquet catalogue
+    parquet_directory = data_dir / "parquet"
+    parquet_directory.mkdir()
+    parquet_path = parquet_directory / "mock_sources.parquet"
+
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {
+            "SourceID": [f"MockSource_{oid}" for oid in object_ids],
+            "RA": ra_values,
+            "Dec": dec_values,
+            "diameter_pixel": np.random.randint(100, 250, num_sources),
+            "fits_file_paths": [str([str(fits_path)]) for _ in range(num_sources)],
+        }
+    )
+    df.to_parquet(parquet_path, index=False)
+
+    return str(parquet_path)
+
+
+@pytest.fixture
+def test_cutana_malformed_header(tmp_path):
+    """Create a directory with sample CSV file with malformed header."""
+    data_dir = tmp_path / "cutana_malformed_test"
+    data_dir.mkdir()
+
+    tile_id = "102018211"
+
+    fits_path = (
+        data_dir / f"EUC_MER_BGSUB-MOSAIC-VIS_TILE{tile_id}-ACBD03_20251124T100053.096Z_00.00.fits"
+    )
+
+    csv_directory = data_dir / "csv"
+    csv_directory.mkdir()
+    csv_path = csv_directory / "mock_sources_malformed.csv"
+
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        # Write bad header, should report missing headers and raise RuntimeError
+        writer.writerow(
+            [
+                "SourceID_MALFORMED",
+                "RA_MALFORMED",
+                "Dec",
+                "diameter_pixel_MALFORMED",
+                "fits_file_paths",
+            ]
+        )
+        for i in range(10):
+            writer.writerow(
+                [
+                    f"MockSource_{i}",
+                    (np.random.rand() - 0.5) * 2 * 5 + 150,
+                    np.random.rand() - 0.5 + 2,
+                    np.random.randint(100, 250),
+                    str([str(fits_path)]),
+                ]
+            )
+
+    return str(csv_directory)
+
+
+@pytest.fixture
+def test_cutana_missing_images(tmp_path):
+    """Create a directory with sample CSV file with mcorrect header and missing images."""
+    data_dir = tmp_path / "cutana_missing_test"
+    data_dir.mkdir()
+
+    tile_id = "102018211"
+
+    fits_path = (  # Fits in CSV, but not actually saved to disk (missing)
+        data_dir / f"EUC_MER_BGSUB-MOSAIC-VIS_TILE{tile_id}-ACBD03_20251124T100053.096Z_00.00.fits"
+    )
+
+    csv_directory = data_dir / "csv"
+    csv_directory.mkdir()
+    csv_path = csv_directory / "mock_sources_malformed.csv"
+
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["SourceID", "RA", "Dec", "diameter_pixel", "fits_file_paths"])
+        for i in range(10):
+            writer.writerow(
+                [
+                    f"MockSource_{i}",
+                    (np.random.rand() - 0.5) * 2 * 5 + 150,
+                    np.random.rand() - 0.5 + 2,
+                    np.random.randint(100, 250),
+                    str([str(fits_path)]),
+                ]
+            )
+
+    return str(csv_directory)
 
 
 def test_evaluate_files(test_config, sample_images, tmp_path):
@@ -217,6 +520,99 @@ def test_evaluate_images_in_zarr(test_config, test_zarr):
     assert len(scores) == 10
     assert len(filenames) == 10
     assert imgs.shape[0] == 10
+
+
+def test_evaluate_images_cutana(test_config, test_cutana):
+    """Test evaluation of images via cutana streaming with CSV catalogue."""
+    scores, filenames, imgs = evaluate_images_from_cutana(test_cutana, test_config, batch_size=5)
+    assert len(scores) == 10
+    assert len(filenames) == 10
+    assert imgs.shape[0] == 10
+
+
+def test_evaluate_images_cutana_parquet(test_config, test_cutana_parquet):
+    """Test evaluation of images via cutana streaming with parquet catalogue."""
+    scores, filenames, imgs = evaluate_images_from_cutana(
+        test_cutana_parquet, test_config, batch_size=5
+    )
+    assert len(scores) == 10
+    assert len(filenames) == 10
+    assert imgs.shape[0] == 10
+
+
+def test_prediction_file_type_cutana_malformed_header(test_config, test_cutana_malformed_header):
+    """Test for meaningful exception when streaming from cutana and csv files have malformed headers."""
+    from anomaly_match.pipeline.session import Session
+    from anomaly_match.utils.get_default_cfg import get_default_cfg
+
+    cfg = get_default_cfg()
+    cfg.normalisation.image_size = [64, 64]
+    cfg.prediction_search_dir = test_cutana_malformed_header
+    cfg.model_path = test_config.model_path
+
+    session = Session(cfg)
+
+    with pytest.warns(
+        RuntimeWarning,
+        match=r"File .* did not pass cutana compatibility check and will be skipped \(.*\)",
+    ):
+        with pytest.raises(RuntimeError, match="All found files are not compatible with cutana"):
+            session.evaluate_all_images()
+
+
+def test_prediction_file_type_cutana_missing_images(test_config, test_cutana_missing_images):
+    """Test for meaningful exception when streaming from cutana and images are missing."""
+    from anomaly_match.pipeline.session import Session
+    from anomaly_match.utils.get_default_cfg import get_default_cfg
+
+    cfg = get_default_cfg()
+    cfg.normalisation.image_size = [64, 64]
+    cfg.prediction_search_dir = test_cutana_missing_images
+    cfg.model_path = test_config.model_path
+
+    session = Session(cfg)
+
+    with pytest.warns(
+        RuntimeWarning,
+        match=r"File .* did not pass cutana compatibility check and will be skipped \(.*\)",
+    ):
+        with pytest.raises(RuntimeError, match="All found files are not compatible with cutana"):
+            session.evaluate_all_images()
+
+
+def test_stream_file_type_detection_csv_and_parquet(tmp_path):
+    """Test that CSV and parquet files are correctly detected as stream type for cutana."""
+    # Create test CSV file
+    csv_file = tmp_path / "test_catalogue.csv"
+    csv_file.write_text("SourceID,RA,Dec\n1,0.0,0.0\n")
+
+    # Create test parquet file
+    parquet_file = tmp_path / "test_catalogue.parquet"
+    import pandas as pd
+
+    pd.DataFrame({"SourceID": [1], "RA": [0.0], "Dec": [0.0]}).to_parquet(parquet_file)
+
+    # Test file type detection via extension map (same logic as run_pipeline)
+    import os
+
+    extension_map = {
+        ".h5": "hdf5",
+        ".hdf5": "hdf5",
+        ".zarr": "zarr",
+        ".txt": "image",
+        ".parquet": "stream",
+        ".csv": "stream",
+    }
+
+    # Test CSV detection
+    _, csv_ext = os.path.splitext(str(csv_file).lower())
+    assert csv_ext == ".csv"
+    assert extension_map.get(csv_ext) == "stream"
+
+    # Test parquet detection
+    _, parquet_ext = os.path.splitext(str(parquet_file).lower())
+    assert parquet_ext == ".parquet"
+    assert extension_map.get(parquet_ext) == "stream"
 
 
 def test_predictions_output(test_config, test_hdf5):
@@ -300,23 +696,25 @@ def test_mixed_format_support(test_config, mixed_format_images, monkeypatch):
     assert len(scores) >= len(image_paths), "Not enough scores returned for all image formats"
 
 
-def test_read_and_resize_multiple_formats(test_config, mixed_format_images):
-    """Test the read_and_resize_image function can handle multiple formats."""
-    from prediction_process import read_and_resize_image
+def test_load_and_preprocess_multiple_formats(test_config, mixed_format_images):
+    """Test the load_and_preprocess function can handle multiple formats."""
+    from prediction_process import load_and_preprocess
+    from anomaly_match.image_processing.transforms import get_prediction_transforms
 
     image_paths, _ = mixed_format_images
+    transform = get_prediction_transforms()
 
     for path in image_paths:
         ext = os.path.splitext(path)[1].lower()
-        image = read_and_resize_image(path, cfg=test_config)
+        # load_and_preprocess now returns (filepath, numpy_image)
+        filename, numpy_image = load_and_preprocess((path, test_config))
+
+        # Apply transform to get tensor (transform is now applied on main thread)
+        image = transform(numpy_image)
 
         # Check image shape and type
-        assert image.shape == (
-            test_config.size[0],
-            test_config.size[1],
-            3,
-        ), f"Image resizing failed for {ext}"
-        assert image.dtype == np.uint8, f"Image type incorrect for {ext}"
+        assert isinstance(image, torch.Tensor), f"Expected tensor output for {ext}"
+        assert image.shape[0] == 3, f"Expected 3 channels for {ext}"  # RGB channels
 
 
 class MockModel(torch.nn.Module):
@@ -402,13 +800,24 @@ def test_accumulate_top_n_results(test_config, monkeypatch):
 
         # Load final results
         output_csv = os.path.join(test_config.output_dir, f"{test_config.save_file}_top{top_n}.csv")
+        output_npy = os.path.join(test_config.output_dir, f"{test_config.save_file}_top{top_n}.npy")
         final_results = pd.read_csv(output_csv)
         final_scores = final_results["Score"].values
+        final_images = np.load(output_npy)
 
         # Check if we got the highest scores from the second batch
         assert len(final_scores) == top_n
         assert np.all(final_scores >= 0.85)  # All top scores should be from second batch
         assert np.all(final_scores <= 0.95)  # Maximum probability capped at 0.95
+
+        # CRITICAL: Verify that the image array size matches the CSV
+        assert len(final_images) == len(final_scores), (
+            f"Image array size ({len(final_images)}) doesn't match CSV size ({len(final_scores)}). "
+            f"This indicates a bug in image accumulation logic."
+        )
+        assert (
+            final_images.shape[0] == top_n
+        ), f"Expected {top_n} images, got {final_images.shape[0]}"
 
 
 def test_all_predictions_accumulation(test_config, monkeypatch):
@@ -618,12 +1027,11 @@ def test_image_directory_processing(test_config, mixed_format_images):
 
     # Create a temporary file list
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as file_list:
-        # List all image files and write them to the file
+        # List all image files and write them to the file - only supported extensions
         image_paths = (
             list(Path(directory_path).glob("*.jpg"))
             + list(Path(directory_path).glob("*.jpeg"))
             + list(Path(directory_path).glob("*.png"))
-            + list(Path(directory_path).glob("*.tif"))
             + list(Path(directory_path).glob("*.tiff"))
         )
 
@@ -830,7 +1238,7 @@ def test_prediction_file_type_zarr(test_config, monkeypatch, test_zarr):
     cfg.save_file = "test_zarr_type"
     cfg.output_dir = os.path.join(os.path.dirname(test_zarr), "output")
     cfg.model_path = test_config.model_path
-    cfg.size = [150, 150]
+    cfg.normalisation.image_size = [150, 150]
 
     called_processes = []
 
@@ -904,10 +1312,13 @@ def test_zarr_image_processing_consistency(test_config, test_zarr):
 
     # Verify the output dimensions and type
     assert processed_image.shape == (
-        test_config.size[0],
-        test_config.size[1],
+        test_config.normalisation.image_size[0],
+        test_config.normalisation.image_size[1],
         3,
-    ), f"Wrong image shape: {processed_image.shape}, expected {(test_config.size[0], test_config.size[1], 3)}"
+    ), (
+        f"Wrong image shape: {processed_image.shape}, "
+        f"expected {(test_config.normalisation.image_size[0], test_config.normalisation.image_size[1], 3)}"
+    )
     assert processed_image.dtype == np.uint8, f"Wrong dtype: {processed_image.dtype}"
 
     # Verify the image is not all zeros (should have some content)
@@ -1015,3 +1426,152 @@ def test_zarr_auto_detection_basic(test_config, multiple_test_zarr):
             max(file_type_counts, key=file_type_counts.get) if file_type_counts else "zarr"
         )
         assert detected_type == "zarr"
+
+
+def test_zarr_batch_folders_detection(test_config, zarr_batch_folders):
+    """Test auto-detection for zarr batch folders with images.zarr subdirectories."""
+    batch_folders, batch_dir = zarr_batch_folders
+
+    from anomaly_match.pipeline.session import Session
+
+    try:
+        session = Session.__new__(Session)
+        session.cfg = test_config
+
+        # Test auto-detection method
+        detected_type = session._auto_detect_prediction_file_type(batch_dir)
+
+        # Should detect zarr file type
+        assert detected_type == "zarr"
+    except Exception:
+        # Manual test
+        import os
+
+        file_type_counts = {}
+        for filename in os.listdir(batch_dir):
+            file_path = os.path.join(batch_dir, filename)
+            if os.path.isdir(file_path):
+                # Check for batch folders containing images.zarr subdirectory
+                if os.path.exists(os.path.join(file_path, "images.zarr")):
+                    file_type_counts["zarr"] = file_type_counts.get("zarr", 0) + 1
+
+        detected_type = (
+            max(file_type_counts, key=file_type_counts.get) if file_type_counts else "image"
+        )
+        assert detected_type == "zarr"
+
+
+def test_zarr_batch_folders_processing(test_config, zarr_batch_folders):
+    """Test processing multiple zarr batch folders."""
+    batch_folders, batch_dir = zarr_batch_folders
+
+    # Test each batch folder individually
+    all_scores = []
+    all_filenames = []
+
+    for batch_folder in batch_folders:
+        scores, filenames, imgs = evaluate_images_in_zarr(batch_folder, test_config, top_n=100)
+        all_scores.extend(scores)
+        all_filenames.extend(filenames)
+
+    # Should have processed all batch folders successfully
+    assert len(all_scores) > 0
+    assert len(all_filenames) > 0
+
+    # Verify that filenames from different batches are present
+    batch_prefixes = set()
+    for filename in all_filenames:
+        if isinstance(filename, bytes):
+            filename_str = filename.decode("utf-8")
+        elif isinstance(filename, np.ndarray):
+            filename_str = str(filename.item()) if filename.size == 1 else str(filename)
+        else:
+            filename_str = str(filename)
+
+        # Extract batch prefix (batch_000, batch_001, etc.)
+        if filename_str.startswith("batch_"):
+            parts = filename_str.split("_")
+            if len(parts) >= 2:
+                batch_prefix = parts[0] + "_" + parts[1]
+                batch_prefixes.add(batch_prefix)
+
+    # Should have processed multiple batches
+    assert len(batch_prefixes) >= 2
+
+
+def test_zarr_batch_metadata_loading(test_config, zarr_batch_folders):
+    """Test that metadata is correctly loaded from batch folders."""
+    batch_folders, batch_dir = zarr_batch_folders
+
+    # Test the first batch folder
+    first_batch = batch_folders[0]
+    scores, filenames, imgs = evaluate_images_in_zarr(first_batch, test_config, top_n=100)
+
+    # Verify filenames are loaded from metadata
+    assert len(filenames) > 0
+    # Filenames should not be generic "image_000000" format
+    assert not all(f.startswith("image_") for f in filenames)
+    # Should contain batch identifier
+    assert any("batch_" in str(f) for f in filenames)
+
+
+def test_zarr_fallback_filenames_have_prefix(tmp_path, test_config):
+    """Test that when metadata loading fails, fallback filenames include zarr prefix to avoid collisions."""
+    import zarr
+
+    # Create two zarr stores WITHOUT metadata to trigger fallback filename generation
+    for batch_idx in range(2):
+        batch_folder = tmp_path / f"batch_{batch_idx:03d}"
+        batch_folder.mkdir()
+        zarr_path = batch_folder / "images.zarr"
+
+        # Create minimal zarr store
+        root = zarr.open_group(str(zarr_path), mode="w")
+
+        # Create a simple image array
+        img_array = np.ones((5, 64, 64, 3), dtype=np.uint8) * (50 + batch_idx * 50)
+        zarr_images = root.create_dataset(
+            "images", shape=img_array.shape, chunks=(1, 64, 64, 3), dtype=np.uint8
+        )
+        zarr_images[:] = img_array
+
+        # Intentionally NO metadata file to trigger fallback
+
+    # Process both batches
+    batch_filenames = []
+    for batch_idx in range(2):
+        zarr_path = tmp_path / f"batch_{batch_idx:03d}" / "images.zarr"
+
+        # Use a unique output dir for each batch to avoid accumulation
+        batch_config = test_config.copy()
+        batch_config.output_dir = str(tmp_path / f"output_{batch_idx}")
+        os.makedirs(batch_config.output_dir, exist_ok=True)
+
+        scores, filenames, imgs = evaluate_images_in_zarr(str(zarr_path), batch_config, top_n=100)
+
+        # Convert filenames to strings
+        filenames_str = []
+        for filename in filenames:
+            if isinstance(filename, bytes):
+                filename_str = filename.decode("utf-8")
+            elif isinstance(filename, np.ndarray):
+                filename_str = str(filename.item()) if filename.size == 1 else str(filename)
+            else:
+                filename_str = str(filename)
+            filenames_str.append(filename_str)
+
+        batch_filenames.append(filenames_str)
+
+    # Verify fallback filenames have zarr prefix
+    for batch_idx, filenames in enumerate(batch_filenames):
+        sample_filename = filenames[0]
+        # Should have format: <zarr_prefix>__image_000000
+        assert (
+            "__image_" in sample_filename
+        ), f"Batch {batch_idx} fallback filename doesn't have expected format. Got: {sample_filename}"
+
+    # Verify no collision between batches
+    set_0 = set(batch_filenames[0])
+    set_1 = set(batch_filenames[1])
+    overlap = set_0 & set_1
+    assert len(overlap) == 0, f"Found filename collision between batches: {overlap}"

@@ -19,19 +19,26 @@ import pickle
 import h5py
 import zarr
 from pathlib import Path
+from fitsbolt import SUPPORTED_IMAGE_EXTENSIONS
+
 
 from anomaly_match.datasets.SSL_Dataset import SSL_Dataset
 from anomaly_match.datasets.data_utils import get_prediction_dataloader
 from anomaly_match.models.FixMatch import FixMatch
-from anomaly_match.utils.constants import SUPPORTED_IMAGE_EXTENSIONS
+
 from anomaly_match.utils.print_cfg import print_cfg
 from anomaly_match.utils.set_log_level import set_log_level
 from anomaly_match.utils.get_net_builder import get_net_builder
+from anomaly_match.utils.cutana_stream_utils import (
+    cutana_buffer_generator,
+    cutana_validate_files_and_count_sources,
+)
 from anomaly_match.utils.get_optimizer import get_optimizer
 from anomaly_match.utils.validate_config import validate_config
-from anomaly_match.image_processing.NormalisationMethod import NormalisationMethod
+from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 from anomaly_match.pipeline.SessionTracker import SessionTracker
 from anomaly_match.data_io.SessionIOHandler import SessionIOHandler
+from anomaly_match.data_io.load_images import get_fitsbolt_config
 
 
 class Session:
@@ -40,7 +47,6 @@ class Session:
     labeled_train_dataset = None
     unlabeled_train_dataset = None
     test_dataset = None
-    prediction_dataset = None
 
     widget = None
     model: FixMatch = None
@@ -81,7 +87,7 @@ class Session:
         validate_config(cfg)
 
         self.cfg = cfg
-        self.cached_image_normalisation_enum = cfg.normalisation_method
+        self.cached_image_normalisation_enum = cfg.normalisation.normalisation_method
         self.out = None  # Initialize out attribute to None
 
         # Initialize label cache and distribution cache
@@ -93,8 +99,6 @@ class Session:
         self._load_datasets()
         logger.debug("Datasets loaded, initializing model")
         self._init_model()
-        self.top_N_filenames_scores = []
-        self.eval_predictions = {}  # Initialize empty dict for eval predictions
 
     def _init_model(self):
         """Initializes the model with the configuration settings."""
@@ -113,7 +117,6 @@ class Session:
             lambda_u=self.cfg.ulb_loss_ratio,
             hard_label=True,
             logger=logger,
-            current_normalisation_method=self.cfg.normalisation_method,
             session_tracker=self.session_tracker,
         )
 
@@ -151,7 +154,7 @@ class Session:
         self.labeled_train_dataset, self.unlabeled_train_dataset = self.train_dset.get_ssl_dset()
 
         # Update information about cached dataset
-        self.cached_image_normalisation_enum = self.cfg.normalisation_method
+        self.cached_image_normalisation_enum = self.cfg.normalisation.normalisation_method
 
         self.cfg.num_classes = self.train_dset.num_classes
         self.cfg.num_channels = self.train_dset.num_channels
@@ -184,8 +187,8 @@ class Session:
             )
 
             def progress_callback(current, total):
-                if hasattr(self.cfg, "progress_bar") and self.cfg.progress_bar is not None:
-                    self.cfg.progress_bar.value = current / total
+                if self.widget is not None and self.widget.ui["progress_bar"] is not None:
+                    self.widget.ui["progress_bar"].value = current / total
 
             if self.widget is not None:
                 self.widget.ui["train_label"].value = "Updating predictions..."
@@ -363,7 +366,7 @@ class Session:
             method (NormalisationMethod): The new normalization method to apply.
         """
         # update norm method in session cfg, should
-        self.cfg.normalisation_method = method
+        self.cfg.normalisation.normalisation_method = method
 
     def _reload_datasets(self):
         """Reloads the datasets if normalisation changed."""
@@ -408,6 +411,10 @@ class Session:
     def save_model(self):
         """Saves the current model state using SessionIOHandler."""
         with self.out if self.out is not None else nullcontext():
+            # Ensure fitsbolt config is set before saving model
+            # This creates cfg.fitsbolt_cfg from normalisation settings for prediction consistency
+            self.cfg = get_fitsbolt_config(self.cfg)
+
             # Save model using SessionIOHandler
             model_path = self.session_io.save_model(self.model, self.cfg, self.session_tracker)
 
@@ -416,23 +423,36 @@ class Session:
     def load_model(self):
         """Loads the model state using SessionIOHandler."""
         with self.out if self.out is not None else nullcontext():
+            # Save the current normalisation method before loading
+            old_normalisation_method = self.cfg.normalisation.normalisation_method
+
             success = self.session_io.load_model(self.model, self.cfg)
 
             if success:
                 logger.info("Model loaded successfully")
 
-                # Check if normalisation method was updated from the loaded model
-                if hasattr(self.model, "last_normalisation_method"):
-                    if self.model.last_normalisation_method != self.cfg.normalisation_method:
-                        logger.info(
-                            f"Normalisation method updated from loaded model: "
-                            f"{self.model.last_normalisation_method}"
-                        )
+                # Always inform user about loaded normalisation settings
+                # (parameters like asinh_scale may differ even if method is the same)
+                new_normalisation_method = self.cfg.normalisation.normalisation_method
+                logger.info(
+                    f"Loaded model normalisation: {new_normalisation_method.name}. "
+                    f"Note: normalisation parameters were also loaded from the model checkpoint."
+                )
 
-                        # Update cached normalisation and reload datasets if needed
-                        if self.cached_image_normalisation_enum != self.cfg.normalisation_method:
-                            logger.info("Normalisation method changed, reloading datasets...")
-                            self._reload_datasets()
+                # Warn if the method itself changed
+                if old_normalisation_method != new_normalisation_method:
+                    logger.warning(
+                        f"Normalisation method changed from {old_normalisation_method.name} "
+                        f"to {new_normalisation_method.name}. Images may need to be refreshed."
+                    )
+
+                # Update cached normalisation and reload datasets if method changed
+                if (
+                    self.cached_image_normalisation_enum
+                    != self.cfg.normalisation.normalisation_method
+                ):
+                    logger.info("Normalisation method changed, reloading datasets...")
+                    self._reload_datasets()
             else:
                 logger.error("Failed to load model")
 
@@ -444,7 +464,6 @@ class Session:
             progess_callback (function, optional): Callback function to update progress. Defaults to None.
         """
         self.cfg = cfg
-        self.top_N_filenames_scores = []  # Clear top N filenames and scores
         with self.out if self.out is not None else nullcontext():
             # Start a new session iteration
             self.session_tracker.start_new_session_iteration()
@@ -476,6 +495,7 @@ class Session:
             eval_results = self.model.train(cfg, progress_callback=progress_callback)
 
             # Update session tracker with training results
+            test_scores = None
             if eval_results:
                 # Filter out large data fields that shouldn't be saved to session metadata
                 filtered_eval_results = {
@@ -486,13 +506,40 @@ class Session:
                 }
                 self.session_tracker.update_test_performance(filtered_eval_results)
 
+                # Extract test scores for saving (filename -> anomaly probability)
+                if "eval/predictions_and_labels" in eval_results:
+                    predictions_and_labels = eval_results["eval/predictions_and_labels"]
+                    test_scores = {
+                        filename: float(pred_label[0].item())
+                        for filename, pred_label in predictions_and_labels.items()
+                    }
+
             # Update total model iterations
             self.session_tracker.total_model_iterations = self.model.total_it
 
             logger.info("Training complete.")
             # Update cached image normalisation enum
-            self.cached_image_normalisation_enum = self.cfg.normalisation_method
+            self.cached_image_normalisation_enum = self.cfg.normalisation.normalisation_method
+
+            # Update predictions to get unlabelled scores for this iteration
+            self.update_predictions()
+
+            # Extract unlabelled scores (filename -> anomaly score)
+            unlabelled_scores = None
+            if self.scores is not None and self.filenames is not None:
+                unlabelled_scores = {
+                    filename: float(score) for filename, score in zip(self.filenames, self.scores)
+                }
+
+            # Save iteration scores (unlabelled and test set scores)
+            self.session_io.save_iteration_scores(
+                self.session_tracker,
+                unlabelled_scores=unlabelled_scores,
+                test_scores=test_scores,
+            )
+
             # Save model to session directory using centralized save_model method
+            # Note: save_model() ensures fitsbolt_cfg is set before saving
             self.save_model()
 
             # Save session again to capture training results (test performance, model path)
@@ -584,7 +631,6 @@ class Session:
     def load_next_batch(self):
         """Loads the next batch of data and updates predictions."""
         logger.debug("Loading next batch of data")
-        self.top_N_filenames_scores = []  # Clear top N filenames and scores
         # Note that we are updating also the labeled_dataset since the unlabeled
         # data are going to disappear from the unlabeled dataset once we call this function.
         self.labeled_train_dataset, self.unlabeled_train_dataset = self.train_dset.update_dsets(
@@ -601,7 +647,7 @@ class Session:
         # Clear the label cache since active_learning_df is now empty
         self._label_cache = {}
 
-        self.cached_image_normalisation_enum = self.cfg.normalisation_method
+        self.cached_image_normalisation_enum = self.cfg.normalisation.normalisation_method
         # We don't rebuild the cache here since active_learning_df is empty
         # The get_label method will handle finding labels in the main dataset if needed
         self.update_predictions()
@@ -637,6 +683,8 @@ class Session:
                     ".hdf5": "hdf5",
                     ".zarr": "zarr",
                     ".txt": "image",  # Grouped image files
+                    ".parquet": "stream",
+                    ".csv": "stream",
                 }
                 file_type = extension_map.get(ext, "image")
             else:
@@ -647,6 +695,7 @@ class Session:
             "hdf5": "prediction_process_hdf5.py",
             "image": "prediction_process.py",
             "zarr": "prediction_process_zarr.py",
+            "stream": "prediction_process_cutana.py",
         }
 
         script = script_map.get(file_type)
@@ -689,7 +738,7 @@ class Session:
         """Evaluates all images and updates the session's img_catalog with the top N images."""
         logger.info("Evaluating all images")
         # check if normalisation changed and reload if necessary
-        if self.cfg.normalisation_method != self.cached_image_normalisation_enum:
+        if self.cfg.normalisation.normalisation_method != self.cached_image_normalisation_enum:
             self._reload_datasets()
 
         # Check if model exists before proceeding
@@ -704,17 +753,37 @@ class Session:
             raise FileNotFoundError(error_msg)
 
         # Auto-detect file type based on prediction_search_dir
-        detected_file_type = None
-        if self.cfg.prediction_search_dir:
-            detected_file_type = self._auto_detect_prediction_file_type(
-                self.cfg.prediction_search_dir
+        if not self.cfg.prediction_search_dir:
+            error_msg = (
+                "No prediction_search_dir configured. "
+                "Please set cfg.prediction_search_dir to a directory containing "
+                "images, HDF5 files, Zarr files, or Cutana buffer files."
             )
+            logger.error(error_msg)
+            if self.widget is not None:
+                self.widget.ui["train_label"].value = "Error: No prediction directory!"
+            raise ValueError(error_msg)
+
+        detected_file_type = self._auto_detect_prediction_file_type(self.cfg.prediction_search_dir)
+
+        # Check for Cutana + MIDTONES incompatibility
+        if detected_file_type == "stream":
+            if self.cfg.normalisation.normalisation_method == NormalisationMethod.MIDTONES:
+                error_msg = (
+                    "MIDTONES normalisation is not supported for Cutana streaming predictions. "
+                    "Please use CONVERSION_ONLY, LOG, ZSCALE, or ASINH."
+                )
+                logger.error(error_msg)
+                if self.widget is not None:
+                    self.widget.ui["train_label"].value = "Error: MIDTONES not supported!"
+                raise ValueError(error_msg)
 
         # Define supported file extensions
         supported_extensions = {
             "hdf5": [".h5", ".hdf5"],
             "image": SUPPORTED_IMAGE_EXTENSIONS,
             "zarr": [".zarr"],
+            "stream": [".csv", ".parquet"],
         }
 
         pattern = supported_extensions.get(detected_file_type)
@@ -724,32 +793,57 @@ class Session:
         # Get all matching files from the cfg.prediction_search_dir
         input_files = []
         for f in os.listdir(self.cfg.prediction_search_dir):
+            file_path = os.path.join(self.cfg.prediction_search_dir, f)
             file_ext = os.path.splitext(f.lower())[1]
-            if file_ext in pattern:
-                input_files.append(os.path.join(self.cfg.prediction_search_dir, f))
 
-        num_files = len(input_files)
+            if detected_file_type == "zarr":
+                # For zarr, check for direct .zarr files/directories
+                if file_ext in pattern and (os.path.isfile(file_path) or os.path.isdir(file_path)):
+                    input_files.append(file_path)
+                # Also check for batch folders containing images.zarr subdirectory
+                elif os.path.isdir(file_path) and os.path.exists(
+                    os.path.join(file_path, "images.zarr")
+                ):
+                    # Add the path to the images.zarr subdirectory
+                    input_files.append(os.path.join(file_path, "images.zarr"))
+            elif file_ext in pattern:
+                input_files.append(file_path)
+
         total_images = 0
         processed_images = 0
         start_time = time.time()
 
         # First count total images
         logger.debug("Counting total images to process...")
-        for input_file in input_files:
-            try:
-                if detected_file_type == "hdf5":
-                    with h5py.File(input_file, "r") as h5f:
-                        total_images += len(h5f["images"])
-                elif detected_file_type == "zarr":
-                    root = zarr.open_group(input_file, mode="r")
-                    if "images" in root:
-                        total_images += root["images"].shape[0]
-                    else:
-                        logger.warning(f"No 'images' array found in Zarr file {input_file}")
-                else:  # jpeg/image files - single file
-                    total_images += 1
-            except Exception as e:
-                logger.warning(f"Error counting images in {input_file}: {str(e)}")
+        if detected_file_type != "stream":
+            for input_file in input_files:
+                try:
+                    if detected_file_type == "hdf5":
+                        with h5py.File(input_file, "r") as h5f:
+                            total_images += len(h5f["images"])
+                    elif detected_file_type == "zarr":
+                        root = zarr.open_group(input_file, mode="r")
+                        if "images" in root:
+                            total_images += root["images"].shape[0]
+                        else:
+                            logger.warning(f"No 'images' array found in Zarr file {input_file}")
+                    else:  # jpeg/image files - single file
+                        total_images += 1
+                except Exception as e:
+                    logger.warning(f"Error counting images in {input_file}: {str(e)}")
+
+        else:  # Validates files against cutana and counts sources in valid files
+            logger.info("Validating files against cutana")
+            input_files, total_images, total_chunks = cutana_validate_files_and_count_sources(
+                input_files, chunk_size=self.cfg.subprocess_buffer_size
+            )
+
+            if not input_files:
+                msg = "All found files are not compatible with cutana"
+                logger.error(msg)
+                raise RuntimeError(msg)
+
+        num_files = len(input_files)
 
         logger.info(f"Found total of {total_images:,} images to process in {num_files} files")
 
@@ -780,6 +874,18 @@ class Session:
                 f"for {total_input_images} images"
             )
 
+        # Creating a generator that loads the csv/parquet in chunks and saves to a temporary file
+        elif detected_file_type == "stream":
+
+            # Files are read in chunks and saved into this intermediate buffer
+            cutana_buffer_path = Path("tmp") / ".cutana_buffer.parquet"
+            input_files = cutana_buffer_generator(
+                files=input_files,
+                buffer_path=cutana_buffer_path,
+                chunk_size=self.cfg.subprocess_buffer_size,
+            )
+            num_files = total_chunks
+
         for file_idx, input_file in enumerate(input_files):  # Get number of images in current file
             logger.debug(f"Processing file {file_idx + 1}/{num_files}: {input_file}")
             if detected_file_type == "hdf5":
@@ -796,8 +902,14 @@ class Session:
                 except Exception as e:
                     logger.error(f"Error reading Zarr file {input_file}: {e}")
                     num_items = 0
+            elif detected_file_type == "stream":
+                # Cutana input buffer file (CSV or parquet)
+                if str(input_file).endswith(".parquet"):
+                    num_items = len(pd.read_parquet(input_file))
+                else:
+                    num_items = len(pd.read_csv(input_file))
             else:  # image files
-                if input_file.endswith(".txt"):  # This is a group file
+                if str(input_file).endswith(".txt"):  # This is a group file
                     with open(input_file, "r") as f:
                         num_items = len(f.readlines())
                 else:
@@ -849,14 +961,13 @@ class Session:
             # Make tmp folder if it doesn't exist
             os.makedirs("tmp", exist_ok=True)
 
-            # Clear progress bar key from cfg is present since it is not pickle serializable
-            if "progress_bar" in temp_config:
-                del temp_config["progress_bar"]
-
             # Save the config to a temporary file as pickle
             with open(temp_config_path, "wb") as f:
                 pickle.dump(temp_config, f)
             logger.debug(f"Temporary config saved to {temp_config_path}")
+
+            # Create output directory if it doesn't exist
+            os.makedirs(self.cfg.output_dir, exist_ok=True)
 
             # Run the prediction process script
             self.run_pipeline(temp_config_path, input_file, top_N, detected_file_type)
@@ -1037,7 +1148,11 @@ class Session:
             ".tif": "image",
             ".tiff": "image",
             ".fits": "image",
+            ".csv": "stream",
+            ".parquet": "stream",
         }
+
+        tracked_extenstions = {key: 0 for key in extension_map.keys()}
 
         # Count files by type
         file_type_counts = {}
@@ -1048,14 +1163,19 @@ class Session:
             if os.path.isfile(file_path):
                 _, ext = os.path.splitext(filename.lower())
                 if ext in extension_map:
+                    tracked_extenstions[ext] += 1
                     file_type = extension_map[ext]
                     file_type_counts[file_type] = file_type_counts.get(file_type, 0) + 1
 
             # Check if it's a zarr directory (zarr stores can be directories)
             elif os.path.isdir(file_path):
+                # Check for direct zarr store (ends with .zarr or has zarr.json)
                 if filename.lower().endswith(".zarr") or os.path.exists(
                     os.path.join(file_path, "zarr.json")
                 ):
+                    file_type_counts["zarr"] = file_type_counts.get("zarr", 0) + 1
+                # Check for batch folders containing images.zarr subdirectory
+                elif os.path.exists(os.path.join(file_path, "images.zarr")):
                     file_type_counts["zarr"] = file_type_counts.get("zarr", 0) + 1
 
         if not file_type_counts:
@@ -1066,6 +1186,7 @@ class Session:
 
         # Return the most common file type
         detected_type = max(file_type_counts, key=file_type_counts.get)
+
         logger.debug(
             f"Auto-detected prediction file type: {detected_type} (found {file_type_counts[detected_type]} files)"
         )

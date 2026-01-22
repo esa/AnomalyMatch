@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "anomaly_match"
-version = "1.1.0"
+version = "1.2.0"
 description = "A tool for anomaly detection in images using semi-supervised and active learning with a GUI"
 readme = "README.md"
 license = { file = "LICENSE.txt" }
@@ -44,18 +44,21 @@ dependencies = [
     "matplotlib",
     "numpy",
     "opencv-python-headless",
-    "pandas",
+    "pandas<3",
     "pyturbojpeg",
     "scikit-learn",
     "scikit-image",
+    "fitsbolt>=0.1.6",
     "toml",
     "torch",
+    "torchvision",
     "tqdm",
     "zarr>=3.0.0b0",
+    "cutana>=0.2.1",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov", "black", "flake8", "mypy"]
+dev = ["pytest", "pytest-cov", "black", "flake8", "mypy", "vulture>=2.10"]
 
 [tool.setuptools]
 packages = ["anomaly_match"]
@@ -64,7 +67,7 @@ packages = ["anomaly_match"]
 "" = "."
 
 [tool.black]
-line-length = 88
+line-length = 100
 target-version = ['py311']
 
 [tool.pytest.ini_options]
@@ -72,3 +75,8 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+[tool.vulture]
+min_confidence = 60
+paths = ["anomaly_match"]
+exclude = ["tests/", "docs/", "examples/", "paper_scripts/"]

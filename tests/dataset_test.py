@@ -28,11 +28,12 @@ def base_config():
     """Fixture providing base configuration for tests."""
     cfg = am.get_default_cfg()
     cfg.data_dir = "tests/test_data/"
-    cfg.size = [64, 64]
+    cfg.normalisation.image_size = [64, 64]
+    cfg.normalisation.n_output_channels = 3
     cfg.num_train_iter = 2
     cfg.test_ratio = 0.5
     cfg.N_to_load = 10
-    cfg.fits_extension = None
+    cfg.normalisation.fits_extension = None
     cfg.label_file = None
     return cfg
 
@@ -59,8 +60,8 @@ def sample_data():
 def multi_extension_dataset():
     """Create a temporary directory with images of different extensions for testing."""
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Create test images with different extensions
-        extensions = [".jpg", ".jpeg", ".png", ".tif", ".tiff"]
+        # Create test images with different extensions - only supported formats
+        extensions = [".jpg", ".jpeg", ".png", ".tiff"]
         test_images = []
 
         # Create a simple test image
@@ -93,7 +94,7 @@ def test_anomaly_detection_dataset_initialization(base_config):
     dataset = AnomalyDetectionDataset(base_config)
 
     assert dataset is not None
-    assert dataset.size == base_config.size
+    assert dataset.size == base_config.normalisation.image_size
     assert dataset.test_ratio == base_config.test_ratio
     assert dataset.num_channels == 3
     assert hasattr(dataset, "data_dict")

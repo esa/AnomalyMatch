@@ -43,7 +43,7 @@ class SSL_Dataset:
         self.N_to_load = cfg.N_to_load
         self.train = train
         self.num_classes = 2
-        self.size = cfg.size
+        self.size = cfg.normalisation.image_size
         self.data_dir = cfg.data_dir
         self.label_file = cfg.label_file
         self.dset = None

@@ -189,8 +189,11 @@ paper_scripts/test_plots_output
 paper_scripts/**/*.png
 paper_scripts/**/*.jpg
 paper_scripts/**/*.jpeg
+paper_scripts/**/*.pdf
 science_paper/**/*.png
 science_paper/**/*.jpg
 science_paper/**/*.jpeg
 pytest-coverage.txt
 pytest.xml
+# IDE and editor settings
+.vscode/

@@ -14,7 +14,7 @@ from dotmap import DotMap
 
 from anomaly_match.data_io.SessionIOHandler import SessionIOHandler
 from anomaly_match.pipeline.SessionTracker import SessionTracker
-from anomaly_match.image_processing.NormalisationMethod import NormalisationMethod
+from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 
 
 class MockModel(nn.Module):
@@ -112,14 +112,14 @@ class TestModelIOIntegration:
 
         # Update config to match model for saving
         save_cfg = DotMap(self.cfg)
-        save_cfg.normalisation_method = NormalisationMethod.LOG
+        save_cfg.normalisation.normalisation_method = NormalisationMethod.LOG
 
         # Save model
         self.session_io.save_model(self.mock_model, save_cfg, session_tracker=None)
 
         # Create config with different normalisation for loading
         test_cfg = DotMap(self.cfg)
-        test_cfg.normalisation_method = NormalisationMethod.CONVERSION_ONLY
+        test_cfg.normalisation.normalisation_method = NormalisationMethod.CONVERSION_ONLY
 
         # Load model
         new_model = MockFixMatch()
@@ -127,7 +127,7 @@ class TestModelIOIntegration:
 
         # Verify normalisation was updated from model
         assert success
-        assert test_cfg.normalisation_method == NormalisationMethod.LOG
+        assert test_cfg.normalisation.normalisation_method == NormalisationMethod.LOG
         assert new_model.last_normalisation_method == NormalisationMethod.LOG
 
     def test_load_model_nonexistent_file(self):

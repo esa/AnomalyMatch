@@ -67,6 +67,8 @@ class TestRunAndLabelSavingMigration:
         config = Mock()
         config.normalisation_method = "min_max"
         config.model_path = "test_model.pth"
+        # Explicitly set fitsbolt_cfg to None to avoid pickling issues with Mock
+        config.fitsbolt_cfg = None
         return config
 
     def test_save_run_basic(self, session_io, mock_model, temp_dir):
@@ -161,17 +163,6 @@ class TestRunAndLabelSavingMigration:
         expected_df = labeled_data.copy()
         expected_df["iteration"] = -1  # Default iteration for initial data
         pd.testing.assert_frame_equal(session_tracker.labeled_data_df, expected_df)
-
-    def test_session_tracker_save_training_run(self, session_tracker):
-        """Test SessionTracker.save_training_run method."""
-        mock_config = Mock()
-        model_path = "/path/to/model.pth"
-
-        session_tracker.save_training_run(model_path, mock_config)
-
-        # Check that session was updated
-        assert len(session_tracker.session_iterations) == 1
-        assert session_tracker.session_iterations[0].model_state_path == model_path
 
     def test_session_tracker_update_labeled_data(self, session_tracker):
         """Test SessionTracker.update_labeled_data method."""

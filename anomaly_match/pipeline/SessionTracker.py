@@ -23,6 +23,9 @@ class IterationInfo:
     model_state_path: Optional[str] = None
     num_newly_labeled_anomalous: int = 0
     num_newly_labeled_nominal: int = 0
+    # Per-sample scores for this iteration (stored separately as CSV files)
+    unlabelled_scores_file: Optional[str] = None
+    test_scores_file: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert IterationInfo to dictionary."""
@@ -34,6 +37,8 @@ class IterationInfo:
             "model_state_path": self.model_state_path,
             "num_newly_labeled_anomalous": self.num_newly_labeled_anomalous,
             "num_newly_labeled_nominal": self.num_newly_labeled_nominal,
+            "unlabelled_scores_file": self.unlabelled_scores_file,
+            "test_scores_file": self.test_scores_file,
         }
 
 
@@ -145,21 +150,6 @@ class SessionTracker:
 
         logger.debug(f"Added labeled sample: {filename} -> {label} (iteration {current_iter_num})")
 
-    def add_initial_labeled_samples(self, labeled_data_df: pd.DataFrame) -> None:
-        """
-        Add initial labeled samples (before any training iterations).
-
-        Args:
-            labeled_data_df: DataFrame with columns ['filename', 'label'] for initial data.
-        """
-        initial_df = labeled_data_df.copy()
-        initial_df["iteration"] = -1  # Mark as initial/pre-training data
-
-        # Concatenate with existing data
-        self.labeled_data_df = pd.concat([self.labeled_data_df, initial_df], ignore_index=True)
-
-        logger.debug(f"Added {len(initial_df)} initial labeled samples")
-
     def update_test_performance(self, performance_metrics: Dict[str, float]) -> None:
         """
         Update test performance for the current session iteration.
@@ -182,6 +172,28 @@ class SessionTracker:
             self.session_iterations[-1].model_state_path = model_path
             logger.debug(f"Updated model state path: {model_path}")
 
+    def update_unlabelled_scores_path(self, scores_path: str) -> None:
+        """
+        Update the unlabelled scores file path for the current session iteration.
+
+        Args:
+            scores_path: Path to the saved unlabelled scores CSV file.
+        """
+        if self.session_iterations:
+            self.session_iterations[-1].unlabelled_scores_file = scores_path
+            logger.debug(f"Updated unlabelled scores path: {scores_path}")
+
+    def update_test_scores_path(self, scores_path: str) -> None:
+        """
+        Update the test scores file path for the current session iteration.
+
+        Args:
+            scores_path: Path to the saved test scores CSV file.
+        """
+        if self.session_iterations:
+            self.session_iterations[-1].test_scores_file = scores_path
+            logger.debug(f"Updated test scores path: {scores_path}")
+
     def get_session_info(self) -> Dict[str, Any]:
         """
         Get comprehensive session information.
@@ -192,7 +204,8 @@ class SessionTracker:
         # Count all labeled samples including initial data (iteration = -1)
         total_anomalous = len(self.labeled_data_df[self.labeled_data_df["label"] == "anomaly"])
         total_nominal = len(self.labeled_data_df[self.labeled_data_df["label"] == "normal"])
-        total_labeled = len(self.labeled_data_df)
+        total_labeled = len(self.labeled_data_df[self.labeled_data_df["label"] != "removed"])
+        total_removed = len(self.labeled_data_df[self.labeled_data_df["label"] == "removed"])
 
         # Handle case where iteration column might not exist (legacy data)
         if "iteration" in self.labeled_data_df.columns:
@@ -213,6 +226,7 @@ class SessionTracker:
             "total_anomalous_samples": total_anomalous,
             "total_nominal_samples": total_nominal,
             "total_labeled_samples": total_labeled,
+            "total_removed_samples": total_removed,
             "initial_labeled_samples": initial_samples,
             "iteration_labeled_samples": iteration_samples,
             "session_duration_minutes": (
@@ -265,22 +279,6 @@ class SessionTracker:
             DataFrame with labeled samples.
         """
         return self.labeled_data_df.copy()
-
-    def save_training_run(self, model_path: str, config: Any = None) -> None:
-        """
-        Record a completed training run with model and config.
-
-        Args:
-            model_path: Path to the saved model
-            config: Optional configuration used for training
-        """
-        if not self.session_iterations:
-            self.start_new_session_iteration()
-
-        # Update current iteration with the final model
-        self.session_iterations[-1].model_state_path = model_path
-
-        logger.info(f"Training run completed. Model saved to: {model_path}")
 
     def update_labeled_data(self, labeled_data_df: pd.DataFrame) -> None:
         """
@@ -340,51 +338,3 @@ class SessionTracker:
         if "iteration" in self.labeled_data_df.columns:
             iter_counts = self.labeled_data_df["iteration"].value_counts().sort_index()
             logger.debug(f"Iteration distribution after merge: {dict(iter_counts)}")
-
-    def set_total_model_iterations(self, total_iterations: int) -> None:
-        """
-        Set the total model iterations count directly.
-
-        This is useful when you need to correct or set the iteration count
-        based on actual training that has occurred.
-
-        Args:
-            total_iterations: Total number of model training iterations.
-        """
-        self.total_model_iterations = total_iterations
-        logger.debug(f"Set total model iterations to: {total_iterations}")
-
-    def get_current_iteration_number(self) -> int:
-        """
-        Get the current active iteration number.
-
-        Returns:
-            int: Current iteration number, or -1 if no iterations started yet.
-        """
-        if self.session_iterations:
-            return self.session_iterations[-1].iteration_number
-        else:
-            return -1
-
-    def debug_session_state(self) -> Dict[str, Any]:
-        """
-        Get debug information about the current session state.
-
-        Returns:
-            Dict with debug information.
-        """
-        return {
-            "current_session_iteration": self.current_session_iteration,
-            "total_session_iterations": len(self.session_iterations),
-            "current_active_iteration": self.get_current_iteration_number(),
-            "total_model_iterations": self.total_model_iterations,
-            "labeled_data_count": len(self.labeled_data_df),
-            "iterations_info": [
-                {
-                    "iter_num": iter_info.iteration_number,
-                    "anomalous": iter_info.num_newly_labeled_anomalous,
-                    "normal": iter_info.num_newly_labeled_nominal,
-                }
-                for iter_info in self.session_iterations
-            ],
-        }

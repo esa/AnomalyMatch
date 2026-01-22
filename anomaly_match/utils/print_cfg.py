@@ -31,7 +31,7 @@ def print_cfg(cfg: DotMap):
             "seed",
             "test_ratio",
             "N_to_load",
-            "size",
+            "image_size",
             "num_workers",
             "pin_memory",
         ],

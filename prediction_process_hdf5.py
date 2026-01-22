@@ -18,31 +18,20 @@ import time
 import h5py
 from tqdm import tqdm
 
+from anomaly_match.data_io.load_images import process_single_wrapper
+
 from prediction_utils import (
     load_model,
     save_results,
     process_batch_predictions,
+    clear_gpu_cache_if_needed,
     jpeg_decoder,
+    estimate_batch_size,
 )
 
 from anomaly_match.image_processing.transforms import (
     get_prediction_transforms,
 )
-from anomaly_match.data_io.load_images import process_image_array
-
-# Configure logging
-logs_dir = os.path.join(os.path.dirname(__file__), "logs")
-os.makedirs(logs_dir, exist_ok=True)
-
-# Remove default handler and set up file logging
-logger.remove()
-logger.add(
-    os.path.join(logs_dir, "prediction_thread_{time}.log"),
-    rotation="1 MB",
-    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
-    level="DEBUG",
-)
-logger.add(sys.stderr, level="INFO")
 
 
 def read_and_decode_image_from_hdf5(image_data, cfg):
@@ -64,21 +53,26 @@ def read_and_decode_image_from_hdf5(image_data, cfg):
 
             image = np.array(Image.open(io.BytesIO(image_bytes)))
 
-        processed_image = process_image_array(image, cfg, convert_to_rgb=True, image_source="hdf5")
+        processed_image = process_single_wrapper(image, cfg, desc="hdf5")
         return processed_image
 
     except Exception as e:
         logger.error(f"Error decoding image from HDF5: {e}")
         # Return a blank image as fallback
-        return np.zeros((cfg.size[0], cfg.size[1], 3), dtype=np.uint8)
+        return np.zeros(
+            (cfg.normalisation.image_size[0], cfg.normalisation.image_size[1], 3),
+            dtype=np.uint8,
+        )
 
 
-def load_and_preprocess(args):
-    """Load and preprocess a single image."""
-    image_data, transform, cfg = args
-    image = read_and_decode_image_from_hdf5(image_data, cfg)
-    image = transform(image)
-    return image
+def load_and_preprocess_hdf5(args):
+    """Load and preprocess a single image from HDF5.
+
+    Note: Returns numpy array, not tensor. Tensor conversion is done on main
+    thread to avoid CUDA context issues in ThreadPoolExecutor.
+    """
+    image_data, cfg = args
+    return read_and_decode_image_from_hdf5(image_data, cfg)
 
 
 def evaluate_images_in_hdf5(hdf5_path, cfg, top_n=1000, batch_size=1000, max_workers=4):
@@ -108,24 +102,35 @@ def evaluate_images_in_hdf5(hdf5_path, cfg, top_n=1000, batch_size=1000, max_wor
         last_log_time = start_time
         processed_since_last_log = 0
 
-        for batch_start in tqdm(range(0, num_images, batch_size), desc="Processing batches"):
+        for batch_idx, batch_start in enumerate(
+            tqdm(range(0, num_images, batch_size), desc="Processing batches")
+        ):
             batch_end = min(batch_start + batch_size, num_images)
             batch_data = dataset[batch_start:batch_end]
             batch_size_actual = len(batch_data)
 
-            # Process batch in parallel
+            # I/O and preprocessing in ThreadPool (returns numpy arrays)
+            # CUDA operations are kept on main thread to prevent memory fragmentation
             batch_process_start = time.time()
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                batch_args = [(data, transform, cfg) for data in batch_data]
-                batch_images = list(executor.map(load_and_preprocess, batch_args))
+                batch_args = [(data, cfg) for data in batch_data]
+                numpy_images = list(executor.map(load_and_preprocess_hdf5, batch_args))
 
-            # Stack images into a batch tensor and get predictions
+            # Tensor conversion on main thread (not in ThreadPool)
             stack_start = time.time()
-            images = torch.stack(batch_images, dim=0)
+            batch_tensors = [transform(img) for img in numpy_images]
+            images = torch.stack(batch_tensors, dim=0)
+            del numpy_images, batch_tensors  # Free memory before CUDA ops
+
+            # CUDA inference with explicit cleanup
             batch_scores, batch_imgs = process_batch_predictions(model, images)
+            del images  # Free CUDA tensor reference
 
             scores_list.append(batch_scores)
             imgs_list.append(batch_imgs)
+
+            # Periodic GPU cache clearing to prevent fragmentation
+            clear_gpu_cache_if_needed(batch_idx)
 
             processed_since_last_log += batch_size_actual
             current_time = time.time()
@@ -177,13 +182,19 @@ def main():
         logger.error(f"Failed to load config from {args.config_path}: {e}")
         sys.exit(1)
 
+    logger.info("Setting batch size")
+    batch_size = (
+        estimate_batch_size(cfg) if cfg.N_batch_prediction is None else cfg.N_batch_prediction
+    )
+    logger.info(f"Batch size set to: {batch_size}")
+
     # Log key configuration parameters
     logger.debug("Configuration loaded with parameters:")
     logger.debug(f"  Save file: {cfg.save_file}")
     logger.debug(f"  Save path: {cfg.save_path}")
     logger.debug(f"  Model path: {cfg.model_path}")
     logger.debug(f"  Output directory: {cfg.output_dir}")
-    logger.debug(f"  Image size: {cfg.size}")
+    logger.debug(f"  Image size: {cfg.normalisation.image_size}")
 
     # Create output directory if it doesn't exist
     os.makedirs(cfg.output_dir, exist_ok=True)
@@ -191,7 +202,7 @@ def main():
     logger.info(f"Processing HDF5 file: {args.hdf5_path}")
 
     try:
-        evaluate_images_in_hdf5(args.hdf5_path, cfg, top_n=args.top_n)
+        evaluate_images_in_hdf5(args.hdf5_path, cfg, batch_size=batch_size, top_n=args.top_n)
         elapsed_time = time.time() - start_time
         logger.success(f"Script completed in {elapsed_time:.2f} seconds")
     except Exception as e:
@@ -200,4 +211,18 @@ def main():
 
 
 if __name__ == "__main__":
+
+    # Configure logging
+    logs_dir = os.path.join(os.path.dirname(__file__), "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+
+    # Remove default handler and set up file logging
+    logger.remove()
+    logger.add(
+        os.path.join(logs_dir, "prediction_thread_{time}.log"),
+        rotation="1 MB",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+        level="DEBUG",
+    )
+    logger.add(sys.stderr, level="INFO")
     main()

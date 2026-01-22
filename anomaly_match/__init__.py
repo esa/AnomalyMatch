@@ -4,14 +4,14 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
-from .image_processing.NormalisationMethod import NormalisationMethod
+from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 from .pipeline.session import Session
 from .utils.get_default_cfg import get_default_cfg
 from .utils.set_log_level import set_log_level
 from .utils.print_cfg import print_cfg
 from .data_io.SessionIOHandler import print_session
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 __all__ = [
     "get_default_cfg",

@@ -75,7 +75,6 @@ class TestFixMatch:
         assert fixmatch_model.T == 0.5
         assert fixmatch_model.p_cutoff == 0.95
         assert fixmatch_model.lambda_u == 1.0
-        assert fixmatch_model.use_hard_label is True
 
         # Check optimizer
         assert fixmatch_model.optimizer is not None

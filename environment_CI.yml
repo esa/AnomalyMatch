@@ -19,7 +19,7 @@ dependencies:
   - loguru
   - matplotlib
   - numpy
-  - pandas
+  - pandas<3
   - python=3.11
   - pytorch
   - pytest
@@ -37,3 +37,5 @@ dependencies:
       - albumentations
       - efficientnet_lite_pytorch
       - efficientnet_lite0_pytorch_model
+      - fitsbolt>=0.1.6
+      - cutana>=0.2.1

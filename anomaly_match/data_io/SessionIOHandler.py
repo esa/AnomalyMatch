@@ -55,7 +55,10 @@ class SessionIOHandler:
         return self.base_save_path / session_folder
 
     def save_session(
-        self, session_tracker: SessionTracker, save_path: Optional[Path] = None, cfg=None
+        self,
+        session_tracker: SessionTracker,
+        save_path: Optional[Path] = None,
+        cfg=None,
     ) -> Path:
         """
         Save complete session data to disk.
@@ -125,6 +128,62 @@ class SessionIOHandler:
                 logger.debug("No configuration available to save")
         except Exception as e:
             logger.warning(f"Failed to save configuration: {e}")
+
+    def save_iteration_scores(
+        self,
+        session_tracker: SessionTracker,
+        unlabelled_scores: Dict[str, float] = None,
+        test_scores: Dict[str, float] = None,
+        save_path: Optional[Path] = None,
+    ) -> None:
+        """
+        Save per-sample scores for the current iteration.
+
+        Saves unlabelled data scores and test set scores (if available) as CSV files.
+        Updates the session tracker with the file paths.
+
+        Args:
+            session_tracker: SessionTracker instance to update.
+            unlabelled_scores: Dict mapping filename to anomaly score for unlabelled data.
+            test_scores: Dict mapping filename to anomaly score for test set.
+            save_path: Optional custom save path. If None, uses default session path.
+        """
+        if save_path is None:
+            save_path = self.get_session_save_path(session_tracker)
+
+        save_path.mkdir(parents=True, exist_ok=True)
+        scores_dir = save_path / "iteration_scores"
+        scores_dir.mkdir(exist_ok=True)
+
+        iteration_num = (
+            len(session_tracker.session_iterations) - 1 if session_tracker.session_iterations else 0
+        )
+
+        # Save unlabelled scores
+        if unlabelled_scores is not None and len(unlabelled_scores) > 0:
+            unlabelled_df = pd.DataFrame(
+                list(unlabelled_scores.items()), columns=["filename", "score"]
+            )
+            unlabelled_path = scores_dir / f"unlabelled_scores_iter_{iteration_num}.csv"
+            try:
+                unlabelled_df.to_csv(unlabelled_path, index=False)
+                session_tracker.update_unlabelled_scores_path(str(unlabelled_path))
+                logger.debug(
+                    f"Saved {len(unlabelled_scores)} unlabelled scores to: {unlabelled_path}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to save unlabelled scores: {e}")
+
+        # Save test scores
+        if test_scores is not None and len(test_scores) > 0:
+            test_df = pd.DataFrame(list(test_scores.items()), columns=["filename", "score"])
+            test_path = scores_dir / f"test_scores_iter_{iteration_num}.csv"
+            try:
+                test_df.to_csv(test_path, index=False)
+                session_tracker.update_test_scores_path(str(test_path))
+                logger.debug(f"Saved {len(test_scores)} test scores to: {test_path}")
+            except Exception as e:
+                logger.warning(f"Failed to save test scores: {e}")
 
     def save_model_checkpoint(
         self,
@@ -207,6 +266,11 @@ class SessionIOHandler:
             model.eval_model.module if hasattr(model.eval_model, "module") else model.eval_model
         )
 
+        # Get fitsbolt config if present (DotMap pickles directly)
+        fitsbolt_cfg = getattr(cfg, "fitsbolt_cfg", None)
+        if fitsbolt_cfg is not None:
+            logger.debug("Including fitsbolt config in model checkpoint")
+
         # Create save state
         save_state = {
             "train_model": train_model.state_dict(),
@@ -218,7 +282,8 @@ class SessionIOHandler:
             "best_eval_acc": model.best_eval_acc,
             "best_it": model.best_it,
             "last_normalisation_method": getattr(model, "last_normalisation_method", None),
-            "normalisation_method": cfg.normalisation_method,
+            "normalisation_method": cfg.normalisation.normalisation_method,
+            "fitsbolt_cfg": fitsbolt_cfg,
         }
 
         # Save model
@@ -309,22 +374,36 @@ class SessionIOHandler:
                 model.best_it = checkpoint["best_it"]
 
             # Handle normalisation method updates
+            # Checkpoints store two fields (both should have the same value in normal operation):
+            # - "last_normalisation_method": from model.last_normalisation_method (what model was trained with)
+            # - "normalisation_method": from cfg.normalisation.normalisation_method (config at save time)
+            # We prefer "last_normalisation_method" (actual training method) over config value
+            # Note: last_normalisation_method can be None if model was saved before first training
             normalisation_updated = False
-            if "last_normalisation_method" in checkpoint:
-                cfg.normalisation_method = checkpoint["normalisation_method"]
-                model.last_normalisation_method = checkpoint["normalisation_method"]
-                normalisation_updated = True
-                logger.debug(f"Updated normalisation method to: {cfg.normalisation_method}")
-            elif "normalisation_method" in checkpoint:
-                cfg.normalisation_method = checkpoint["last_normalisation_method"]
+            if checkpoint.get("last_normalisation_method") is not None:
+                cfg.normalisation.normalisation_method = checkpoint["last_normalisation_method"]
                 model.last_normalisation_method = checkpoint["last_normalisation_method"]
                 normalisation_updated = True
                 logger.debug(
-                    f"Updated normalisation method from legacy field: {cfg.normalisation_method}"
+                    f"Updated normalisation method to: {cfg.normalisation.normalisation_method.name}"
+                )
+            elif checkpoint.get("normalisation_method") is not None:
+                cfg.normalisation.normalisation_method = checkpoint["normalisation_method"]
+                model.last_normalisation_method = checkpoint["normalisation_method"]
+                normalisation_updated = True
+                logger.debug(
+                    f"Updated normalisation method from config field: {cfg.normalisation.normalisation_method.name}"
                 )
 
             if normalisation_updated:
-                logger.info(f"Model loaded with normalisation method: {cfg.normalisation_method}")
+                logger.info(
+                    f"Model loaded with normalisation method: {cfg.normalisation.normalisation_method.name}"
+                )
+
+            # Load fitsbolt config if present in checkpoint (DotMap pickles directly)
+            if "fitsbolt_cfg" in checkpoint and checkpoint["fitsbolt_cfg"] is not None:
+                cfg.fitsbolt_cfg = checkpoint["fitsbolt_cfg"]
+                logger.debug("Loaded fitsbolt config from model checkpoint")
 
             # Update config to point to the successfully loaded model path
             cfg.model_path = load_path
@@ -413,6 +492,8 @@ class SessionIOHandler:
                 model_state_path=iter_data.get("model_state_path"),
                 num_newly_labeled_anomalous=iter_data.get("num_newly_labeled_anomalous", 0),
                 num_newly_labeled_nominal=iter_data.get("num_newly_labeled_nominal", 0),
+                unlabelled_scores_file=iter_data.get("unlabelled_scores_file"),
+                test_scores_file=iter_data.get("test_scores_file"),
             )
             session_tracker.session_iterations.append(iteration_info)
 
@@ -499,6 +580,13 @@ class SessionIOHandler:
             else model.eval_model
         )
 
+        # Get fitsbolt config if present (DotMap pickles directly)
+        fitsbolt_cfg = None
+        if cfg is not None:
+            fitsbolt_cfg = getattr(cfg, "fitsbolt_cfg", None)
+            if fitsbolt_cfg is not None:
+                logger.debug("Including fitsbolt config in training run checkpoint")
+
         # Save model state
         save_state = {
             "train_model": train_model.state_dict(),
@@ -510,6 +598,7 @@ class SessionIOHandler:
             "best_eval_acc": getattr(model, "best_eval_acc", None),
             "best_it": getattr(model, "best_it", None),
             "last_normalisation_method": getattr(model, "last_normalisation_method", None),
+            "fitsbolt_cfg": fitsbolt_cfg,
         }
 
         torch.save(save_state, save_filename)
@@ -545,7 +634,10 @@ class SessionIOHandler:
         return save_filename
 
     def save_labels_to_output_dir(
-        self, labeled_data_df: pd.DataFrame, output_dir: str, session_tracker: SessionTracker = None
+        self,
+        labeled_data_df: pd.DataFrame,
+        output_dir: str,
+        session_tracker: SessionTracker = None,
     ) -> str:
         """
         Save labeled data to the session directory if session_tracker is available,

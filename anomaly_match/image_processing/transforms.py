@@ -41,21 +41,19 @@ def get_prediction_transforms():
 
 
 def get_strong_transforms():
-    """Get strong augmentations
+    """Get strong augmentations for FixMatch.
 
-
-    Args:
-        None
+    Includes RandAugment followed by the same transforms as weak (ToTensor,
+    RandomHorizontalFlip, RandomAffine).
 
     Returns:
-        torchvision.transforms.Compose: transforms.
-        with random augmentations and horizontal flips
+        torchvision.transforms.Compose: Strong augmentation pipeline.
     """
-
     return transforms.Compose(
         [
-            RandAugment(3, 5),  # Apply RandAugment as first step
+            RandAugment(3, 5),
             transforms.ToTensor(),
-            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomAffine(0, translate=(0, 0.125)),
         ]
     )

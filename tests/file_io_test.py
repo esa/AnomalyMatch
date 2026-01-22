@@ -19,8 +19,74 @@ from anomaly_match.data_io.find_images_in_folder import (
     get_image_names_from_folder,
     get_image_paths_from_folder,
 )
-from anomaly_match.data_io.load_images import read_and_resize_image, load_images_parallel
-from anomaly_match.image_processing.NormalisationMethod import NormalisationMethod
+from anomaly_match.data_io.load_images import (
+    load_and_process_wrapper,
+    load_and_process_single_wrapper,
+)
+from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
+
+
+def _load_image_with_fitsbolt(filepath, cfg):
+    """Helper function to load image using fitsbolt with AnomalyMatch config."""
+    # Use the new wrapper function instead of directly using fitsbolt
+    return load_and_process_single_wrapper(filepath, cfg, desc="test loading", show_progress=False)
+
+
+def _load_multiple_images_with_fitsbolt(filepaths, cfg, show_progress=False):
+    """Helper function to load multiple images using fitsbolt with AnomalyMatch config."""
+    # Use the new wrapper function instead of directly using fitsbolt
+    return load_and_process_wrapper(
+        filepaths,
+        cfg,
+        desc="test loading multiple",
+        show_progress=show_progress,
+    )
+
+
+def _update_config(cfg, **kwargs):
+    """Update both the main config and fitsbolt config with the given parameters."""
+    for key, value in kwargs.items():
+        setattr(cfg, key, value)
+        if key == "size":
+            cfg.normalisation.image_size = value
+        elif key == "fits_extension":
+            cfg.normalisation.fits_extension = value
+            # When setting fits_extension to a list, automatically set up appropriate channel_combination
+            # only if channel_combination hasn't been explicitly set
+            if isinstance(value, list) and len(value) > 1:
+                # Check if channel_combination is being explicitly set in this call
+                if "channel_combination" not in kwargs:
+                    import numpy as np
+
+                    n_channels = min(3, len(value))  # Limit to 3 output channels (RGB)
+                    n_extensions = len(value)
+                    if n_extensions == n_channels:
+                        cfg.normalisation.channel_combination = np.eye(n_channels)
+                    else:
+                        # Create a combination matrix that uses the first n_channels extensions
+                        combination = np.zeros((n_channels, n_extensions))
+                        for i in range(n_channels):
+                            combination[i, i] = 1.0
+                        cfg.normalisation.channel_combination = combination
+        elif key == "channel_combination":
+            # Convert dictionary format to numpy array format for fitsbolt
+            cfg.normalisation.channel_combination = value
+        elif key == "normalisation_method":
+            cfg.normalisation.normalisation_method = value
+        elif key == "interpolation_order":
+            cfg.normalisation.interpolation_order = value
+        elif key.startswith("normalisation."):
+            # Handle nested attributes in normalisation
+            norm_key = key.split(".")[1]
+            setattr(cfg.normalisation, norm_key, value)
+            fitsbolt_key = f"norm_{norm_key}"
+            setattr(cfg.normalisation, fitsbolt_key, value)
+
+    # Clear the cached fitsbolt config to force regeneration with new parameters
+    if hasattr(cfg, "fitsbolt_cfg"):
+        delattr(cfg, "fitsbolt_cfg")
+
+    return cfg
 
 
 class TestImageIO:
@@ -35,12 +101,10 @@ class TestImageIO:
 
         cfg = get_default_cfg()
         # Override for test specific settings
-        cfg.size = None  # Default no resize (only the rgba test covers this)
-        cfg.fits_extension = None  # Default first extension
-        cfg.normalisation.maximum_value = None
-        cfg.normalisation.minimum_value = None
-        cfg.normalisation.crop_for_maximum_value = None
-        cfg.normalisation.log_calculate_minimum_value = False
+        # Add fitsbolt configuration needed by the wrapper functions
+        cfg.normalisation.image_size = None
+        cfg.normalisation.n_output_channels = 3
+
         return cfg
 
     @classmethod
@@ -204,50 +268,47 @@ class TestImageIO:
         assert len(recursive_paths) > len(image_paths)
         assert any("nested" in path for path in recursive_paths)
 
-    def test_read_and_resize_image_rgb(self, test_config):
-        """Test reading and resizing an RGB image."""
+    def test_load_and_process_images_rgb(self, test_config):
+        """Test loading and processing an RGB image."""
         # Test loading an RGB image
-        img = read_and_resize_image(self.rgb_path, cfg=test_config)
+        img = _load_image_with_fitsbolt(self.rgb_path, cfg=test_config)
         assert img.shape[2] == 3  # Should be RGB
         assert img.dtype == np.uint8
 
         # Test with resizing
-        test_config.size = (50, 50)
-        resized_img = read_and_resize_image(self.rgb_path, cfg=test_config)
-        assert resized_img.shape[:2] == test_config.size
+        _update_config(test_config, size=(50, 50))
+        resized_img = _load_image_with_fitsbolt(self.rgb_path, cfg=test_config)
+        assert resized_img.shape[:2] == test_config.normalisation.image_size
         assert resized_img.shape[2] == 3  # Still RGB
 
-    def test_read_and_resize_image_grayscale(self, test_config):
-        """Test reading and resizing a grayscale image."""
-        # Test loading a grayscale image and converting to RGB
-        img = read_and_resize_image(self.gray_path, cfg=test_config, convert_to_rgb=True)
+    def test_load_and_process_images_grayscale(self, test_config):
+        """Test loading and processing a grayscale image."""
+        # Test loading a grayscale image (fitsbolt automatically converts to RGB)
+        img = _load_image_with_fitsbolt(self.gray_path, cfg=test_config)
         assert img.shape[2] == 3  # Should be converted to RGB
+        assert img.dtype == np.uint8
 
-        # Test loading a grayscale image without converting to RGB
-        img = read_and_resize_image(self.gray_path, cfg=test_config, convert_to_rgb=False)
-        assert len(img.shape) == 2 or img.shape[2] == 1  # Should remain grayscale
-
-    def test_read_and_resize_image_rgba(self, test_config):
-        """Test reading and resizing an RGBA image."""
-        # Test loading an RGBA image and converting to RGB
-        img = read_and_resize_image(self.rgba_path, cfg=test_config)
+    def test_load_and_process_images_rgba(self, test_config):
+        """Test loading and processing an RGBA image."""
+        # Test loading an RGBA image (fitsbolt automatically converts to RGB)
+        img = _load_image_with_fitsbolt(self.rgba_path, cfg=test_config)
         assert img.shape[2] == 3  # Alpha channel should be removed
 
         # Test resizing
         target_size = (75, 75)
-        test_config.size = target_size
-        resized_img = read_and_resize_image(self.rgba_path, cfg=test_config)
+        _update_config(test_config, size=target_size)
+        resized_img = _load_image_with_fitsbolt(self.rgba_path, cfg=test_config)
         assert resized_img.shape[:2] == target_size
         assert resized_img.shape[2] == 3  # RGB
 
         # Test with fully transparent image
-        transparent_img = read_and_resize_image(self.transparent_path, cfg=test_config)
+        transparent_img = _load_image_with_fitsbolt(self.transparent_path, cfg=test_config)
         assert transparent_img.shape[2] == 3  # Should still be RGB
         # The green channel should still be present even though the pixels were transparent
         assert np.any(
             transparent_img[:, :, 1] > 0
         ), "Green channel data lost in transparent image"  # Test complex RGBA with gradient alpha
-        complex_rgba_img = read_and_resize_image(self.complex_rgba_path, cfg=test_config)
+        complex_rgba_img = _load_image_with_fitsbolt(self.complex_rgba_path, cfg=test_config)
         assert complex_rgba_img.shape[2] == 3  # Should be RGB
         # Check that gradients are preserved in RGB channels
         # Note: Using 195 as threshold since some image formats/conversions may reduce max values slightly
@@ -283,7 +344,7 @@ class TestImageIO:
         Image.fromarray(test_rgba).save(test_path)
 
         # Load and convert to RGB
-        rgb_img = read_and_resize_image(test_path, cfg=test_config, convert_to_rgb=True)
+        rgb_img = _load_image_with_fitsbolt(test_path, cfg=test_config)
 
         # Test shape and type
         assert rgb_img.shape == (height, width, 3), "RGBA should convert to RGB shape"
@@ -341,7 +402,7 @@ class TestImageIO:
         Image.fromarray(test_values).save(values_path)
 
         # Load the image and check value preservation
-        loaded_img = read_and_resize_image(values_path, cfg=test_config)
+        loaded_img = _load_image_with_fitsbolt(values_path, cfg=test_config)
 
         # Check overall shape and type
         assert loaded_img.shape == (100, 100, 3), "Shape should be preserved"
@@ -365,22 +426,18 @@ class TestImageIO:
                 assert g_diff <= max_allowed_diff, f"Green value not preserved at ({i},{j})"
                 assert b_diff <= max_allowed_diff, f"Blue value not preserved at ({i},{j})"
 
-    def test_read_and_resize_image_fits(self, test_config):
+    def test_load_image_with_fitsbolt_fits(self, test_config):
         """Test reading and resizing a FITS image."""
         # Test loading a FITS image
-        img = read_and_resize_image(self.fits_path, cfg=test_config)
+        img = _load_image_with_fitsbolt(self.fits_path, cfg=test_config)
         assert img.shape[2] == 3  # Should be converted to RGB
         assert img.dtype == np.uint8  # Should be converted to uint8
 
         # Test loading a multi-channel FITS image
-        multi_img = read_and_resize_image(self.multi_fits_path, cfg=test_config)
-        assert multi_img.shape[2] == 3  # Should have 3 channels
+        with pytest.raises(ValueError):
+            _load_image_with_fitsbolt(self.multi_fits_path, cfg=test_config)
+            # should fail as this is a 3d fits extension
 
-        # Test with resizing
-        target_size = (60, 60)
-        test_config.size = target_size
-        resized_fits = read_and_resize_image(self.multi_fits_path, cfg=test_config)
-        assert resized_fits.shape[:2] == target_size
         with fits.open(self.four_dim_fits_path) as hdul:
             if hdul[0].data.ndim == 4:
                 # Extract a 3D slice from the 4D array (first element of first dimension)
@@ -390,22 +447,19 @@ class TestImageIO:
                 fits.writeto(slice_path, slice_data, overwrite=True)
 
                 # Now test the 3D slice which should load correctly
-                slice_img = read_and_resize_image(slice_path, cfg=test_config)
-                assert slice_img.shape[2] == 3, "FITS slice data should be converted to RGB"
-                assert slice_img.dtype == np.uint8, "Should be converted to uint8"
+                # fitsbolt has no 3D fits support this will fail
+                with pytest.raises(ValueError):
+                    _load_image_with_fitsbolt(slice_path, cfg=test_config)
 
-                # Test with specific dimensions
-                target_size = (40, 40)
-                test_config.size = target_size
-                resized_slice = read_and_resize_image(slice_path, cfg=test_config)
-                assert resized_slice.shape == (40, 40, 3), "Resizing failed for 4D FITS slice"
+                # If this test fails in the future, implement further testing
+                # changing target size for example
             else:
                 # If it's not 4D, we'll skip this specific assertion
                 pytest.skip("FITS file doesn't have 4D data structure")
 
         # Test value normalization with extreme values
-        test_config.size = None  # No resizing for this test
-        extreme_img = read_and_resize_image(self.extreme_fits_path, cfg=test_config)
+        _update_config(test_config, size=None)  # No resizing for this test
+        extreme_img = _load_image_with_fitsbolt(self.extreme_fits_path, cfg=test_config)
         assert extreme_img.shape[2] == 3, "Should be converted to RGB"
         assert extreme_img.dtype == np.uint8, "Should be converted to uint8"
         assert np.min(extreme_img) >= 0, "Minimum value should be normalized to at least 0"
@@ -420,9 +474,9 @@ class TestImageIO:
     def test_fits_extension_parameter(self, test_config):
         """Test the fits_extension parameter for FITS files."""
         # Test explicit extension 0 (should be the same as default)
-        img_default = read_and_resize_image(self.fits_path, cfg=test_config)
-        test_config.fits_extension = 0
-        img_ext0 = read_and_resize_image(self.fits_path, cfg=test_config)
+        img_default = _load_image_with_fitsbolt(self.fits_path, cfg=test_config)
+        _update_config(test_config, fits_extension=0)
+        img_ext0 = _load_image_with_fitsbolt(self.fits_path, cfg=test_config)
         assert np.array_equal(img_default, img_ext0)
 
         # For multi_fits_path, we created it with 3 channels in the test setup
@@ -431,8 +485,8 @@ class TestImageIO:
             # Opening directly to check the contents
             with fits.open(self.multi_fits_path) as hdul:
                 if len(hdul) > 1:  # Only test if there are multiple extensions
-                    test_config.fits_extension = 1
-                    img_ext1 = read_and_resize_image(self.multi_fits_path, cfg=test_config)
+                    _update_config(test_config, fits_extension=1)
+                    img_ext1 = _load_image_with_fitsbolt(self.multi_fits_path, cfg=test_config)
                     # Should be different from extension 0
                     assert not np.array_equal(img_default, img_ext1)
 
@@ -464,12 +518,12 @@ class TestImageIO:
         hdul.writeto(named_fits_path, overwrite=True)
 
         # Now test accessing by string name
-        test_config.fits_extension = "PRIMARY"
-        img_primary = read_and_resize_image(named_fits_path, cfg=test_config)
-        test_config.fits_extension = "SCIENCE"
-        img_science = read_and_resize_image(named_fits_path, cfg=test_config)
-        test_config.fits_extension = "ERROR"
-        img_error = read_and_resize_image(named_fits_path, cfg=test_config)
+        _update_config(test_config, fits_extension="PRIMARY")
+        img_primary = _load_image_with_fitsbolt(named_fits_path, cfg=test_config)
+        _update_config(test_config, fits_extension="SCIENCE")
+        img_science = _load_image_with_fitsbolt(named_fits_path, cfg=test_config)
+        _update_config(test_config, fits_extension="ERROR")
+        img_error = _load_image_with_fitsbolt(named_fits_path, cfg=test_config)
 
         # Verify that each extension has different data
         assert not np.array_equal(img_primary, img_science)
@@ -477,12 +531,12 @@ class TestImageIO:
         assert not np.array_equal(img_science, img_error)
 
         # Test accessing using index vs name (should be equivalent)
-        test_config.fits_extension = 0
-        img_primary_idx = read_and_resize_image(named_fits_path, cfg=test_config)
-        test_config.fits_extension = 1
-        img_science_idx = read_and_resize_image(named_fits_path, cfg=test_config)
-        test_config.fits_extension = 2
-        img_error_idx = read_and_resize_image(named_fits_path, cfg=test_config)
+        _update_config(test_config, fits_extension=0)
+        img_primary_idx = _load_image_with_fitsbolt(named_fits_path, cfg=test_config)
+        _update_config(test_config, fits_extension=1)
+        img_science_idx = _load_image_with_fitsbolt(named_fits_path, cfg=test_config)
+        _update_config(test_config, fits_extension=2)
+        img_error_idx = _load_image_with_fitsbolt(named_fits_path, cfg=test_config)
 
         assert np.array_equal(img_primary, img_primary_idx)
         assert np.array_equal(img_science, img_science_idx)
@@ -492,21 +546,24 @@ class TestImageIO:
         """Test error handling for invalid FITS extensions."""
         # Test out-of-bounds extension index
         with pytest.raises(IndexError):
-            test_config.fits_extension = 999
-            read_and_resize_image(self.fits_path, cfg=test_config)
+            _update_config(test_config, fits_extension=999)
+            _load_image_with_fitsbolt(self.fits_path, cfg=test_config)
 
         # Test negative extension index
         with pytest.raises(IndexError):
-            test_config.fits_extension = -1
-            read_and_resize_image(self.fits_path, cfg=test_config)
+            _update_config(test_config, fits_extension=-1)
+            _load_image_with_fitsbolt(self.fits_path, cfg=test_config)
 
-    def test_load_images_parallel(self, test_config):
+    def test_load_and_process_images(self, test_config):
         """Test loading multiple images in parallel."""
         # Make a copy of the file list to avoid permission issues
-        test_files = self.image_files[:5]  # Include a variety of image types
-
+        test_files = self.image_files[
+            2:5
+        ]  # Include a variety of image with the same number of channels
         # Test basic functionality with multiple file types
-        results = load_images_parallel(test_files, cfg=test_config, show_progress=False)
+        results = _load_multiple_images_with_fitsbolt(
+            test_files, cfg=test_config, show_progress=False
+        )
 
         # Should return all the files we passed
         assert len(results) == len(test_files)
@@ -519,29 +576,15 @@ class TestImageIO:
 
         # Test with resizing
         target_size = (30, 30)
-        test_config.size = target_size
-        resized_results = load_images_parallel(test_files, cfg=test_config, show_progress=False)
+        _update_config(test_config, size=target_size)
+        resized_results = _load_multiple_images_with_fitsbolt(
+            test_files, cfg=test_config, show_progress=False
+        )
 
         # Check that all resized images have the correct size
         for filepath, img in resized_results:
             assert img.shape[:2] == target_size, f"Image {filepath} wasn't resized correctly"
             assert img.shape[2] == 3, f"Image {filepath} should be RGB after resize"
-
-        # Test with a custom transform function
-        def custom_transform(image):
-            # Simple transform that inverts the image
-            return 255 - image
-
-        transformed_results = load_images_parallel(
-            test_files, cfg=test_config, transform=custom_transform, show_progress=False
-        )
-
-        # Test that the transform was applied
-        for i, (filepath, img) in enumerate(transformed_results):
-            # Compare with original loaded image
-            original_img = read_and_resize_image(filepath, cfg=test_config)
-            # Check that some pixels are different (transformation was applied)
-            assert not np.array_equal(original_img, img), f"Transform not applied to {filepath}"
 
     def test_fits_multiple_extensions(self, test_config):
         """Test loading and combining multiple FITS extensions."""
@@ -572,18 +615,18 @@ class TestImageIO:
 
         # Test loading with list of integer indices
         int_indices = [0, 1, 2]
-        test_config.fits_extension = int_indices
-        combined_img1 = read_and_resize_image(multi_ext_path, cfg=test_config)
+        _update_config(test_config, fits_extension=int_indices)
+        combined_img1 = _load_image_with_fitsbolt(multi_ext_path, cfg=test_config)
 
         # Test loading with list of string names
         str_names = ["PRIMARY", "EXT1", "EXT2"]
-        test_config.fits_extension = str_names
-        combined_img2 = read_and_resize_image(multi_ext_path, cfg=test_config)
+        _update_config(test_config, fits_extension=str_names)
+        combined_img2 = _load_image_with_fitsbolt(multi_ext_path, cfg=test_config)
 
         # Test loading with mixed list of indices and names
         mixed_list = [0, "EXT2", "EXT1"]
-        test_config.fits_extension = mixed_list
-        combined_img3 = read_and_resize_image(multi_ext_path, cfg=test_config)
+        _update_config(test_config, fits_extension=mixed_list)
+        combined_img3 = _load_image_with_fitsbolt(multi_ext_path, cfg=test_config)
 
         # All should result in RGB images with shape (50, 50, 3)
         assert combined_img1.shape == (50, 50, 3), "Combined image should have shape (50, 50, 3)"
@@ -620,46 +663,18 @@ class TestImageIO:
 
         # Test that combining different shapes raises a ValueError
         with pytest.raises(ValueError) as e_info:
-            test_config.fits_extension = [0, 1]
-            read_and_resize_image(diff_shapes_path, cfg=test_config)
+            _update_config(test_config, fits_extension=[0, 1], channel_combination=None)
+            _load_image_with_fitsbolt(diff_shapes_path, cfg=test_config)
 
-        # Validate the error message contains information about the shapes
-        assert "different shapes" in str(e_info.value), "Error should mention different shapes"
-        assert "(50, 50)" in str(e_info.value), "Error should include the first shape"
-        assert "(60, 40)" in str(e_info.value), "Error should include the second shape"
+        # Validate the error message contains information about channel mismatch
+        error_message = str(e_info.value)
+        assert (
+            "channel" in error_message.lower() or "extension" in error_message.lower()
+        ), f"Error should mention channel or extension mismatch: {error_message}"
+        # could expand test if needed with more extensions
 
-        # Test with more than 3 extensions (should use only first 3 as RGB channels)
-        many_ext_path = os.path.join(self.test_dir, "many_extensions.fits")
-
-        # Create 5 extensions with same shape but different patterns
-        hdu_list = [fits.PrimaryHDU(np.ones((40, 40), dtype=np.float32) * 0.1)]
-        for i in range(4):
-            data = np.ones((40, 40), dtype=np.float32) * (i + 1) * 0.2
-            data[10 + i * 5 : 20 + i * 5, 10 + i * 5 : 20 + i * 5] = (
-                0.9  # Different pattern in each
-            )
-            hdu = fits.ImageHDU(data)
-            hdu.header["EXTNAME"] = f"EXT{i + 1}"
-            hdu_list.append(hdu)
-
-        # Create FITS file with 5 extensions
-        many_hdul = fits.HDUList(hdu_list)
-        many_hdul.writeto(many_ext_path, overwrite=True)
-
-        # Try loading all 5 extensions (should use only first 3)
-        with pytest.warns(UserWarning):  # Should warn about using only first 3
-            test_config.fits_extension = [0, 1, 2, 3, 4]
-            five_ext_img = read_and_resize_image(many_ext_path, cfg=test_config)
-
-        # Should still be RGB image with 3 channels
-        assert five_ext_img.shape == (
-            40,
-            40,
-            3,
-        ), "Image should have 3 channels even with >3 extensions"
-
-    def test_load_images_parallel_fits_extension(self, test_config):
-        """Test that load_images_parallel correctly passes the fits_extension parameter."""
+    def test_load_and_process_images_fits_extension(self, test_config):
+        """Test that load_and_process_images correctly passes the fits_extension parameter."""
         # Create a test FITS file with multiple extensions of the same shape
         multi_ext_path = os.path.join(self.test_dir, "multi_extension_parallel.fits")
 
@@ -692,17 +707,23 @@ class TestImageIO:
         # List of files to test
         test_files = [multi_ext_path, multi_ext_path2]
 
-        # Test load_images_parallel with a single extension index
-        test_config.fits_extension = 0
-        results_ext0 = load_images_parallel(test_files, cfg=test_config, show_progress=False)
+        # Test load_and_process_images with a single extension index
+        _update_config(test_config, fits_extension=0)
+        results_ext0 = _load_multiple_images_with_fitsbolt(
+            test_files, cfg=test_config, show_progress=False
+        )
 
-        # Test load_images_parallel with a different extension index
-        test_config.fits_extension = 1
-        results_ext1 = load_images_parallel(test_files, cfg=test_config, show_progress=False)
+        # Test load_and_process_images with a different extension index
+        _update_config(test_config, fits_extension=1)
+        results_ext1 = _load_multiple_images_with_fitsbolt(
+            test_files, cfg=test_config, show_progress=False
+        )
 
-        # Test load_images_parallel with a list of extensions
-        test_config.fits_extension = [0, 1, 2]
-        results_combined = load_images_parallel(test_files, cfg=test_config, show_progress=False)
+        # Test load_and_process_images with a list of extensions
+        _update_config(test_config, fits_extension=[0, 1, 2])
+        results_combined = _load_multiple_images_with_fitsbolt(
+            test_files, cfg=test_config, show_progress=False
+        )
 
         # Verify that all files were loaded
         assert len(results_ext0) == len(test_files)
@@ -746,8 +767,10 @@ class TestImageIO:
         ), "Combined extensions should differ from single extension"
 
         # Also test with string extension names
-        test_config.fits_extension = ["PRIMARY", "EXT1", "EXT2"]
-        results_named = load_images_parallel(test_files, cfg=test_config, show_progress=False)
+        _update_config(test_config, fits_extension=["PRIMARY", "EXT1", "EXT2"])
+        results_named = _load_multiple_images_with_fitsbolt(
+            test_files, cfg=test_config, show_progress=False
+        )
         img_named = results_named[0][1]
 
         # Should be identical to using numeric indices [0, 1, 2]
@@ -772,15 +795,15 @@ class TestImageIO:
         Image.fromarray(test_values).save(test_path)
 
         # Test with no normalisation (default)
-        test_config.normalisation_method = NormalisationMethod.CONVERSION_ONLY
-        img_none = read_and_resize_image(test_path, cfg=test_config)
+        _update_config(test_config, normalisation_method=NormalisationMethod.CONVERSION_ONLY)
+        img_none = _load_image_with_fitsbolt(test_path, cfg=test_config)
         assert np.array_equal(
             img_none, test_values
         ), "NONE normalisation should preserve original values"
 
         # Test with LOG normalisation
-        test_config.normalisation_method = NormalisationMethod.LOG
-        img_log = read_and_resize_image(test_path, cfg=test_config)
+        _update_config(test_config, normalisation_method=NormalisationMethod.LOG)
+        img_log = _load_image_with_fitsbolt(test_path, cfg=test_config)
         assert not np.array_equal(img_log, test_values), "LOG normalisation should modify values"
         # Log normalisation should enhance darker regions
         # Check that dark regions (low values) have relatively higher values after log normalisation
@@ -790,8 +813,8 @@ class TestImageIO:
         assert ratio_dark > 1, "LOG normalisation should enhance dark regions"
 
         # Test with ZSCALE normalisation
-        test_config.normalisation_method = NormalisationMethod.ZSCALE
-        img_zscale = read_and_resize_image(test_path, cfg=test_config)
+        _update_config(test_config, normalisation_method=NormalisationMethod.ZSCALE)
+        img_zscale = _load_image_with_fitsbolt(test_path, cfg=test_config)
         assert not np.array_equal(
             img_zscale, test_values
         ), "ZSCALE normalisation should modify values"
@@ -842,8 +865,8 @@ class TestImageIO:
         Image.fromarray(large_img).save(large_path)
 
         # Set target size to 100x100 for both images
-        test_config.size = (100, 100)
-        test_config.normalisation_method = NormalisationMethod.CONVERSION_ONLY
+        _update_config(test_config, size=(100, 100))
+        _update_config(test_config, normalisation_method=NormalisationMethod.CONVERSION_ONLY)
 
         # Define the expected center pixel colors for each quadrant after resizing
         # We're checking center points of each quadrant to avoid edge effects
@@ -859,10 +882,10 @@ class TestImageIO:
 
         # Check each interpolation order (0-5)
         for order in range(6):
-            test_config.interpolation_order = order
+            _update_config(test_config, interpolation_order=order)
 
             # Resize small image (40x40 → 100x100) - upsampling
-            resized_small = read_and_resize_image(small_path, cfg=test_config)
+            resized_small = _load_image_with_fitsbolt(small_path, cfg=test_config)
             upscaled_results.append(resized_small)
             assert resized_small.shape == (
                 100,
@@ -874,7 +897,7 @@ class TestImageIO:
             ), f"Resized small image should be uint8 with order {order}"
 
             # Resize large image (200x200 → 100x100) - downsampling
-            resized_large = read_and_resize_image(large_path, cfg=test_config)
+            resized_large = _load_image_with_fitsbolt(large_path, cfg=test_config)
             assert resized_large.shape == (
                 100,
                 100,
@@ -978,3 +1001,65 @@ class TestImageIO:
                 assert not np.array_equal(
                     upscaled_results[i - 1], upscaled_results[i]
                 ), f"Order {i - 1} and order {i} interpolation should produce different results"
+
+    def test_fits_combination_configurations(self, test_config):
+        """Test different configurations of the fits_combination dictionary."""
+        # Create a FITS file with 4 extensions for testing
+        test_data = []
+        for i in range(4):
+            data = np.zeros((31, 31), dtype=np.float32)
+            data[20:30, 20:30] = float(i + 1)  # Different value in each extension
+            test_data.append(data)
+
+        multi_ext_fits_path = os.path.join(self.test_dir, "multi_ext.fits")
+        primary_hdu = fits.PrimaryHDU(test_data[0])
+        hdul = fits.HDUList([primary_hdu])
+        for i, data in enumerate(test_data[1:], 1):
+            hdul.append(fits.ImageHDU(data, name=f"EXT{i}"))
+        hdul.writeto(multi_ext_fits_path, overwrite=True)
+        self.image_files.append(multi_ext_fits_path)  # Add to cleanup list
+        _update_config(test_config, normalisation_method=NormalisationMethod.CONVERSION_ONLY)
+        # Test 1: None combination dictionary (should use first three extensions as default)
+        _update_config(test_config, fits_extension=[0, 1, 2])  # Use first three extensions
+        _update_config(test_config, channel_combination=None)
+        img_empty = _load_image_with_fitsbolt(multi_ext_fits_path, cfg=test_config)
+        assert img_empty.shape[2] == 3
+        # Check if the first three extensions are used directly
+        assert np.any(img_empty[:, :, :] > 0)  # Should have non-zero values
+
+        # Test 2: Combination with all 4 extensions
+        _update_config(test_config, fits_extension=[0, 1, 2, 3])
+        _update_config(
+            test_config,
+            channel_combination=np.array(
+                [
+                    [0.5, 0.5, 0, 0],  # Combine ext 0 and 1
+                    [0, 0, 1, 0],  # Just ext 2
+                    [0, 0, 0, 1],  # Just ext 3
+                ]
+            ),
+        )
+        img_four = _load_image_with_fitsbolt(multi_ext_fits_path, cfg=test_config)
+        assert img_four.shape[2] == 3
+        # Check if red channel contains combination of first two extensions
+        assert np.any(img_four[:, :, 0] > 0)  # Red channel should have data
+        assert np.any(img_four[:, :, 1] > 0)  # Green channel should have data
+        assert np.any(img_four[:, :, 2] > 0)  # Blue channel should have data
+
+        # Test 3: Combination with 2 extensions only
+        _update_config(test_config, fits_extension=[0, 1])
+        _update_config(
+            test_config,
+            channel_combination=np.array(
+                [
+                    [1, 0],  # Just ext 0
+                    [0.5, 0.5],  # Mix of both
+                    [0, 1],  # Just ext 1
+                ]
+            ),
+        )
+        img_two = _load_image_with_fitsbolt(multi_ext_fits_path, cfg=test_config)
+        assert img_two.shape[2] == 3
+        assert np.any(img_two[:, :, 0] > 0)  # Red channel should have data
+        assert np.any(img_two[:, :, 1] > 0)  # Green channel should have data
+        assert np.any(img_two[:, :, 2] > 0)  # Blue channel should have data

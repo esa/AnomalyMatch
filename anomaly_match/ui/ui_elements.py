@@ -11,7 +11,7 @@ from loguru import logger
 
 from anomaly_match import __version__
 from anomaly_match.ui.memory_monitor import MemoryMonitor
-from anomaly_match.image_processing.NormalisationMethod import NormalisationMethod
+from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 
 HTML_setup = HTML(
     """
@@ -80,7 +80,12 @@ additional_button_names = [
     "Save Labels",
     "Load Top Files",
 ]
-transform_button_names = ["Invert Image", "Restore", "Toggle Unsharp Mask"]
+transform_button_config = {
+    "invert": "Invert",
+    "restore": "Restore",
+    "unsharp_mask": "Unsharp Mask",
+    "full_res": "Show Full Resolution",
+}
 normalisation_button_names = ["Normalisation"]
 
 
@@ -147,7 +152,7 @@ def create_ui_elements():
     remember_button = Button(
         description="Remember",
         button_style="warning",
-        layout=widgets.Layout(background_color="black"),
+        layout=widgets.Layout(background_color="black", width="auto", flex="1 1 auto"),
         style={"button_color": ORANGE_COLOR},
     )
 
@@ -161,7 +166,7 @@ def create_ui_elements():
 
     # Add a dropdown for normalisation methods
     normalisation_dropdown = widgets.Dropdown(
-        options=NormalisationMethod.get_dropdown_options(),
+        options=NormalisationMethod.get_options(),
         value=NormalisationMethod.CONVERSION_ONLY,
         description=normalisation_button_names[0],
         layout=widgets.Layout(background_color="black", width="250px"),
@@ -171,15 +176,16 @@ def create_ui_elements():
     )
 
     # Update transform buttons with white background but black text
-    transform_buttons = [
-        Button(
-            description=w,
+    # Use flex layout to make buttons share space evenly
+    transform_buttons = {
+        key: Button(
+            description=label,
             button_style="success",
-            layout=widgets.Layout(background_color="black"),
+            layout=widgets.Layout(background_color="black", width="auto", flex="1 1 auto"),
             style={"button_color": WHITE_COLOR, "text_color": "black"},
         )
-        for w in transform_button_names
-    ]
+        for key, label in transform_button_config.items()
+    }
 
     # Sliders with adjusted widths for side-by-side display
     brightness_slider = widgets.FloatSlider(
@@ -257,9 +263,10 @@ def create_ui_elements():
     transform_controls = VBox(
         [
             HBox(
-                transform_buttons + [remember_button]
-            ),  # Add remember button to transform controls
-            slider_row,  # Single row with both sliders and RGB toggles
+                list(transform_buttons.values()) + [remember_button],
+                layout=widgets.Layout(background_color="black", width="600px"),
+            ),
+            slider_row,
         ],
         layout=widgets.Layout(background_color="black"),
     )
@@ -299,9 +306,9 @@ def create_ui_elements():
 
     train_iteration_slider = widgets.IntSlider(
         value=50,
-        min=50,
-        max=2000,
-        step=50,
+        min=10,
+        max=600,
+        step=20,
         description="Train Iterations",
         continuous_update=True,
         style={
@@ -514,20 +521,21 @@ def attach_click_listeners(widget):
 
     # Decision buttons
     def mark_anomalous(_):
-        widget.session.label_image(widget.current_index, "anomaly")
+        widget.session.label_image(widget.preview.current_index, "anomaly")
         widget.update_image_UI_label()
 
     def mark_nominal(_):
-        widget.session.label_image(widget.current_index, "normal")
+        widget.session.label_image(widget.preview.current_index, "normal")
         widget.update_image_UI_label()
 
     widget.ui["decision_buttons"][0].on_click(mark_anomalous)
     widget.ui["decision_buttons"][1].on_click(mark_nominal)
 
     # Transform buttons
-    widget.ui["transform_buttons"][0].on_click(lambda _: widget.toggle_invert_image())
-    widget.ui["transform_buttons"][1].on_click(lambda _: widget.restore_image())
-    widget.ui["transform_buttons"][2].on_click(lambda _: widget.toggle_unsharp_mask())
+    widget.ui["transform_buttons"]["invert"].on_click(lambda _: widget.toggle_invert_image())
+    widget.ui["transform_buttons"]["restore"].on_click(lambda _: widget.restore_image())
+    widget.ui["transform_buttons"]["unsharp_mask"].on_click(lambda _: widget.toggle_unsharp_mask())
+    widget.ui["transform_buttons"]["full_res"].on_click(lambda _: widget.show_full_resolution())
 
     # Brightness/Contrast observers
     widget.ui["brightness_slider"].observe(widget.adjust_brightness_contrast, names="value")

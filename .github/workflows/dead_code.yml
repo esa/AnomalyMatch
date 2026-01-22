@@ -1,0 +1,44 @@
+#   Copyright (c) European Space Agency, 2025.
+#
+#   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
+#   is part of this source code package. No part of the package, including
+#   this file, may be copied, modified, propagated, or distributed except according to
+#   the terms contained in the file 'LICENCE.txt'.
+name: Dead Code Detection
+
+on: [pull_request]
+
+jobs:
+  vulture-strict:
+    name: Vulture (100% confidence - blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Install vulture
+        run: pip install vulture>=2.10
+      - name: Run vulture (100% confidence)
+        run: |
+          echo "Running vulture dead code detection (100% confidence - blocking)..."
+          vulture anomaly_match/ .vulture_whitelist.py --min-confidence 100
+
+  vulture-warnings:
+    name: Vulture (60% confidence - not required)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Install vulture
+        run: pip install vulture>=2.10
+      - name: Run vulture (60% confidence)
+        run: |
+          echo "Running vulture dead code detection (60% confidence)..."
+          echo "This check fails if potential dead code is found, but is not required to pass."
+          echo ""
+          vulture anomaly_match/ .vulture_whitelist.py --min-confidence 60

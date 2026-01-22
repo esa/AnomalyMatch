@@ -14,50 +14,65 @@ import torch
 import numpy as np
 from loguru import logger
 from concurrent.futures import ThreadPoolExecutor
-import pandas as pd
 from tqdm import tqdm
 import time
+
+from anomaly_match.data_io.load_images import (
+    load_and_process_single_wrapper,
+)
 
 from prediction_utils import (
     load_model,
     save_results,
     process_batch_predictions,
+    estimate_batch_size,
+    clear_gpu_cache_if_needed,
 )
 
 from anomaly_match.image_processing.transforms import (
     get_prediction_transforms,
 )
-from anomaly_match.data_io.load_images import read_and_resize_image
-
-# Configure logging
-logs_dir = os.path.join(os.path.dirname(__file__), "logs")
-os.makedirs(logs_dir, exist_ok=True)
-logger.remove()
-logger.add(
-    os.path.join(logs_dir, "prediction_thread_{time}.log"),
-    rotation="1 MB",
-    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
-    level="DEBUG",
-)
 
 
 def load_and_preprocess(args):
-    filename, transform, cfg = args
-    image = read_and_resize_image(
-        filename,
-        cfg=cfg,
-        convert_to_rgb=True,
+    """Load and preprocess a single image file.
+
+    Note: Returns numpy array, not tensor. Tensor conversion is done on main
+    thread to avoid CUDA context issues in ThreadPoolExecutor.
+    """
+    filepath, cfg = args
+    image = load_and_process_single_wrapper(
+        filepath,
+        cfg,
+        desc="image prediction process",
+        show_progress=False,
+        prediction=True,
     )
-    image = transform(image)
-    return filename, image
+    return filepath, image
 
 
 def evaluate_files(file_list, cfg, top_n=1000, batch_size=1000, max_workers=1):
-    """Evaluate files in batches and return top N scores."""
+    """Evaluate files in batches and return top N scores.
+    file list is a list of cfg.prediction_search_dir+filename
+    """
     logger.trace(f"{len(file_list)} unlabeled images remain.")
 
+    # Load model first - this loads the fitsbolt config from the checkpoint
+    model = load_model(cfg)
+    model.eval()
+
+    # Require fitsbolt config from model checkpoint for consistent predictions
+    if not hasattr(cfg, "fitsbolt_cfg") or cfg.fitsbolt_cfg is None:
+        raise ValueError(
+            "Fitsbolt config not found in model checkpoint. "
+            "Please retrain the model with the updated version to include normalisation settings."
+        )
+    logger.debug("Using fitsbolt config loaded from model checkpoint")
+
     transform = get_prediction_transforms()
-    args_list = [(filename, transform, cfg) for filename in file_list]
+
+    # I/O in ThreadPool (returns numpy arrays)
+    args_list = [(filepath, cfg) for filepath in file_list]
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         results = list(
@@ -68,26 +83,31 @@ def evaluate_files(file_list, cfg, top_n=1000, batch_size=1000, max_workers=1):
             )
         )
 
-    model = load_model(cfg)
-    model.eval()
-
     # Process in batches
     scores_list = []
     filenames_list = []
     imgs_list = []
 
-    for i in range(0, len(results), batch_size):
+    for batch_idx, i in enumerate(range(0, len(results), batch_size)):
         batch = results[i : i + batch_size]  # noqa: E203
         batch_filenames = [item[0] for item in batch]
-        batch_images = [item[1] for item in batch]
+        numpy_images = [item[1] for item in batch]
 
-        # Stack images into a batch tensor
-        images = torch.stack(batch_images, dim=0)
+        # Tensor conversion on main thread (not in ThreadPool)
+        batch_tensors = [transform(img) for img in numpy_images]
+        images = torch.stack(batch_tensors, dim=0)
+        del numpy_images, batch_tensors  # Free memory before CUDA ops
+
+        # CUDA inference with explicit cleanup
         batch_scores, batch_imgs = process_batch_predictions(model, images)
+        del images  # Free CUDA tensor reference
 
         scores_list.append(batch_scores)
         filenames_list.extend(batch_filenames)
         imgs_list.append(batch_imgs)
+
+        # Periodic GPU cache clearing to prevent fragmentation
+        clear_gpu_cache_if_needed(batch_idx)
 
     # Concatenate results
     all_scores = np.concatenate(scores_list)
@@ -120,6 +140,12 @@ def main():
         logger.error(f"Failed to load config from {args.config_path}: {e}")
         sys.exit(1)
 
+    logger.info("Setting batch size")
+    batch_size = (
+        estimate_batch_size(cfg) if cfg.N_batch_prediction is None else cfg.N_batch_prediction
+    )
+    logger.info(f"Batch size set to: {batch_size}")
+
     logger.info(f"Loading file list from {args.file_list_path}")
     with open(args.file_list_path, "r") as f:
         group_list = [line.strip() for line in f]
@@ -128,59 +154,27 @@ def main():
         file_list = [line.strip() for line in f]
     logger.info(f"Found {len(file_list)} files to process")
 
-    # Load existing results if they exist
-    output_csv_path = os.path.join(cfg.output_dir, f"{cfg.save_file}_top{args.top_n}.csv")
-    output_npy_path = os.path.join(cfg.output_dir, f"{cfg.save_file}_top{args.top_n}.npy")
-
-    if os.path.exists(output_csv_path) and os.path.exists(output_npy_path):
-        logger.info("Found existing results, loading...")
-        existing_df = pd.read_csv(output_csv_path)
-        existing_filenames = existing_df["Filename"].values
-        existing_scores = existing_df["Score"].values
-
-        existing_imgs = np.load(output_npy_path)
-    else:
-        existing_filenames = np.array([])
-        existing_scores = np.array([])
-        # Define image shape: (num_samples, channels, height, width)
-        existing_imgs = np.empty((0, 3, cfg.size[0], cfg.size[1]), dtype=np.float32)
-
     logger.info("Starting evaluation...")
-    scores, filenames, imgs = evaluate_files(file_list, cfg, top_n=args.top_n)
-    logger.success(f"Evaluation complete. Computed {len(scores)} scores")
-
-    # Merge new results with existing results
-    all_filenames = np.concatenate([existing_filenames, filenames])
-    all_scores = np.concatenate([existing_scores, scores])
-    # Merge new results with existing results
-    if existing_imgs.size == 0:
-        all_imgs = imgs
-    else:
-        all_imgs = np.concatenate([existing_imgs, imgs])
-
-    # Keep only top N results
-    top_indices = np.argsort(all_scores)[::-1][: args.top_n]
-    top_filenames = all_filenames[top_indices]
-    top_scores = all_scores[top_indices]
-    top_imgs = all_imgs[top_indices]
-
-    logger.info(
-        f"Score statistics - Min: {np.min(top_scores):.4f}, Max: {np.max(top_scores):.4f}"
-        + f", Mean: {np.mean(top_scores):.4f}, Std: {np.std(top_scores):.4f}"
+    # evaluate_files calls save_results internally which handles accumulation
+    # across multiple batches - no additional merging needed here
+    scores, filenames, imgs = evaluate_files(
+        file_list, cfg, batch_size=batch_size, top_n=args.top_n
     )
-
-    logger.info(f"Saving results to {output_csv_path} and {output_npy_path}")
-
-    # Save merged results to CSV using pandas
-    df = pd.DataFrame({"Filename": top_filenames, "Score": top_scores})
-    df.to_csv(output_csv_path, index=False)
-
-    # Save merged images using numpy
-    np.save(output_npy_path, top_imgs)
+    logger.success(f"Evaluation complete. Top {len(scores)} scores returned")
 
     elapsed_time = time.time() - start_time
     logger.success(f"Script completed in {elapsed_time:.2f} seconds")
 
 
 if __name__ == "__main__":
+    # Configure logging
+    logs_dir = os.path.join(os.path.dirname(__file__), "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    logger.remove()
+    logger.add(
+        os.path.join(logs_dir, "prediction_thread_{time}.log"),
+        rotation="1 MB",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+        level="DEBUG",
+    )
     main()

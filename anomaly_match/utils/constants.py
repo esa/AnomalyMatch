@@ -6,5 +6,4 @@
 #   the terms contained in the file 'LICENCE.txt'.
 """Constants used across the AnomalyMatch module."""
 
-# Supported image file extensions
-SUPPORTED_IMAGE_EXTENSIONS = [".fits", ".jpeg", ".jpg", ".png", ".tif", ".tiff"]
+# Supported image file extensions was moved to fitsbolt

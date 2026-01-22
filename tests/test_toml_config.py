@@ -14,7 +14,7 @@ from anomaly_match.data_io.save_config import (
     save_config_toml,
     _convert_enum_to_string,
 )
-from anomaly_match.image_processing.NormalisationMethod import NormalisationMethod
+from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 
 
 class TestTOMLConfigUtils:
@@ -119,21 +119,21 @@ class TestConfigIntegration:
         assert isinstance(config, DotMap)
 
         # Check for required keys that should exist in default config
+        # Note: normalisation.image_size has no default - user must set it explicitly
         required_keys = [
-            "size",
             "net",
             "batch_size",
             "name",
-        ]  # Removed 'device' as it doesn't exist
+        ]
         for key in required_keys:
             assert key in config, f"Missing required key: {key}"
 
         # Check types
-        assert isinstance(config.size, list)
-        assert len(config.size) == 2
         assert isinstance(config.net, str)
         assert isinstance(config.batch_size, int)
         assert isinstance(config.name, str)
 
-        # Check that size contains valid dimensions
-        assert all(isinstance(dim, int) and dim > 0 for dim in config.size)
+        # Verify image_size is NOT in default config (user must set it)
+        assert (
+            "image_size" not in config.normalisation
+        ), "image_size should not have a default value"

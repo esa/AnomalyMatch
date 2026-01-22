@@ -82,19 +82,6 @@ def Equalize(img, _):
     return PIL.ImageOps.equalize(img)
 
 
-def Invert(img, _):
-    """Invert the colors of the image.
-
-    Args:
-        img: PIL Image to be processed
-        _: Unused parameter
-
-    Returns:
-        PIL Image with inverted colors
-    """
-    return PIL.ImageOps.invert(img)
-
-
 def Identity(img, v):
     """Return the image unchanged.
 
@@ -190,19 +177,6 @@ def TranslateX(img, v):
     return img.transform(img.size, PIL.Image.AFFINE, (1, 0, v, 0, 1, 0))
 
 
-def TranslateXabs(img, v):
-    """Translate the image horizontally by an absolute amount.
-
-    Args:
-        img: PIL Image to be processed
-        v: Absolute translation amount in pixels
-
-    Returns:
-        PIL Image with horizontal translation applied
-    """
-    return img.transform(img.size, PIL.Image.AFFINE, (1, 0, v, 0, 1, 0))
-
-
 def TranslateY(img, v):
     """Translate the image vertically by a percentage of its height.
 
@@ -214,19 +188,6 @@ def TranslateY(img, v):
         PIL Image with vertical translation applied
     """
     v = v * img.size[1]
-    return img.transform(img.size, PIL.Image.AFFINE, (1, 0, 0, 0, 1, v))
-
-
-def TranslateYabs(img, v):
-    """Translate the image vertically by an absolute amount.
-
-    Args:
-        img: PIL Image to be processed
-        v: Absolute translation amount in pixels
-
-    Returns:
-        PIL Image with vertical translation applied
-    """
     return img.transform(img.size, PIL.Image.AFFINE, (1, 0, 0, 0, 1, v))
 
 
@@ -334,13 +295,12 @@ class RandAugment:
         augment_list: List of available augmentation operations
     """
 
-    def __init__(self, n, m, use_ms_augmentations=False):
+    def __init__(self, n, m):
         """Initialize the RandAugment pipeline.
 
         Args:
             n: Number of augmentation operations to apply
             m: Magnitude parameter [0, 30] (deprecated)
-            use_ms_augmentations: Whether to use MS-specific augmentations (currently unused)
         """
         self.n = n
         self.m = m
@@ -365,7 +325,7 @@ class RandAugment:
 
 
 if __name__ == "__main__":
-    randaug = RandAugment(3, 5, True)
+    randaug = RandAugment(3, 5)
     test_img = np.zeros([32, 32, 13], dtype="uint8")
     print(randaug)
 

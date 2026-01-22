@@ -180,7 +180,7 @@ def generate_detection_data(total_samples=10000, total_anomalies=100):
 
 
 # For score vs user score grid plot
-def generate_grid_mock_data(n_samples=500):
+def generate_grid_mock_data(n_samples=15000):
     """Generate mock data for testing the score vs user score grid plot."""
     # Generate random scores between 0 and 1
     ml_scores = np.random.beta(2, 2, n_samples)  # Using beta distribution for better spread
