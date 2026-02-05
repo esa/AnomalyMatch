@@ -21,7 +21,7 @@ dependencies:
   - numpy
   - pandas<3
   - python=3.11
-  - pytorch
+  - pytorch>=2.6
   - pytest
   - pytest-asyncio>=0.23.0
   - pyturbojpeg

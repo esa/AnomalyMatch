@@ -50,7 +50,7 @@ dependencies = [
     "scikit-image",
     "fitsbolt>=0.1.6",
     "toml",
-    "torch",
+    "torch>=2.6",
     "torchvision",
     "tqdm",
     "zarr>=3.0.0b0",

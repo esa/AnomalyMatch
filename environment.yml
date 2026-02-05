@@ -22,7 +22,7 @@ dependencies:
   - numpy
   - pandas<3
   - python=3.11
-  - pytorch
+  - pytorch>=2.6
   - pytorch-cuda=12.4
   - pyturbojpeg
   - scikit-learn
