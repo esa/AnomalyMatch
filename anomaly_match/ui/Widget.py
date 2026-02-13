@@ -220,9 +220,9 @@ class Widget:
 
                     # Handle completion message
                     if completed and total_time_str:
-                        self.ui["train_label"].value = (
-                            f"Search complete in {total_time_str} ({final_speed:.1f} img/sec)"
-                        )
+                        self.ui[
+                            "train_label"
+                        ].value = f"Search complete in {total_time_str} ({final_speed:.1f} img/sec)"
                         return
 
                     # Handle batch update with ETA information
@@ -238,15 +238,15 @@ class Widget:
                             self.ui["train_label"].value = message
                         else:
                             # Early in the process when ETA isn't available yet
-                            self.ui["train_label"].value = (
-                                f"Evaluating files... Batch: {batch}/{num_batches}"
-                            )
+                            self.ui[
+                                "train_label"
+                            ].value = f"Evaluating files... Batch: {batch}/{num_batches}"
                     else:
                         # Regular evaluation updates (not used in this function but keeping for completeness)
                         if eta_str:
-                            self.ui["train_label"].value = (
-                                f"Evaluating... {batch}/{num_batches} | ETA: {eta_str}"
-                            )
+                            self.ui[
+                                "train_label"
+                            ].value = f"Evaluating... {batch}/{num_batches} | ETA: {eta_str}"
                         else:
                             self.ui["train_label"].value = f"Evaluating... {batch}/{num_batches}"
 
@@ -362,7 +362,6 @@ class Widget:
             self.ui["gallery"].clear_output(wait=True)
             try:
                 if self.cfg.test_ratio > 0:
-
                     # Show mispredicted images
                     mispredicted_images = []
                     image_text = []
@@ -434,7 +433,7 @@ class Widget:
                         ax1 = plt.subplot(1, 2, 1)
                         labels, probs = eval_perf["eval/roc_data"]
                         fpr, tpr, _ = roc_curve(labels, probs)
-                        ax1.plot(fpr, tpr, "b-", label=f'ROC (AUC={eval_perf["eval/auroc"]:.3f})')
+                        ax1.plot(fpr, tpr, "b-", label=f"ROC (AUC={eval_perf['eval/auroc']:.3f})")
                         ax1.plot([0, 1], [0, 1], "r--")
                         ax1.set_title("ROC Curve", color="white")
                         ax1.grid(True, alpha=0.3)
@@ -451,7 +450,7 @@ class Widget:
                             recall,
                             precision,
                             "g-",
-                            label=f'PRC (AUC={eval_perf["eval/auprc"]:.3f})',
+                            label=f"PRC (AUC={eval_perf['eval/auprc']:.3f})",
                         )
                         ax2.set_title("Precision-Recall Curve", color="white")
                         ax2.grid(True, alpha=0.3)
@@ -546,9 +545,9 @@ class Widget:
         self.session.load_model()
 
         # Update the normalization dropdown to match the session's method
-        self.ui["normalisation_dropdown"].value = (
-            self.session.cfg.normalisation.normalisation_method
-        )
+        self.ui[
+            "normalisation_dropdown"
+        ].value = self.session.cfg.normalisation.normalisation_method
 
         with self.ui["out"]:
             logger.debug(
@@ -607,14 +606,13 @@ class Widget:
 
                         # Update display with iteration count and ETA
                         self.ui["train_label"].value = (
-                            f"Training... Iteration {iteration}/{total_iterations} | "
-                            f"ETA: {eta_str}"
+                            f"Training... Iteration {iteration}/{total_iterations} | ETA: {eta_str}"
                         )
                     else:
                         # Early iterations - no reliable ETA yet
-                        self.ui["train_label"].value = (
-                            f"Training... Iteration {iteration}/{total_iterations}"
-                        )
+                        self.ui[
+                            "train_label"
+                        ].value = f"Training... Iteration {iteration}/{total_iterations}"
 
                     last_update_time = current_time
                     last_iteration = iteration
@@ -655,9 +653,9 @@ class Widget:
 
         if self.cfg.test_ratio > 0:
             if self.session.eval_performance is not None:
-                self.ui["train_label"].value = (
-                    f"Training Complete. Eval Acc: {self.session.eval_performance['eval/top-1-acc'] * 100:.2f}%"
-                )
+                self.ui[
+                    "train_label"
+                ].value = f"Training Complete. Eval Acc: {self.session.eval_performance['eval/top-1-acc'] * 100:.2f}%"
             else:
                 self.ui["train_label"].value = "Training Complete. No evaluation performed yet."
         else:

@@ -815,9 +815,9 @@ def test_accumulate_top_n_results(test_config, monkeypatch):
             f"Image array size ({len(final_images)}) doesn't match CSV size ({len(final_scores)}). "
             f"This indicates a bug in image accumulation logic."
         )
-        assert (
-            final_images.shape[0] == top_n
-        ), f"Expected {top_n} images, got {final_images.shape[0]}"
+        assert final_images.shape[0] == top_n, (
+            f"Expected {top_n} images, got {final_images.shape[0]}"
+        )
 
 
 def test_all_predictions_accumulation(test_config, monkeypatch):
@@ -988,9 +988,9 @@ def test_top_images_preservation_across_batches(test_config, tmp_path):
     logger.info(f"All stored filenames: {all_stored_filenames}")
     # Should have 4 total predictions (2 from each batch)
     assert len(all_stored_scores) == 4, f"Expected 4 total scores, got {len(all_stored_scores)}"
-    assert (
-        len(all_stored_filenames) == 4
-    ), f"Expected 4 total filenames, got {len(all_stored_filenames)}"
+    assert len(all_stored_filenames) == 4, (
+        f"Expected 4 total filenames, got {len(all_stored_filenames)}"
+    )
 
     # Verify that all scores from both batches are present
     expected_all_scores = [0.9, 0.8, 0.6, 0.5]  # batch1: 0.9, 0.8; batch2: 0.6, 0.5
@@ -1006,12 +1006,12 @@ def test_top_images_preservation_across_batches(test_config, tmp_path):
     sorted_scores = all_stored_scores[sorted_indices]
     sorted_filenames = all_stored_filenames[sorted_indices]
 
-    assert np.allclose(
-        sorted_scores, expected_all_scores
-    ), f"Expected all scores {expected_all_scores}, got {sorted_scores}"
-    assert (
-        list(sorted_filenames) == expected_all_filenames
-    ), f"Expected all filenames {expected_all_filenames}, got {list(sorted_filenames)}"
+    assert np.allclose(sorted_scores, expected_all_scores), (
+        f"Expected all scores {expected_all_scores}, got {sorted_scores}"
+    )
+    assert list(sorted_filenames) == expected_all_filenames, (
+        f"Expected all filenames {expected_all_filenames}, got {list(sorted_filenames)}"
+    )
 
     logger.info("✅ All predictions file correctly contains data from both batches")
 
@@ -1147,7 +1147,7 @@ def test_prediction_file_type_image(test_config, monkeypatch, mixed_format_image
         with open(group_file, "r") as f:
             group_content = f.read().strip().split("\n")
             assert set(group_content) == set(image_paths), (
-                f"Wrong content in group file: {group_content}, " f"expected {image_paths}"
+                f"Wrong content in group file: {group_content}, expected {image_paths}"
             )
 
         # Verify that the file list exists and points to the group file
@@ -1155,7 +1155,7 @@ def test_prediction_file_type_image(test_config, monkeypatch, mixed_format_image
         with open(temp_file_list, "r") as f:
             content = f.read().strip()
             assert content == group_file, (
-                f"Wrong content in file list: '{content}', " f"expected '{group_file}'"
+                f"Wrong content in file list: '{content}', expected '{group_file}'"
             )
 
     finally:
@@ -1208,14 +1208,14 @@ def test_image_channel_order_rgb(test_config, tmp_path):
         f"HDF5: Red channel not highest. R={np.mean(loaded_hdf5[:, :, 0])}, "
         f"G={np.mean(loaded_hdf5[:, :, 1])}, B={np.mean(loaded_hdf5[:, :, 2])}"
     )
-    assert (
-        np.mean(loaded_hdf5[:, :, 0]) > np.mean(loaded_hdf5[:, :, 2]) + tolerance
-    ), f"HDF5: Red channel not highest vs blue. R={np.mean(loaded_hdf5[:, :, 0])}, B={np.mean(loaded_hdf5[:, :, 2])}"
+    assert np.mean(loaded_hdf5[:, :, 0]) > np.mean(loaded_hdf5[:, :, 2]) + tolerance, (
+        f"HDF5: Red channel not highest vs blue. R={np.mean(loaded_hdf5[:, :, 0])}, B={np.mean(loaded_hdf5[:, :, 2])}"
+    )
 
     # Check green channel (should be middle)
-    assert (
-        np.mean(loaded_hdf5[:, :, 1]) > np.mean(loaded_hdf5[:, :, 2]) + tolerance
-    ), f"HDF5: Green channel not higher than blue. G={np.mean(loaded_hdf5[:, :, 1])}, B={np.mean(loaded_hdf5[:, :, 2])}"
+    assert np.mean(loaded_hdf5[:, :, 1]) > np.mean(loaded_hdf5[:, :, 2]) + tolerance, (
+        f"HDF5: Green channel not higher than blue. G={np.mean(loaded_hdf5[:, :, 1])}, B={np.mean(loaded_hdf5[:, :, 2])}"
+    )
 
     logger.info(
         f"HDF5 RGB values: R={np.mean(loaded_hdf5[:, :, 0]):.1f}, "
@@ -1289,9 +1289,9 @@ def test_prediction_file_type_zarr(test_config, monkeypatch, test_zarr):
         assert script_path == "prediction_process_zarr.py", f"Wrong script called: {script_path}"
 
         # Verify the zarr file path is passed correctly
-        assert (
-            called_processes[0][3] == test_zarr
-        ), f"Wrong zarr file path: {called_processes[0][3]}"
+        assert called_processes[0][3] == test_zarr, (
+            f"Wrong zarr file path: {called_processes[0][3]}"
+        )
 
     finally:
         # Clean up any temporary files
@@ -1566,9 +1566,9 @@ def test_zarr_fallback_filenames_have_prefix(tmp_path, test_config):
     for batch_idx, filenames in enumerate(batch_filenames):
         sample_filename = filenames[0]
         # Should have format: <zarr_prefix>__image_000000
-        assert (
-            "__image_" in sample_filename
-        ), f"Batch {batch_idx} fallback filename doesn't have expected format. Got: {sample_filename}"
+        assert "__image_" in sample_filename, (
+            f"Batch {batch_idx} fallback filename doesn't have expected format. Got: {sample_filename}"
+        )
 
     # Verify no collision between batches
     set_0 = set(batch_filenames[0])

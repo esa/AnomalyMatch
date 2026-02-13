@@ -152,7 +152,6 @@ def test_estimate_batch_size_invalid_memory(test_config):
 
 
 def test_estimate_batch_size_invalid_model_coefficients(test_config, monkeypatch):
-
     import prediction_utils
 
     # Inject invalid coefficients

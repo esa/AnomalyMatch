@@ -7,6 +7,7 @@
 """
 PreviewWidget: A self-contained widget for displaying and manipulating preview images.
 """
+
 import os
 import numpy as np
 import ipywidgets as widgets

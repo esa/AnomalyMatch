@@ -7,6 +7,7 @@
 """
 Tests for the image IO utility functions.
 """
+
 import os
 import numpy as np
 import pytest
@@ -305,9 +306,9 @@ class TestImageIO:
         transparent_img = _load_image_with_fitsbolt(self.transparent_path, cfg=test_config)
         assert transparent_img.shape[2] == 3  # Should still be RGB
         # The green channel should still be present even though the pixels were transparent
-        assert np.any(
-            transparent_img[:, :, 1] > 0
-        ), "Green channel data lost in transparent image"  # Test complex RGBA with gradient alpha
+        assert np.any(transparent_img[:, :, 1] > 0), (
+            "Green channel data lost in transparent image"
+        )  # Test complex RGBA with gradient alpha
         complex_rgba_img = _load_image_with_fitsbolt(self.complex_rgba_path, cfg=test_config)
         assert complex_rgba_img.shape[2] == 3  # Should be RGB
         # Check that gradients are preserved in RGB channels
@@ -352,24 +353,24 @@ class TestImageIO:
 
         # Test that colors are preserved correctly according to alpha values
         # Colors with full alpha should be preserved exactly
-        assert np.all(
-            rgb_img[: height // 2, : width // 2, 0] == 255
-        ), "Red with full alpha should be preserved"
-        assert np.all(
-            rgb_img[: height // 2, : width // 2, 1] == 0
-        ), "Red channel should have no green"
-        assert np.all(
-            rgb_img[: height // 2, : width // 2, 2] == 0
-        ), "Red channel should have no blue"
+        assert np.all(rgb_img[: height // 2, : width // 2, 0] == 255), (
+            "Red with full alpha should be preserved"
+        )
+        assert np.all(rgb_img[: height // 2, : width // 2, 1] == 0), (
+            "Red channel should have no green"
+        )
+        assert np.all(rgb_img[: height // 2, : width // 2, 2] == 0), (
+            "Red channel should have no blue"
+        )
 
         # Colors with partial alpha might be handled differently depending on implementation
         # We'll just check that they exist and aren't black
-        assert (
-            np.mean(rgb_img[: height // 2, width // 2 :, 1]) > 0
-        ), "Green with half alpha should be visible"
-        assert (
-            np.mean(rgb_img[height // 2 :, : width // 2, 2]) > 0
-        ), "Blue with quarter alpha should be visible"
+        assert np.mean(rgb_img[: height // 2, width // 2 :, 1]) > 0, (
+            "Green with half alpha should be visible"
+        )
+        assert np.mean(rgb_img[height // 2 :, : width // 2, 2]) > 0, (
+            "Blue with quarter alpha should be visible"
+        )
         # The behavior with fully transparent pixels can vary depending on the implementation
         # Some libraries preserve the color values even with zero alpha, others apply a background color
         # Instead of asserting they shouldn't be white, we'll just check that the image was loaded successfully
@@ -467,9 +468,9 @@ class TestImageIO:
         # Check if normalization preserved the pattern (bright area should be brighter than dark area)
         bright_area = extreme_img[50:80, 50:80]
         dark_area = extreme_img[10:40, 10:40]
-        assert np.mean(bright_area) > np.mean(
-            dark_area
-        ), "Normalization failed to preserve contrast"
+        assert np.mean(bright_area) > np.mean(dark_area), (
+            "Normalization failed to preserve contrast"
+        )
 
     def test_fits_extension_parameter(self, test_config):
         """Test the fits_extension parameter for FITS files."""
@@ -634,14 +635,14 @@ class TestImageIO:
         assert combined_img3.shape == (50, 50, 3), "Combined image should have shape (50, 50, 3)"
 
         # The images should be different due to different ordering
-        assert not np.array_equal(
-            combined_img1, combined_img3
-        ), "Different extension order should give different results"
+        assert not np.array_equal(combined_img1, combined_img3), (
+            "Different extension order should give different results"
+        )
 
         # Int indices and string names with same order should give same result
-        assert np.array_equal(
-            combined_img1, combined_img2
-        ), "Same extension order should give same results"
+        assert np.array_equal(combined_img1, combined_img2), (
+            "Same extension order should give same results"
+        )
 
         # Create another FITS file with extensions of different shapes to test error handling
         diff_shapes_path = os.path.join(self.test_dir, "diff_shapes.fits")
@@ -668,9 +669,9 @@ class TestImageIO:
 
         # Validate the error message contains information about channel mismatch
         error_message = str(e_info.value)
-        assert (
-            "channel" in error_message.lower() or "extension" in error_message.lower()
-        ), f"Error should mention channel or extension mismatch: {error_message}"
+        assert "channel" in error_message.lower() or "extension" in error_message.lower(), (
+            f"Error should mention channel or extension mismatch: {error_message}"
+        )
         # could expand test if needed with more extensions
 
     def test_load_and_process_images_fits_extension(self, test_config):
@@ -759,12 +760,12 @@ class TestImageIO:
         img_combined = results_combined[0][1]
 
         # The images should have different content because they used different extensions
-        assert not np.array_equal(
-            img_ext0, img_ext1
-        ), "Different extensions should produce different images"
-        assert not np.array_equal(
-            img_ext0, img_combined
-        ), "Combined extensions should differ from single extension"
+        assert not np.array_equal(img_ext0, img_ext1), (
+            "Different extensions should produce different images"
+        )
+        assert not np.array_equal(img_ext0, img_combined), (
+            "Combined extensions should differ from single extension"
+        )
 
         # Also test with string extension names
         _update_config(test_config, fits_extension=["PRIMARY", "EXT1", "EXT2"])
@@ -774,9 +775,9 @@ class TestImageIO:
         img_named = results_named[0][1]
 
         # Should be identical to using numeric indices [0, 1, 2]
-        assert np.array_equal(
-            img_combined, img_named
-        ), "String extension names should produce same result as numeric indices"
+        assert np.array_equal(img_combined, img_named), (
+            "String extension names should produce same result as numeric indices"
+        )
 
     def test_image_normalisation(self, test_config):
         """Test that different normalisation methods are correctly applied during image loading."""
@@ -797,9 +798,9 @@ class TestImageIO:
         # Test with no normalisation (default)
         _update_config(test_config, normalisation_method=NormalisationMethod.CONVERSION_ONLY)
         img_none = _load_image_with_fitsbolt(test_path, cfg=test_config)
-        assert np.array_equal(
-            img_none, test_values
-        ), "NONE normalisation should preserve original values"
+        assert np.array_equal(img_none, test_values), (
+            "NONE normalisation should preserve original values"
+        )
 
         # Test with LOG normalisation
         _update_config(test_config, normalisation_method=NormalisationMethod.LOG)
@@ -815,9 +816,9 @@ class TestImageIO:
         # Test with ZSCALE normalisation
         _update_config(test_config, normalisation_method=NormalisationMethod.ZSCALE)
         img_zscale = _load_image_with_fitsbolt(test_path, cfg=test_config)
-        assert not np.array_equal(
-            img_zscale, test_values
-        ), "ZSCALE normalisation should modify values"
+        assert not np.array_equal(img_zscale, test_values), (
+            "ZSCALE normalisation should modify values"
+        )
         # ZScale should produce values with reasonable contrast
         assert np.min(img_zscale) < np.max(img_zscale), "ZSCALE should preserve contrast"
 
@@ -829,9 +830,9 @@ class TestImageIO:
         # Test that all normalised outputs preserve image dimensions
         assert img_none.shape == test_values.shape, "NONE normalisation should preserve dimensions"
         assert img_log.shape == test_values.shape, "LOG normalisation should preserve dimensions"
-        assert (
-            img_zscale.shape == test_values.shape
-        ), "ZSCALE normalisation should preserve dimensions"
+        assert img_zscale.shape == test_values.shape, (
+            "ZSCALE normalisation should preserve dimensions"
+        )
 
     def test_image_interpolation_orders(self, test_config):
         """Test different interpolation orders when resizing images.
@@ -892,9 +893,9 @@ class TestImageIO:
                 100,
                 3,
             ), f"Resized small image should be 100x100 with order {order}"
-            assert (
-                resized_small.dtype == np.uint8
-            ), f"Resized small image should be uint8 with order {order}"
+            assert resized_small.dtype == np.uint8, (
+                f"Resized small image should be uint8 with order {order}"
+            )
 
             # Resize large image (200x200 → 100x100) - downsampling
             resized_large = _load_image_with_fitsbolt(large_path, cfg=test_config)
@@ -903,9 +904,9 @@ class TestImageIO:
                 100,
                 3,
             ), f"Resized large image should be 100x100 with order {order}"
-            assert (
-                resized_large.dtype == np.uint8
-            ), f"Resized large image should be uint8 with order {order}"
+            assert resized_large.dtype == np.uint8, (
+                f"Resized large image should be uint8 with order {order}"
+            )
 
             # Check the center pixel of each quadrant for both resized images
             # Allow for some variation (±20%) in color values due to interpolation differences
@@ -931,9 +932,9 @@ class TestImageIO:
                         )
                     else:
                         # For zero values, small absolute threshold
-                        assert (
-                            small_color[c] <= 50
-                        ), f"Small image order {order}, quadrant {idx}, channel {c}: expected ~0, got {small_color[c]}"
+                        assert small_color[c] <= 50, (
+                            f"Small image order {order}, quadrant {idx}, channel {c}: expected ~0, got {small_color[c]}"
+                        )
 
                 # Check large image downsampled
                 large_color = resized_large[y, x]
@@ -948,9 +949,9 @@ class TestImageIO:
                         )
                     else:
                         # For zero values, small absolute threshold
-                        assert (
-                            large_color[c] <= 50
-                        ), f"Large image order {order}, quadrant {idx}, channel {c}: expected ~0, got {large_color[c]}"
+                        assert large_color[c] <= 50, (
+                            f"Large image order {order}, quadrant {idx}, channel {c}: expected ~0, got {large_color[c]}"
+                        )
 
             # Additional check for sharp transitions with order 0 (nearest neighbor)
             if order == 0:
@@ -962,16 +963,16 @@ class TestImageIO:
                 # For small image
                 left_of_boundary_small = resized_small[boundary_y, boundary_x - 1]
                 right_of_boundary_small = resized_small[boundary_y, boundary_x + 1]
-                assert not np.array_equal(
-                    left_of_boundary_small, right_of_boundary_small
-                ), "Small image order 0 should have sharp transitions at boundary"
+                assert not np.array_equal(left_of_boundary_small, right_of_boundary_small), (
+                    "Small image order 0 should have sharp transitions at boundary"
+                )
 
                 # For large image
                 left_of_boundary_large = resized_large[boundary_y, boundary_x - 1]
                 right_of_boundary_large = resized_large[boundary_y, boundary_x + 1]
-                assert not np.array_equal(
-                    left_of_boundary_large, right_of_boundary_large
-                ), "Large image order 0 should have sharp transitions at boundary"
+                assert not np.array_equal(left_of_boundary_large, right_of_boundary_large), (
+                    "Large image order 0 should have sharp transitions at boundary"
+                )
 
             # Higher order interpolation (order > 1) should lead to smoother transitions
             # This is difficult to quantify precisely, but we can check for values between the extremes for upscaling
@@ -986,21 +987,21 @@ class TestImageIO:
                 unique_values_small = np.unique(boundary_region_small)
 
                 # Higher order interpolation should have more unique values in the boundary region when upscaling
-                assert (
-                    len(unique_values_small) > 4
-                ), f"Small image order {order} should have intermediate values at boundaries"
+                assert len(unique_values_small) > 4, (
+                    f"Small image order {order} should have intermediate values at boundaries"
+                )
 
         # Compare results between different interpolation orders to verify they're not identical
         # We'll compare order 0 (nearest neighbor) with orders 1, 3, and 5
         # These should produce visibly different results
         for i, upscaled_im in enumerate(upscaled_results):
             if i != 0:
-                assert not np.array_equal(
-                    upscaled_results[0], upscaled_results[i]
-                ), "Order 0 and order {i} interpolation should produce different results"
-                assert not np.array_equal(
-                    upscaled_results[i - 1], upscaled_results[i]
-                ), f"Order {i - 1} and order {i} interpolation should produce different results"
+                assert not np.array_equal(upscaled_results[0], upscaled_results[i]), (
+                    "Order 0 and order {i} interpolation should produce different results"
+                )
+                assert not np.array_equal(upscaled_results[i - 1], upscaled_results[i]), (
+                    f"Order {i - 1} and order {i} interpolation should produce different results"
+                )
 
     def test_fits_combination_configurations(self, test_config):
         """Test different configurations of the fits_combination dictionary."""

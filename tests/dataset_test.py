@@ -112,9 +112,9 @@ def test_multiple_file_extensions_support(multi_extension_dataset, test_config):
     dataset = AnomalyDetectionDataset(test_config)
 
     # Check if all images were found
-    assert len(dataset.all_filenames) == len(
-        extensions
-    ), "Not all images with different extensions were found"
+    assert len(dataset.all_filenames) == len(extensions), (
+        "Not all images with different extensions were found"
+    )
 
     # Verify that all expected files are included
     for filename in test_images:

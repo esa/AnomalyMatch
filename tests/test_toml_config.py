@@ -134,6 +134,6 @@ class TestConfigIntegration:
         assert isinstance(config.name, str)
 
         # Verify image_size is NOT in default config (user must set it)
-        assert (
-            "image_size" not in config.normalisation
-        ), "image_size should not have a default value"
+        assert "image_size" not in config.normalisation, (
+            "image_size should not have a default value"
+        )

@@ -212,9 +212,9 @@ def test_load_top_files(trained_session):
     # Verify that the transpose from CHW to HWC was applied correctly
     # Convert the original CHW back to HWC for comparison
     expected_images_hwc = test_images_chw.transpose(0, 2, 3, 1)
-    assert np.array_equal(
-        session.img_catalog, expected_images_hwc
-    ), "CHW to HWC conversion should be correct"
+    assert np.array_equal(session.img_catalog, expected_images_hwc), (
+        "CHW to HWC conversion should be correct"
+    )
 
     # Test loading with images already in HWC format
     test_images_hwc = np.random.randint(0, 255, (top_N, 64, 64, 3), dtype=np.uint8)
@@ -235,9 +235,9 @@ def test_load_top_files(trained_session):
     # Verify that float images were converted to uint8
     assert session.img_catalog.dtype == np.uint8, "Float images should be converted to uint8"
     expected_uint8 = (test_images_float * 255.0).clip(0, 255).astype(np.uint8)
-    assert np.array_equal(
-        session.img_catalog, expected_uint8
-    ), "Float to uint8 conversion should be correct"
+    assert np.array_equal(session.img_catalog, expected_uint8), (
+        "Float to uint8 conversion should be correct"
+    )
 
     # Clean up test files
     if os.path.exists(output_csv_path):
@@ -705,9 +705,9 @@ def test_iteration_scores_saved_after_training(base_config):
     # Verify score mapping: check a few samples match between CSV and session
     for idx, (filename, score) in enumerate(zip(session.filenames[:5], session.scores[:5])):
         csv_score = unlabelled_df[unlabelled_df["filename"] == filename]["score"].values[0]
-        assert (
-            abs(csv_score - score) < 1e-6
-        ), f"Score mismatch for {filename}: {csv_score} vs {score}"
+        assert abs(csv_score - score) < 1e-6, (
+            f"Score mismatch for {filename}: {csv_score} vs {score}"
+        )
 
     # If test_ratio > 0, verify test scores were also saved
     if cfg.test_ratio > 0:

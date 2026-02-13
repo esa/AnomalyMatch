@@ -352,38 +352,38 @@ class TestImageIO:
             reloaded_config = DotMap(reloaded_config)
 
             # Check that critical fields are present
-            assert hasattr(
-                reloaded_config, "normalisation"
-            ), "normalisation field missing from reloaded config"
-            assert hasattr(
-                reloaded_config.normalisation, "fits_extension"
-            ), "fits_extension field missing from reloaded config.normalisation"
-            assert hasattr(
-                reloaded_config.normalisation, "size"
-            ), "size field missing from reloaded config.normalisation"
-            assert hasattr(
-                reloaded_config.normalisation, "normalisation_method"
-            ), "normalisation_method field missing from reloaded config.normalisation"
+            assert hasattr(reloaded_config, "normalisation"), (
+                "normalisation field missing from reloaded config"
+            )
+            assert hasattr(reloaded_config.normalisation, "fits_extension"), (
+                "fits_extension field missing from reloaded config.normalisation"
+            )
+            assert hasattr(reloaded_config.normalisation, "size"), (
+                "size field missing from reloaded config.normalisation"
+            )
+            assert hasattr(reloaded_config.normalisation, "normalisation_method"), (
+                "normalisation_method field missing from reloaded config.normalisation"
+            )
 
             # Test image loading with reloaded config
             for test_file in test_files:
                 try:
                     loaded_image = _load_image_with_fitsbolt(test_file, reloaded_config)
-                    assert (
-                        loaded_image is not None
-                    ), f"Failed to load {test_file} with reloaded config"
-                    assert isinstance(
-                        loaded_image, np.ndarray
-                    ), f"Loaded image from {test_file} is not a numpy array"
-                    assert (
-                        loaded_image.ndim == 3
-                    ), f"Loaded image from {test_file} should be 3D (HWC)"
-                    assert (
-                        loaded_image.shape[2] == 3
-                    ), f"Loaded image from {test_file} should have 3 channels"  # Ensure no NaN/inf values
-                    assert np.isfinite(
-                        loaded_image
-                    ).all(), f"Image from {test_file} contains NaN or inf values"
+                    assert loaded_image is not None, (
+                        f"Failed to load {test_file} with reloaded config"
+                    )
+                    assert isinstance(loaded_image, np.ndarray), (
+                        f"Loaded image from {test_file} is not a numpy array"
+                    )
+                    assert loaded_image.ndim == 3, (
+                        f"Loaded image from {test_file} should be 3D (HWC)"
+                    )
+                    assert loaded_image.shape[2] == 3, (
+                        f"Loaded image from {test_file} should have 3 channels"
+                    )  # Ensure no NaN/inf values
+                    assert np.isfinite(loaded_image).all(), (
+                        f"Image from {test_file} contains NaN or inf values"
+                    )
                 except Exception as e:
                     pytest.fail(f"Failed to load {test_file} with reloaded config: {e}")
 
@@ -427,24 +427,24 @@ class TestImageIO:
 
                     if should_succeed:
                         assert loaded_image is not None, f"Failed to load {filename}"
-                        assert isinstance(
-                            loaded_image, np.ndarray
-                        ), f"Loaded {filename} is not a numpy array"
+                        assert isinstance(loaded_image, np.ndarray), (
+                            f"Loaded {filename} is not a numpy array"
+                        )
 
                         # Check dimensions
-                        assert (
-                            loaded_image.ndim >= 2
-                        ), f"Loaded {filename} has insufficient dimensions"
+                        assert loaded_image.ndim >= 2, (
+                            f"Loaded {filename} has insufficient dimensions"
+                        )
 
                         # Check data integrity
-                        assert np.isfinite(
-                            loaded_image
-                        ).all(), f"Loaded {filename} contains NaN or inf values"
+                        assert np.isfinite(loaded_image).all(), (
+                            f"Loaded {filename} contains NaN or inf values"
+                        )
 
                         # Check data type
-                        assert (
-                            loaded_image.dtype == np.uint8
-                        ), f"Loaded {filename} has wrong dtype: {loaded_image.dtype}"
+                        assert loaded_image.dtype == np.uint8, (
+                            f"Loaded {filename} has wrong dtype: {loaded_image.dtype}"
+                        )
 
                 except Exception as e:
                     if should_succeed:

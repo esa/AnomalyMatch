@@ -26,7 +26,6 @@ class MockDataset:
 
 
 class TestFixMatch:
-
     @pytest.fixture
     def net_builder(self):
         """Simple CNN network builder for testing."""
