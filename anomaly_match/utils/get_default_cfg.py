@@ -4,13 +4,13 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
-from dotmap import DotMap
-
 import os
+
 import numpy as np
+from dotmap import DotMap
+from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 
 from .create_model_string import create_model_string
-from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 
 
 def get_default_cfg():
@@ -53,6 +53,7 @@ def get_default_cfg():
     cfg.normalisation.output_dtype = np.uint8  # output dtype of the images
     # NOTE: image_size has no default - user must explicitly set it
     cfg.normalisation.n_output_channels = 3  # number of output channels (e.g. 3 for RGB)
+    cfg.num_channels = cfg.normalisation.n_output_channels  # set from dataset at runtime
 
     # FITS file handling settings
     # fits_extension: Extension(s) to use when loading FITS files
@@ -88,6 +89,12 @@ def get_default_cfg():
         99.8,
     ]
     # end of fitsbolt settings
+
+    # Flux conversion (Euclid): convert pixel values to flux density in Jansky
+    # using the AB zeropoint (MAGZERO) from FITS headers.  When True, must be
+    # applied in both training (load_and_process_wrapper) and prediction (cutana) paths.
+    cfg.normalisation.apply_flux_conversion = False
+    cfg.normalisation.flux_conversion_zeropoint_keyword = "MAGZERO"
 
     # FixMatch settings
     cfg.ema_m = 0.99

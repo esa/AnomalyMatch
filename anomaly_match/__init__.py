@@ -5,13 +5,14 @@
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
 from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
+
+from .data_io.SessionIOHandler import print_session
 from .pipeline.session import Session
 from .utils.get_default_cfg import get_default_cfg
-from .utils.set_log_level import set_log_level
 from .utils.print_cfg import print_cfg
-from .data_io.SessionIOHandler import print_session
+from .utils.set_log_level import set_log_level
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 __all__ = [
     "get_default_cfg",

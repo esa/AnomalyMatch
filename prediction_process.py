@@ -5,32 +5,27 @@
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
 import argparse
-import os
-import pickle
-import sys
-
-from dotmap import DotMap
-import torch
-import numpy as np
-from loguru import logger
-from concurrent.futures import ThreadPoolExecutor
-from tqdm import tqdm
 import time
+from concurrent.futures import ThreadPoolExecutor
+
+import numpy as np
+import torch
+from loguru import logger
+from tqdm import tqdm
 
 from anomaly_match.data_io.load_images import (
     load_and_process_single_wrapper,
 )
-
-from prediction_utils import (
-    load_model,
-    save_results,
-    process_batch_predictions,
-    estimate_batch_size,
-    clear_gpu_cache_if_needed,
-)
-
 from anomaly_match.image_processing.transforms import (
     get_prediction_transforms,
+)
+from prediction_utils import (
+    clear_gpu_cache_if_needed,
+    load_model,
+    load_prediction_config,
+    process_batch_predictions,
+    save_results,
+    setup_prediction_logging,
 )
 
 
@@ -55,6 +50,12 @@ def evaluate_files(file_list, cfg, top_n=1000, batch_size=1000, max_workers=1):
     """Evaluate files in batches and return top N scores.
     file list is a list of cfg.prediction_search_dir+filename
     """
+    if not file_list:
+        raise FileNotFoundError(
+            f"No files to evaluate. The prediction search directory "
+            f"'{cfg.prediction_search_dir}' is empty or contains no supported image files."
+        )
+
     logger.trace(f"{len(file_list)} unlabeled images remain.")
 
     # Load model first - this loads the fitsbolt config from the checkpoint
@@ -130,21 +131,7 @@ def main():
     parser.add_argument("top_n", type=int, default=1000, help="Number of top scores to keep")
     args = parser.parse_args()
 
-    logger.info(f"Loading config from {args.config_path}")
-    # Load cfg from pkl
-    try:
-        with open(args.config_path, "rb") as f:
-            cfg = pickle.load(f)
-            cfg = DotMap(cfg)
-    except Exception as e:
-        logger.error(f"Failed to load config from {args.config_path}: {e}")
-        sys.exit(1)
-
-    logger.info("Setting batch size")
-    batch_size = (
-        estimate_batch_size(cfg) if cfg.N_batch_prediction is None else cfg.N_batch_prediction
-    )
-    logger.info(f"Batch size set to: {batch_size}")
+    cfg, batch_size = load_prediction_config(args.config_path)
 
     logger.info(f"Loading file list from {args.file_list_path}")
     with open(args.file_list_path, "r") as f:
@@ -167,14 +154,5 @@ def main():
 
 
 if __name__ == "__main__":
-    # Configure logging
-    logs_dir = os.path.join(os.path.dirname(__file__), "logs")
-    os.makedirs(logs_dir, exist_ok=True)
-    logger.remove()
-    logger.add(
-        os.path.join(logs_dir, "prediction_thread_{time}.log"),
-        rotation="1 MB",
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
-        level="DEBUG",
-    )
+    setup_prediction_logging("prediction_thread")
     main()

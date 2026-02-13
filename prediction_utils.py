@@ -13,13 +13,19 @@ and provides functionality for accumulating results across multiple batch runs.
 """
 
 import os
-import torch
+import pickle
+import sys
+
 import numpy as np
 import pandas as pd
-
+import torch
+from dotmap import DotMap
+from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 from loguru import logger
 from turbojpeg import TurboJPEG
 
+from anomaly_match.data_io.load_images import get_fitsbolt_config, process_single_wrapper
+from anomaly_match.utils.get_default_cfg import get_default_cfg
 
 # Initialize TurboJPEG
 jpeg_decoder = TurboJPEG()
@@ -124,13 +130,7 @@ def estimate_batch_size(
     # usable_vram - c = B * (a * S² + b)
     # B = (usable_vram - c) / (a * S² + b)
     S2 = cfg.normalisation.image_size[0] * cfg.normalisation.image_size[1]
-    # Use num_channels if set, otherwise fall back to normalisation.n_output_channels
-    num_channels = (
-        cfg.num_channels
-        if isinstance(cfg.num_channels, int)
-        else cfg.normalisation.n_output_channels
-    )
-    denominator = coef["a"] * S2 * num_channels + coef["b"]
+    denominator = coef["a"] * S2 * cfg.num_channels + coef["b"]
 
     if denominator <= 0:
         logger.warning("Invalid memory model parameters, returning minimum batch size")
@@ -174,18 +174,12 @@ def load_model(cfg):
 
     from anomaly_match.utils.get_net_builder import get_net_builder
 
-    # Use num_channels if set, otherwise fall back to normalisation.n_output_channels
-    num_channels = (
-        cfg.num_channels
-        if isinstance(cfg.num_channels, int)
-        else cfg.normalisation.n_output_channels
-    )
     net_builder = get_net_builder(
         cfg.net,
         pretrained=cfg.pretrained,
-        in_channels=num_channels,
+        in_channels=cfg.num_channels,
     )
-    model = net_builder(num_classes=2, in_channels=num_channels)
+    model = net_builder(num_classes=2, in_channels=cfg.num_channels)
 
     if torch.cuda.is_available():
         gpu_device = getattr(cfg, "gpu", 0)  # Default to 0 if not set
@@ -447,6 +441,174 @@ def _ensure_consistent_image_format(images):
             images = images.transpose(0, 2, 3, 1)
 
     return images
+
+
+def setup_prediction_logging(log_name):
+    """Set up logging for prediction scripts.
+
+    Configures file logging with rotation and stderr output. Also adds
+    session-specific logging if a config path is available in sys.argv.
+
+    Args:
+        log_name: Name used for the log file (e.g. "prediction_thread",
+            "prediction_zarr", "prediction_cutana").
+    """
+    logs_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+
+    logger.remove()
+    logger.add(
+        os.path.join(logs_dir, f"{log_name}_{{time}}.log"),
+        rotation="1 MB",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+        level="DEBUG",
+    )
+    logger.add(sys.stderr, level="INFO")
+
+    # Also log to session output directory if available
+    if len(sys.argv) > 1:
+        try:
+            with open(sys.argv[1], "rb") as _f:
+                _pre_cfg = DotMap(pickle.load(_f))
+            if _pre_cfg.output_dir:
+                os.makedirs(_pre_cfg.output_dir, exist_ok=True)
+                logger.add(
+                    os.path.join(_pre_cfg.output_dir, "prediction.log"),
+                    rotation="10 MB",
+                    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+                    level="DEBUG",
+                )
+        except Exception:
+            pass
+
+
+def load_prediction_config(config_path):
+    """Load prediction config from pickle file and compute batch size.
+
+    Args:
+        config_path: Path to the pickled config file.
+
+    Returns:
+        tuple: (cfg, batch_size) where cfg is a DotMap config object
+            and batch_size is the computed or configured batch size.
+    """
+    logger.info(f"Loading config from {config_path}")
+    try:
+        with open(config_path, "rb") as f:
+            cfg = pickle.load(f)
+            cfg = DotMap(cfg)
+    except Exception as e:
+        logger.error(f"Failed to load config from {config_path}: {e}")
+        sys.exit(1)
+
+    logger.info("Setting batch size")
+    batch_size = (
+        estimate_batch_size(cfg) if cfg.N_batch_prediction is None else cfg.N_batch_prediction
+    )
+    logger.info(f"Batch size set to: {batch_size}")
+
+    # Log key configuration parameters
+    logger.debug("Configuration loaded with parameters:")
+    logger.debug(f"  Save file: {cfg.save_file}")
+    logger.debug(f"  Save path: {cfg.save_path}")
+    logger.debug(f"  Model path: {cfg.model_path}")
+    logger.debug(f"  Output directory: {cfg.output_dir}")
+    logger.debug(f"  Image size: {cfg.normalisation.image_size}")
+
+    # Log full configuration
+    logger.debug("Full configuration:")
+    logger.debug(f"{cfg.toDict()}")
+
+    # Create output directory if it doesn't exist
+    os.makedirs(cfg.output_dir, exist_ok=True)
+
+    return cfg, batch_size
+
+
+def create_cutana_format_cfg(cfg):
+    """Create a CONVERSION_ONLY fitsbolt config for cutana format conversion.
+
+    This config is used by convert_cutana_cutout to handle dtype and channel
+    conversion without re-applying normalisation. Callers should create this
+    once and pass it to convert_cutana_cutout for each image.
+    """
+    format_cfg = get_default_cfg()
+    format_cfg.normalisation.image_size = cfg.normalisation.image_size
+    format_cfg.normalisation.n_output_channels = cfg.normalisation.n_output_channels
+    format_cfg.normalisation.normalisation_method = NormalisationMethod.CONVERSION_ONLY
+    format_cfg.normalisation.norm_asinh_scale = cfg.normalisation.norm_asinh_scale
+    format_cfg.normalisation.norm_asinh_clip = cfg.normalisation.norm_asinh_clip
+    format_cfg.num_workers = 0
+    return get_fitsbolt_config(format_cfg)
+
+
+def convert_cutana_cutout(image_data, format_cfg):
+    """Convert a cutana-normalised cutout to the format expected by the model.
+
+    Cutana already applies normalisation via external_fitsbolt_cfg, so this
+    function only performs format conversion (dtype, channel replication) using
+    fitsbolt's CONVERSION_ONLY mode — no normalisation stretch is applied.
+
+    Args:
+        image_data: Cutana cutout array (already normalised).
+        format_cfg: CONVERSION_ONLY config from create_cutana_format_cfg.
+
+    Returns:
+        np.ndarray: Image in HWC uint8 format ready for model inference.
+    """
+    if not isinstance(image_data, np.ndarray):
+        image_data = np.array(image_data)
+
+    # CHW → HWC (cutana may deliver CHW depending on config)
+    if image_data.ndim == 3 and image_data.shape[0] <= 4 and image_data.shape[2] > 4:
+        image_data = image_data.transpose(1, 2, 0)
+
+    # Delegate dtype conversion and channel replication to fitsbolt via
+    # process_single_wrapper with a CONVERSION_ONLY config so the already-
+    # normalised pixel values are preserved (only dtype + channels change).
+    return process_single_wrapper(image_data, format_cfg, desc="cutana")
+
+
+def read_and_preprocess_image_from_zarr(image_data, cfg):
+    """Read and preprocess raw image data from a Zarr array.
+
+    Handles CHW/HWC format detection and uses fitsbolt for normalization.
+    Used by the zarr prediction script for data that has NOT been normalised yet.
+    """
+    try:
+        # Convert Zarr data to numpy array if it's not already
+        if not isinstance(image_data, np.ndarray):
+            image_data = np.array(image_data)
+
+        # Check if we need to transpose based on the shape
+        # If last dimension is 3 (RGB channels), data is already in HWC format
+        # If first dimension is 3, data is in CHW format and needs transposing
+        if image_data.shape[0] == cfg.normalisation.n_output_channels:
+            # In CHW format, convert to HWC
+            image = image_data.transpose(1, 2, 0)
+        else:
+            # Assume HWC format if neither first nor last dimension is 3
+            # This handles grayscale or other formats
+            image = image_data
+
+        # Use the centralized processing function - this handles RGB conversion,
+        # normalization, and resizing efficiently without temporary files
+        processed_image = process_single_wrapper(image, cfg, desc="zarr")
+        return processed_image
+
+    except Exception as e:
+        logger.error(f"Error processing image from Zarr: {e}")
+        raise
+
+
+def load_and_preprocess_zarr(args):
+    """Load and preprocess a single image from Zarr.
+
+    Note: Returns numpy array, not tensor. Tensor conversion is done on main
+    thread to avoid CUDA context issues in ThreadPoolExecutor.
+    """
+    image_data, cfg = args
+    return read_and_preprocess_image_from_zarr(image_data, cfg)
 
 
 def process_batch_predictions(model, images, original_images=None):

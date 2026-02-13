@@ -14,23 +14,22 @@ classes (nominal). Images are saved with and without annotations.
 
 import os
 import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
-from pathlib import Path
-from PIL import Image
 import torchvision.transforms as transforms
-
+from matplotlib.patches import Rectangle
+from PIL import Image
 
 sys.path.append("/media/home/AnomalyMatch")
 sys.path.append("../")
 
 from anomaly_match.image_processing.transforms import (
-    get_weak_transforms,
     get_strong_transforms,
+    get_weak_transforms,
 )
-
 
 # Constants
 HOURGLASS_CLASS_IDX = 57  # Class ID for hourglass images (anomaly)

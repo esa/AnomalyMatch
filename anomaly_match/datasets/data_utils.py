@@ -4,15 +4,15 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
-import torch
-from torch.utils.data import sampler, DataLoader
-from torch.utils.data.sampler import BatchSampler, WeightedRandomSampler
 import numpy as np
-
+import torch
 from loguru import logger
-from .BasicDataset import BasicDataset
+from torch.utils.data import DataLoader, sampler
+from torch.utils.data.sampler import BatchSampler, WeightedRandomSampler
 
 from anomaly_match.image_processing.transforms import get_prediction_transforms
+
+from .BasicDataset import BasicDataset
 
 
 def get_prediction_dataloader(dset, batch_size=None, num_workers=4, pin_memory=True):
@@ -28,9 +28,10 @@ def get_prediction_dataloader(dset, batch_size=None, num_workers=4, pin_memory=T
         DataLoader: PyTorch DataLoader for the unlabeled data
     """
     unlabeled, unlabeled_filenames = dset.unlabeled
+    num_channels = dset.num_channels
 
     # Basic transform for prediction - just convert to tensor
-    transform = get_prediction_transforms()
+    transform = get_prediction_transforms(num_channels=num_channels)
 
     # Create dataset with dummy labels (-1)
     ulb_dset = BasicDataset(
@@ -41,6 +42,7 @@ def get_prediction_dataloader(dset, batch_size=None, num_workers=4, pin_memory=T
         transform=transform,
         use_strong_transform=False,
         strong_transform=transform,
+        num_channels=num_channels,
     )
 
     return DataLoader(

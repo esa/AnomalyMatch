@@ -5,70 +5,84 @@
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
 import argparse
+import glob
 import os
-import sys
-import pickle
-
-from dotmap import DotMap
-import torch
-import numpy as np
-from loguru import logger
-from concurrent.futures import ThreadPoolExecutor
 import time
-from tqdm import tqdm
+
 import cutana
-
-from anomaly_match.data_io.load_images import process_single_wrapper
-
-from prediction_utils import (
-    load_model,
-    save_results,
-    process_batch_predictions,
-    estimate_batch_size,
-    clear_gpu_cache_if_needed,
-)
+import numpy as np
+import pandas as pd
+import torch
+from cutana.catalogue_preprocessor import extract_filter_name, parse_fits_file_paths
+from dotmap import DotMap
+from loguru import logger
+from tqdm import tqdm
 
 from anomaly_match.image_processing.transforms import (
     get_prediction_transforms,
 )
+from prediction_utils import (
+    clear_gpu_cache_if_needed,
+    convert_cutana_cutout,
+    create_cutana_format_cfg,
+    load_model,
+    load_prediction_config,
+    process_batch_predictions,
+    save_results,
+    setup_prediction_logging,
+)
 
 
-def read_and_preprocess_image_from_zarr(image_data, cfg):
-    """Read and preprocess image data from Zarr array using standardized functions."""
-    try:
-        # Convert Zarr data to numpy array if it's not already
-        if not isinstance(image_data, np.ndarray):
-            image_data = np.array(image_data)
+def _resolve_filter_names_from_catalogue(catalogue_path, n_extensions):
+    """Resolve filter/band names from the first source in a cutana catalogue.
 
-        # Check if we need to transpose based on the shape
-        # If last dimension is 3 (RGB channels), data is already in HWC format
-        # If first dimension is 3, data is in CHW format and needs transposing
-        if image_data.shape[0] == cfg.normalisation.n_output_channels:
-            # In CHW format, convert to HWC
-            image = image_data.transpose(1, 2, 0)
-        else:
-            # Assume HWC format if neither first nor last dimension is 3
-            # This handles grayscale or other formats
-            image = image_data
+    Cutana streaming predictions operate on large mosaic tiles (separate FITS
+    files per band) referenced by the catalogue's ``fits_file_paths`` column.
+    Filter names are extracted from file paths using Euclid naming conventions.
 
-        # Use the centralized processing function - this handles RGB conversion,
-        # normalization, and resizing efficiently without temporary files
-        processed_image = process_single_wrapper(image, cfg, desc="zarr")
-        return processed_image
-
-    except Exception as e:
-        logger.error(f"Error processing image from Zarr: {e}")
-        raise
-
-
-def load_and_preprocess_zarr(args):
-    """Load and preprocess a single image from Zarr.
-
-    Note: Returns numpy array, not tensor. Tensor conversion is done on main
-    thread to avoid CUDA context issues in ThreadPoolExecutor.
+    Raises:
+        ValueError: If filter names cannot be determined — this indicates the
+            catalogue uses non-Euclid file naming.  In that case users must set
+            ``cfg.normalisation.fits_extension`` to explicit filter name strings.
     """
-    image_data, cfg = args
-    return read_and_preprocess_image_from_zarr(image_data, cfg)
+    # catalogue_path may be a single file (buffer parquet) or a directory
+    if os.path.isfile(catalogue_path):
+        first_file = catalogue_path
+    else:
+        cat_files = sorted(glob.glob(os.path.join(catalogue_path, "*.parquet")))
+        if not cat_files:
+            cat_files = sorted(glob.glob(os.path.join(catalogue_path, "*.csv")))
+        if not cat_files:
+            raise FileNotFoundError(f"No catalogue files found in {catalogue_path}")
+        first_file = cat_files[0]
+
+    # Read just the first row to get fits_file_paths
+    if first_file.endswith(".parquet"):
+        df = pd.read_parquet(first_file, columns=["fits_file_paths"]).head(1)
+    else:
+        df = pd.read_csv(first_file, usecols=["fits_file_paths"], nrows=1)
+
+    fits_paths = parse_fits_file_paths(df["fits_file_paths"].iloc[0])
+    if len(fits_paths) != n_extensions:
+        raise ValueError(
+            f"Catalogue has {len(fits_paths)} FITS files per source but "
+            f"cfg.normalisation.fits_extension specifies {n_extensions} extensions."
+        )
+
+    filter_names = [extract_filter_name(p) for p in fits_paths]
+    unknown = [p for p, name in zip(fits_paths, filter_names) if name == "UNKNOWN"]
+    if unknown:
+        raise ValueError(
+            f"Could not determine filter names from catalogue FITS file paths. "
+            f"Cutana streaming predictions currently only support Euclid data with "
+            f"standard file naming conventions (VIS, NIR-H, NIR-Y, NIR-J). "
+            f"Unrecognised files: {unknown}. "
+            f"If using non-Euclid data, set cfg.normalisation.fits_extension to "
+            f"explicit filter name strings instead of integer indices."
+        )
+
+    logger.info(f"Resolved filter names from catalogue: {filter_names}")
+    return filter_names
 
 
 def evaluate_images_from_cutana(
@@ -81,37 +95,104 @@ def evaluate_images_from_cutana(
     cutana_config.target_resolution = cfg.normalisation.image_size[0]
     cutana_config.source_catalogue = cutana_sources_path
 
-    # Configure FITS extensions from AM config, default to PRIMARY if not specified
-    # fits_extension can be: None, str/int, list of str/int, or list of tuples (name, ext_type)
+    # Configure FITS extensions for cutana.
+    #
+    # AnomalyMatch's fits_extension uses integer HDU indices (for multi-extension
+    # cutout files loaded by fitsbolt).  Cutana operates on large mosaic tiles
+    # referenced in the catalogue — each source has separate FITS files per band.
+    # Cutana identifies bands by filter name (e.g. "VIS", "NIR-H") extracted from
+    # the file paths, so we must resolve integer indices to filter names here.
+    #
+    # NOTE: filter name extraction currently relies on Euclid naming conventions
+    # (via cutana.catalogue_preprocessor.extract_filter_name).  If your catalogue
+    # uses non-Euclid file naming, set cfg.normalisation.fits_extension to
+    # explicit filter name strings instead of integer indices.
     fits_ext = cfg.normalisation.fits_extension
     if fits_ext is None:
         fits_ext = ["PRIMARY"]
     elif isinstance(fits_ext, (str, int)):
         fits_ext = [fits_ext]
 
-    # Build selected_extensions - handle both simple names and (name, ext_type) tuples
-    selected_extensions = []
-    extension_names = []
-    for ext in fits_ext:
-        if isinstance(ext, tuple):
-            name, ext_type = ext
-            selected_extensions.append({"name": str(name), "ext": ext_type})
-            extension_names.append(name)
+    # When fits_extension contains integers, resolve to filter names from the
+    # catalogue's fits_file_paths column.
+    has_integer_indices = any(isinstance(e, int) for e in fits_ext)
+    if has_integer_indices:
+        if len(fits_ext) > 1:
+            extension_names = _resolve_filter_names_from_catalogue(
+                cutana_sources_path, len(fits_ext)
+            )
         else:
-            selected_extensions.append({"name": str(ext), "ext": "PrimaryHDU"})
-            extension_names.append(ext)
+            # Single integer index (e.g. [0]) maps to the PRIMARY HDU
+            extension_names = ["PRIMARY"]
+    else:
+        extension_names = [str(e) for e in fits_ext]
 
-    cutana_config.fits_extensions = extension_names
+    # Build selected_extensions for cutana.
+    # For multi-file catalogues (separate FITS per band), each file has only a
+    # PRIMARY HDU, so fits_extensions must be ["PRIMARY"].  The filter names go
+    # into channel_weights and selected_extensions for channel identification.
+    if has_integer_indices:
+        cutana_config.fits_extensions = ["PRIMARY"]
+    else:
+        cutana_config.fits_extensions = extension_names
+
+    selected_extensions = []
+    for name in extension_names:
+        selected_extensions.append({"name": name, "ext": "PRIMARY"})
     cutana_config.selected_extensions = selected_extensions
 
-    # Pass channel combination - required for multi-extension data
+    # Build channel_weights dict for cutana from AM's channel configuration.
+    # Cutana expects {"ext_name": [weight_per_output_channel, ...], ...}.
+    # Channel combination must happen BEFORE normalisation (cutana's pipeline
+    # ensures this) so that ZSCALE/ASINH see the same data shape as training.
+    n_out = cfg.normalisation.n_output_channels
     if cfg.normalisation.channel_combination is not None:
-        cutana_config.channel_weights = cfg.normalisation.channel_combination
+        # Multi-extension: convert numpy matrix (n_out x n_in) to cutana dict
+        combo = cfg.normalisation.channel_combination
+        channel_weights = {}
+        for j, ext_name in enumerate(extension_names):
+            channel_weights[str(ext_name)] = combo[:, j].tolist()
+        cutana_config.channel_weights = channel_weights
     elif len(fits_ext) > 1:
         raise ValueError(
             "cfg.normalisation.channel_combination must be set when using multiple FITS extensions. "
             "This defines how extensions are combined into RGB channels."
         )
+    else:
+        # Single extension: replicate to n_output_channels (e.g. 1→3 for RGB)
+        cutana_config.channel_weights = {str(extension_names[0]): [1.0] * n_out}
+
+    # Verify channel configuration consistency
+    if len(extension_names) > 1:
+        combo = cfg.normalisation.channel_combination
+        n_in = combo.shape[1] if hasattr(combo, "shape") else len(extension_names)
+        if len(extension_names) != n_in:
+            raise ValueError(
+                f"Number of resolved filter names ({len(extension_names)}) does not match "
+                f"channel_combination input dimension ({n_in}). "
+                f"Filter names: {extension_names}, matrix shape: {combo.shape}"
+            )
+        if combo.shape[0] != n_out:
+            raise ValueError(
+                f"channel_combination output dimension ({combo.shape[0]}) does not match "
+                f"n_output_channels ({n_out})"
+            )
+        # For non-diagonal matrices, verify all input channels contribute
+        # (a zero column means an extension is loaded but never used)
+        for j, ext_name in enumerate(extension_names):
+            col_sum = abs(combo[:, j]).sum()
+            if col_sum == 0:
+                logger.warning(
+                    f"Extension '{ext_name}' (column {j}) has zero weight in "
+                    f"channel_combination — this channel will be loaded but ignored"
+                )
+        logger.info(
+            f"Channel configuration: {len(extension_names)} inputs -> {n_out} outputs, "
+            f"filter order: {extension_names}"
+        )
+
+    # Flux conversion: must match the training path setting
+    cutana_config.apply_flux_conversion = cfg.normalisation.apply_flux_conversion
 
     # Pass AnomalyMatch's fitsbolt_cfg directly to cutana for normalization
     # This ensures cutana uses the exact same normalization settings as training
@@ -142,7 +223,7 @@ def evaluate_images_from_cutana(
 
     model = load_model(cfg)
     model.eval()
-    transform = get_prediction_transforms()
+    transform = get_prediction_transforms(num_channels=n_out)
 
     # Process images in batches
     scores_list = []
@@ -164,13 +245,15 @@ def evaluate_images_from_cutana(
         )
     logger.debug("Using fitsbolt config loaded from model checkpoint")
 
+    # CONVERSION_ONLY config for format conversion (created once, reused per cutout)
+    format_cfg = create_cutana_format_cfg(cfg)
+
     batches_count = cutana_orchestrator.get_batch_count()
 
     num_images = 0
     filenames = []
 
     for batch_idx in tqdm(range(batches_count), desc="Processing batches"):
-
         loaded_batch = cutana_orchestrator.next_batch()
         batch_data = loaded_batch["cutouts"]
 
@@ -194,12 +277,12 @@ def evaluate_images_from_cutana(
         batch_filenames = (source["source_id"] for source in loaded_batch["metadata"])
         filenames.extend(batch_filenames)
 
-        # I/O and preprocessing in ThreadPool (returns numpy arrays)
-        # CUDA operations are kept on main thread to prevent memory fragmentation
+        # Cutana already normalised the cutouts via external_fitsbolt_cfg.
+        # Only format conversion is needed (CHW→HWC, dtype, channel replication).
         batch_process_start = time.time()
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            batch_args = [(batch_data[i], cfg) for i in range(batch_size_actual)]
-            numpy_images = list(executor.map(load_and_preprocess_zarr, batch_args))
+        numpy_images = [
+            convert_cutana_cutout(batch_data[i], format_cfg) for i in range(batch_size_actual)
+        ]
 
         # Tensor conversion on main thread (not in ThreadPool) to avoid CUDA context issues
         stack_start = time.time()
@@ -261,36 +344,7 @@ def main():
     parser.add_argument("top_n", type=int, default=1000, help="Number of top scores to keep")
     args = parser.parse_args()
 
-    logger.info(f"Loading config from {args.config_path}")
-    # Load cfg from pkl
-    try:
-        with open(args.config_path, "rb") as f:
-            cfg = pickle.load(f)
-            cfg = DotMap(cfg)
-    except Exception as e:
-        logger.error(f"Failed to load config from {args.config_path}: {e}")
-        sys.exit(1)
-
-    logger.info("Setting batch size")
-    batch_size = (
-        estimate_batch_size(cfg) if cfg.N_batch_prediction is None else cfg.N_batch_prediction
-    )
-    logger.info(f"Batch size set to: {batch_size}")
-
-    # Log key configuration parameters
-    logger.debug("Configuration loaded with parameters:")
-    logger.debug(f"  Save file: {cfg.save_file}")
-    logger.debug(f"  Save path: {cfg.save_path}")
-    logger.debug(f"  Model path: {cfg.model_path}")
-    logger.debug(f"  Output directory: {cfg.output_dir}")
-    logger.debug(f"  Image size: {cfg.normalisation.image_size}")
-
-    # Log full configuration
-    logger.debug("Full configuration:")
-    logger.debug(f"{cfg.toDict()}")
-
-    # Create output directory if it doesn't exist
-    os.makedirs(cfg.output_dir, exist_ok=True)
+    cfg, batch_size = load_prediction_config(args.config_path)
 
     logger.info(f"Streaming from directory: {args.cutana_sources_path}")
 
@@ -306,18 +360,5 @@ def main():
 
 
 if __name__ == "__main__":
-
-    # Configure logging
-    logs_dir = os.path.join(os.path.dirname(__file__), "logs")
-    os.makedirs(logs_dir, exist_ok=True)
-
-    # Remove default handler and set up file logging
-    logger.remove()
-    script_logger_id = logger.add(
-        os.path.join(logs_dir, "prediction_cutana_{time}.log"),
-        rotation="1 MB",
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
-        level="DEBUG",
-    )
-    logger.add(sys.stderr, level="INFO")
+    setup_prediction_logging("prediction_cutana")
     main()

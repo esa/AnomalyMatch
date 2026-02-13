@@ -18,42 +18,43 @@ Author: GitHub Copilot
 Date: April 14, 2025
 """
 
-import os
-import sys
 import argparse
 import glob
+import os
 import pickle
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
-from pathlib import Path
 from loguru import logger
 
 # Add parent directory to path to import paper_plots
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from paper_scripts.paper_plots import (
-    plot_score_histogram,
-    plot_roc_prc_curves,
-    plot_top_n_anomaly_detection,
-    plot_metrics_over_time,
-    plot_combined_anomaly_detection,
-    plot_top_n_with_thresholds,
-    plot_roc_with_thresholds,
-    plot_astronomaly_comparison,
-    plot_score_vs_user_score_grid,
     FONT_SCALE,
+    plot_astronomaly_comparison,
+    plot_combined_anomaly_detection,
+    plot_metrics_over_time,
+    plot_roc_prc_curves,
+    plot_roc_with_thresholds,
+    plot_score_histogram,
+    plot_score_vs_user_score_grid,
+    plot_top_n_anomaly_detection,
+    plot_top_n_with_thresholds,
 )
 from paper_scripts.plot_colors import (
     BLUE,
     ORANGE,
-    PURPLE,
+    PERFECT_LINE_ALPHA,
     PERFECT_LINE_COLOR,
     PERFECT_LINE_STYLE,
-    PERFECT_LINE_ALPHA,
+    PURPLE,
+    VLINE_ALPHA,
     VLINE_COLOR,
     VLINE_STYLE,
-    VLINE_ALPHA,
 )
 
 # Set matplotlib parameters for publication-quality plots (similar to paper_plots.py)

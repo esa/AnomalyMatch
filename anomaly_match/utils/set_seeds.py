@@ -5,9 +5,10 @@
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
 import random
+
 import numpy as np
-import torch.backends.cudnn as cudnn
 import torch
+import torch.backends.cudnn as cudnn
 
 
 def set_seeds(seed: int, deterministic: bool = False) -> None:

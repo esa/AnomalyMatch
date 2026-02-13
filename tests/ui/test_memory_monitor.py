@@ -4,9 +4,13 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
-import pytest
 import asyncio
-from anomaly_match.ui.memory_monitor import MemoryMonitor
+
+import pytest
+
+from anomaly_match_ui.memory_monitor import MemoryMonitor
+
+pytestmark = pytest.mark.ui
 
 
 @pytest.mark.asyncio

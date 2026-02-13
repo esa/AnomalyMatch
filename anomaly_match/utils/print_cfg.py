@@ -4,9 +4,9 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
-from dotmap import DotMap
-import numpy as np
 import ipywidgets as widgets
+import numpy as np
+from dotmap import DotMap
 
 
 def print_cfg(cfg: DotMap):

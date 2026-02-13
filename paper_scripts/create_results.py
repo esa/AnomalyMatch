@@ -17,14 +17,15 @@ Usage:
     python create_results.py
 """
 
+import argparse
+import datetime
+import glob
+import subprocess
 import sys
 import time
-import datetime
-import subprocess
 from pathlib import Path
-import argparse
+
 import pandas as pd
-import glob
 
 # ========== CONFIGURATION ==========
 # Toggle which experiment sets to run

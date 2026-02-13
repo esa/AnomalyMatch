@@ -4,9 +4,9 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
-from torch.optim.lr_scheduler import LambdaLR
-
 import math
+
+from torch.optim.lr_scheduler import LambdaLR
 
 
 def get_cosine_schedule_with_warmup(

@@ -4,8 +4,8 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
-import torch.nn.functional as F
 import torch
+import torch.nn.functional as F
 
 
 def cross_entropy_loss(logits, targets, use_hard_labels=True, reduction="none"):
@@ -31,9 +31,9 @@ def cross_entropy_loss(logits, targets, use_hard_labels=True, reduction="none"):
         return F.cross_entropy(logits, targets.long(), reduction=reduction)
     else:
         # KL divergence style loss with probability distributions as targets
-        assert (
-            logits.shape == targets.shape
-        ), "Logits and targets must have the same shape when using soft labels"
+        assert logits.shape == targets.shape, (
+            "Logits and targets must have the same shape when using soft labels"
+        )
         log_pred = F.log_softmax(logits, dim=-1)
         # Negative KL divergence (equivalent to cross-entropy for soft targets)
         nll_loss = torch.sum(-targets * log_pred, dim=1)

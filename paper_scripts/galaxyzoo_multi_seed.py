@@ -46,31 +46,32 @@ Output Structure:
         └── average_astronomaly_comparison_zoo_class1_n400_ratio0.015_iter{DEFAULT_TRAINING_RUNS}.pdf
 """
 
+import argparse
+import datetime
+import pickle
+import subprocess
 import sys
 import time
-import datetime
-import subprocess
-import pickle
 from pathlib import Path
-import argparse
-import pandas as pd
-import numpy as np
+from typing import Dict, List
+
 import matplotlib.pyplot as plt
-from typing import List, Dict
+import numpy as np
+import pandas as pd
 
 # Import plotting constants from paper_plots
 sys.path.append(str(Path(__file__).parent))
 try:
     from paper_plots import (
         BLUE,
+        DEFAULT_DPI,
         GREEN,
         ORANGE,
+        PERFECT_LINE_STYLE,
         PURPLE,
         RED,
         REFERENCE_LINE_COLOR,
         REFERENCE_LINE_STYLE,
-        PERFECT_LINE_STYLE,
-        DEFAULT_DPI,
     )
 except ImportError:
     # Fallback colors if import fails
@@ -227,8 +228,8 @@ def collect_results_from_seeds(output_dir: Path, seeds: List[int]) -> Dict[str, 
             config_key = f"zoo_class{cls}_n{n_samples}_ratio{anomaly_ratio:.3f}"
             config_results = []
             sub_config_key = (
-                f"galaxyzoo_anomaly{cls}_n{n_samples-int(n_samples*anomaly_ratio)}"
-                + f"_a{int(n_samples*anomaly_ratio)}"
+                f"galaxyzoo_anomaly{cls}_n{n_samples - int(n_samples * anomaly_ratio)}"
+                + f"_a{int(n_samples * anomaly_ratio)}"
             )
             for seed in seeds:
                 seed_dir = output_dir / f"seed_{seed}" / "galaxyzoo" / config_key / sub_config_key
@@ -331,8 +332,8 @@ def load_plot_data_from_seeds(
         for n_samples, anomaly_ratio in GALAXYZOO_CONFIGS:
             config_key = f"zoo_class{cls}_n{n_samples}_ratio{anomaly_ratio:.3f}"
             sub_config_key = (
-                f"galaxyzoo_anomaly{cls}_n{n_samples-int(n_samples*anomaly_ratio)}"
-                + f"_a{int(n_samples*anomaly_ratio)}"
+                f"galaxyzoo_anomaly{cls}_n{n_samples - int(n_samples * anomaly_ratio)}"
+                + f"_a{int(n_samples * anomaly_ratio)}"
             )
 
             plot_data_list = []
@@ -594,9 +595,9 @@ def main():
 
     # Run experiments for each seed
     for i, seed in enumerate(args.seeds):
-        print(f"\n{'='*60}")
-        print(f"Running experiments for seed {seed} ({i+1}/{len(args.seeds)})")
-        print(f"{'='*60}")
+        print(f"\n{'=' * 60}")
+        print(f"Running experiments for seed {seed} ({i + 1}/{len(args.seeds)})")
+        print(f"{'=' * 60}")
 
         try:
             seed_output_dir = run_single_seed_experiment(
@@ -608,9 +609,9 @@ def main():
             continue
 
     # Collect and analyze results
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Collecting and analyzing results from all seeds")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Create summary directory
     summary_dir = output_dir / "summary"
@@ -636,10 +637,10 @@ def main():
 
     # Final summary
     total_time = time.time() - start_time
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("EXPERIMENT SUMMARY")
-    print(f"{'='*60}")
-    print(f"Total execution time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+    print(f"{'=' * 60}")
+    print(f"Total execution time: {total_time:.2f} seconds ({total_time / 60:.2f} minutes)")
     print(f"Seeds processed: {len(args.seeds)}")
     print(f"Configurations per seed: {len(GALAXYZOO_CONFIGS)}")
     print(f"Results saved to: {output_dir}")

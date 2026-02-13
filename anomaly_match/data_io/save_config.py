@@ -5,13 +5,13 @@
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
 
-import toml
 from pathlib import Path
-from typing import Union, Dict, Any
-from dotmap import DotMap
-from loguru import logger
+from typing import Any, Dict, Union
 
+import toml
+from dotmap import DotMap
 from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
+from loguru import logger
 
 
 def _critical_optional_fields() -> list:

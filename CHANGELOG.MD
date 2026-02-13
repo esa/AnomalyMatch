@@ -5,6 +5,42 @@
 [//]: # (this file, may be copied, modified, propagated, or distributed except according to)
 [//]: # (the terms contained in the file 'LICENCE.txt'.)
 
+## [v1.3.0] – 2026-02-11
+
+### Added
+- **Multispectral image support** for arbitrary channel count images with configurable `channel_combination` matrices (#255)
+- **UI separation** into standalone `anomaly_match_ui` package for cleaner architecture (#257)
+- **Flux conversion configuration** (`apply_flux_conversion`) ensuring training/prediction consistency (#272)
+- **timm model backend** replacing efficientnet-specific packages for broader model support (#268)
+- **`test-cnn` model** for fast unit/integration testing without heavy model downloads (#265)
+
+### Changed
+- **Replaced black and flake8 with ruff** for linting and formatting (#258)
+- **Restructured test suite** into unit/integration/e2e/ui directories with pytest markers and CI caching (#265)
+- **Deduplicated prediction code** into shared `prediction_utils.py` module (#264)
+- **Auto-inference of `n_output_channels`** from `channel_combination` matrix or FITS extension count (#276, #278)
+- **PIL resize for CONVERSION_ONLY** normalisation achieving up to 73x faster image loading (#259)
+- **Faster catalogue validation** by skipping per-chunk FITS existence checks and using parquet metadata (#277)
+
+### Fixed
+- **Double normalisation** in cutana streaming pipeline (#271)
+- **Normalisation consistency** between cutana and training paths with channel_weights passthrough (#274)
+- **Session logging** with eager directory creation and per-session log files (#260)
+- **Gallery not updating** after prediction chunks complete (#262)
+- **Cutana source ID handling** for non-string int64 source_ids (#261)
+- **Albumentations 2.0 compatibility** renaming deprecated `mode` to `border_mode` (#276)
+- **Prediction progress bar** with phase tracking for better user feedback (#276)
+- **Identity channel_combination** auto-creation for multi-extension FITS configs (#278)
+- **ASinh parameters** missing in cutana format config (#279)
+- **Filter name resolution** from catalogue for cutana streaming (#281)
+- **Primary HDU validation** raising ValueError when no image data found (#271)
+
+### Documentation
+- **Normalisation README** with improved channel_combination and flux conversion documentation (#275)
+- **Auto-inference documentation** updating multispectral config examples (#284)
+
+---
+
 ## [v1.2.0] – 2025-01-13
 
 ### Added

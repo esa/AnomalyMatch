@@ -6,16 +6,15 @@
 #   the terms contained in the file 'LICENCE.txt'.
 import argparse
 import os
-
+import sys
 from pathlib import Path
+
+import h5py
 import ipywidgets as widgets
 import numpy as np
 import pandas as pd
-import h5py
 from loguru import logger
-from sklearn.metrics import roc_auc_score, precision_recall_curve, auc
-
-import sys
+from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
 
 sys.path.append("/media/home/AnomalyMatch")
 sys.path.append("../")
@@ -478,8 +477,9 @@ def train_with_progress_bar(session, cfg):
         session (am.Session): The AnomalyMatch session
         cfg (DotMap): Configuration for training
     """
-    import time
     import datetime
+    import time
+
     from tqdm import tqdm
 
     # Create a tqdm progress bar
@@ -566,8 +566,8 @@ def save_plot_data(data, plot_type, iteration, output_dir):
         iteration: Iteration number (0 for baseline)
         output_dir: Directory to save data to
     """
-    import pickle
     import os
+    import pickle
 
     # Create plot_data directory if it doesn't exist
     plot_data_dir = os.path.join(output_dir, "plot_data")

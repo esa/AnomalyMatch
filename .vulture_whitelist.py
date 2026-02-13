@@ -21,6 +21,9 @@ save_labels_to_output_dir  # noqa - Used in test_run_label_migration.py
 # FixMatch class attributes
 requires_grad  # noqa - PyTorch tensor property set to disable gradient for EMA model
 
+# TestCNN - nn.Module.forward() called implicitly by PyTorch
+TestCNN.forward  # noqa - Called via model(x) in FixMatch training loop
+
 # AnomalyDetectionDataset methods used in tests (tests/dataset_test.py)
 _read_and_resize_image  # noqa - Used in test_read_and_resize_different_formats
 unlabeled_filepaths  # noqa - Used in test_anomaly_detection_dataset_properties
@@ -60,5 +63,5 @@ set_seeds  # noqa - Used for reproducibility in benchmarks and testing
 _.benchmark  # noqa - torch.backends.cudnn.benchmark attribute
 
 # Image processing functions used in prediction scripts (root level, excluded from scan)
-process_single_wrapper  # noqa - Used in prediction_process_hdf5.py, prediction_process_zarr.py
+process_single_wrapper  # noqa - Used in prediction_utils.py, prediction_process_hdf5.py
 _.n_expected_channels  # noqa - fitsbolt config attribute set dynamically

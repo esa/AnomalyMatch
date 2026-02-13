@@ -12,21 +12,22 @@ channels:
 dependencies:
   - astropy
   - dotmap
-  - efficientnet-pytorch
   - h5py
-  - imageio
   - ipykernel
   - ipywidgets
   - loguru
   - matplotlib
   - numpy
   - pandas<3
+  - psutil
+  - pyarrow
   - python=3.11
   - pytorch>=2.6
   - pytorch-cuda=12.4
   - pyturbojpeg
-  - scikit-learn
   - scikit-image
+  - scikit-learn
+  - scipy
   - toml
   - torchvision
   - tqdm
@@ -34,8 +35,7 @@ dependencies:
   - pip
   - pip:
       - albumentations
-      - efficientnet_lite_pytorch
-      - efficientnet_lite0_pytorch_model
-      - opencv-python-headless
-      - fitsbolt>=0.1.6
       - cutana>=0.2.1
+      - fitsbolt>=0.2
+      - opencv-python-headless
+      - timm

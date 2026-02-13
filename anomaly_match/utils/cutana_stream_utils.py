@@ -5,19 +5,23 @@
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
 
+import math
 import warnings
 from pathlib import Path
 
-import pyarrow.parquet as pq
 import pandas as pd
+import pyarrow.parquet as pq
+from cutana.catalogue_preprocessor import validate_catalogue_columns
 from loguru import logger
-from cutana.catalogue_preprocessor import validate_catalogue_columns, check_fits_files_exist
 
 
 def cutana_validate_files_and_count_sources(
     files: list[Path | str], chunk_size: int = 100_000
 ) -> tuple[list[Path], int, int]:
-    """Validate catalogue files for cutana compatibility and count total number sources and total number of chunks to process.
+    """Validate catalogue files for cutana compatibility and count sources.
+
+    Only checks column schema (first chunk of first file).  Row counts are
+    read from parquet metadata when possible to avoid scanning every row.
 
     Args:
         files (list[Path | str]): list of file paths to validate (CSV or Parquet).
@@ -27,72 +31,61 @@ def cutana_validate_files_and_count_sources(
         tuple[list[Path], int, int]: valid files, total number of sources, and total number of chunks.
     """
 
-    def _validate_against_cutana(index: int, dataframe: pd.DataFrame) -> bool:
-        # Check header once
-        if index == 0:
-            errors = validate_catalogue_columns(dataframe)
-            if errors:
-                return errors
-
-        errors, _ = check_fits_files_exist(dataframe)
-        if errors:
-            return errors
-        return []
-
+    # Schema is validated once from the first valid file (all catalogue files
+    # are expected to share the same column layout).
+    columns_validated = False
     valid_files = []
     total_sources = 0
     total_chunks = 0
 
     for file in files:
+        file_str = str(file)
+        file_type = file_str.rsplit(".", 1)[-1].lower()
 
-        is_file_valid = True
+        if file_type == "parquet":
+            try:
+                parquet_file = pq.ParquetFile(file_str)
 
-        current_file_sources = 0
-        current_file_chunks = 0
+                # Validate columns once from the first file's schema
+                if not columns_validated:
+                    first_batch = next(parquet_file.iter_batches(batch_size=1))
+                    errors = validate_catalogue_columns(first_batch.to_pandas())
+                    if errors:
+                        msg = f"File {file} did not pass cutana column check ({errors})"
+                        logger.warning(msg)
+                        warnings.warn(msg, RuntimeWarning)
+                        continue
+                    columns_validated = True
 
-        if isinstance(file, Path):
-            file_type = file.name.split(".")[-1]
+                num_rows = parquet_file.metadata.num_rows
+                total_sources += num_rows
+                total_chunks += math.ceil(num_rows / chunk_size)
+                valid_files.append(file)
+            except Exception as e:
+                logger.warning(f"Could not read parquet file {file}: {e}")
+
+        elif file_type == "csv":
+            current_sources = 0
+            current_chunks = 0
+            is_valid = True
+            for i, df in enumerate(pd.read_csv(file_str, chunksize=chunk_size)):
+                if not columns_validated:
+                    errors = validate_catalogue_columns(df)
+                    if errors:
+                        msg = f"File {file} did not pass cutana column check ({errors})"
+                        logger.warning(msg)
+                        warnings.warn(msg, RuntimeWarning)
+                        is_valid = False
+                        break
+                    columns_validated = True
+                current_sources += len(df)
+                current_chunks += 1
+            if is_valid:
+                total_sources += current_sources
+                total_chunks += current_chunks
+                valid_files.append(file)
         else:
-            file_type = file.split(".")[-1]
-
-        if file_type == "csv":
-            for i, df in enumerate(pd.read_csv(file, chunksize=chunk_size)):
-
-                errors = _validate_against_cutana(i, df)
-                if errors:
-                    current_file_sources = 0
-                    current_file_chunks = 0
-                    is_file_valid = False
-                    msg = f"File {file} did not pass cutana compatibility check and will be skipped ({errors})"
-                    logger.warning(msg)
-                    warnings.warn(msg, RuntimeWarning)
-                    break
-                current_file_sources += len(df)
-                current_file_chunks += 1
-
-        elif file_type == "parquet":
-            parquet_file = pq.ParquetFile(file)
-            for i, batch in enumerate(parquet_file.iter_batches(batch_size=chunk_size)):
-                df = batch.to_pandas()
-
-                errors = _validate_against_cutana(i, df)
-                if errors:
-                    current_file_sources = 0
-                    current_file_chunks = 0
-                    is_file_valid = False
-                    msg = f"File {file} did not pass cutana compatibility check and will be skipped ({errors})"
-                    logger.warning(msg)
-                    warnings.warn(msg, RuntimeWarning)
-                    break
-                current_file_sources += len(df)
-                current_file_chunks += 1
-        else:
-            is_file_valid = False
-
-        total_sources += current_file_sources
-        total_chunks += current_file_chunks
-        if is_file_valid:
-            valid_files.append(file)
+            logger.warning(f"Unsupported file type '{file_type}' for {file}, skipping")
 
     return valid_files, total_sources, total_chunks
 
@@ -111,11 +104,10 @@ def cutana_buffer_generator(files: list[Path | str], buffer_path: Path, chunk_si
     buffer_path.parent.mkdir(parents=True, exist_ok=True)
 
     for file in files:
-
         if isinstance(file, Path):
-            file_type = file.name.split(".")[-1]
+            file_type = file.name.split(".")[-1].lower()
         else:
-            file_type = file.split(".")[-1]
+            file_type = file.split(".")[-1].lower()
 
         if file_type == "csv":
             for df in pd.read_csv(file, chunksize=chunk_size):

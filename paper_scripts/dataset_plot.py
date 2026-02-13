@@ -12,12 +12,13 @@ from the GalaxyMNIST, MiniImageNet, and GalaxyZoo datasets for the AnomalyMatch 
 """
 
 import os
+from pathlib import Path
+
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 from matplotlib.patches import Rectangle
-from pathlib import Path
 from PIL import Image
 
 # Figure settings for paper-quality output

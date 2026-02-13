@@ -4,12 +4,11 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
-from torchvision import transforms
-from torch.utils.data import Dataset
-
-from PIL import Image
 import numpy as np
 import torch
+from PIL import Image
+from torch.utils.data import Dataset
+from torchvision import transforms
 
 from anomaly_match.image_processing.transforms import get_strong_transforms
 
@@ -31,6 +30,7 @@ class BasicDataset(Dataset):
         transform=None,
         use_strong_transform=False,
         strong_transform=None,
+        num_channels=3,
     ):
         """
         Args
@@ -71,12 +71,13 @@ class BasicDataset(Dataset):
             self.targets = targets.clone().detach()
 
         self.num_classes = num_classes
+        self.num_channels = num_channels
         self.use_strong_transform = use_strong_transform
 
         self.transform = transform
         if use_strong_transform:
             if strong_transform is None:
-                self.strong_transform = get_strong_transforms()
+                self.strong_transform = get_strong_transforms(num_channels=num_channels)
             else:
                 self.strong_transform = strong_transform
 
@@ -95,7 +96,19 @@ class BasicDataset(Dataset):
         if self.transform is None:
             return transforms.ToTensor()(img), target, self.filenames[idx]
         else:
-            img = Image.fromarray(img.numpy()) if isinstance(img, torch.Tensor) else img
+            # Convert to numpy if tensor
+            if isinstance(img, torch.Tensor):
+                img_np = img.numpy()
+            else:
+                img_np = img
+
+            # For RGB images (3 channels), use PIL-based transforms
+            # For N-channel images, pass numpy array directly to transforms
+            if self.num_channels == 3:
+                img = Image.fromarray(img_np)
+            else:
+                img = img_np
+
             img_w = self.transform(img)
 
         if not self.use_strong_transform:

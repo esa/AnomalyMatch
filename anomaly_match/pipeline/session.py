@@ -4,41 +4,39 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
-import os
 import datetime
-import time
-import sys
-import subprocess
-
-from loguru import logger
-import torch
-import pandas as pd
-import numpy as np
-from contextlib import nullcontext
+import os
 import pickle
-import h5py
-import zarr
+import subprocess
+import sys
+import time
+from contextlib import nullcontext
 from pathlib import Path
+
+import h5py
+import numpy as np
+import pandas as pd
+import torch
+import zarr
 from fitsbolt import SUPPORTED_IMAGE_EXTENSIONS
+from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
+from loguru import logger
 
-
-from anomaly_match.datasets.SSL_Dataset import SSL_Dataset
+from anomaly_match.data_io.load_images import get_fitsbolt_config
+from anomaly_match.data_io.SessionIOHandler import SessionIOHandler
 from anomaly_match.datasets.data_utils import get_prediction_dataloader
+from anomaly_match.datasets.SSL_Dataset import SSL_Dataset
 from anomaly_match.models.FixMatch import FixMatch
-
-from anomaly_match.utils.print_cfg import print_cfg
-from anomaly_match.utils.set_log_level import set_log_level
-from anomaly_match.utils.get_net_builder import get_net_builder
+from anomaly_match.pipeline.SessionTracker import SessionTracker
 from anomaly_match.utils.cutana_stream_utils import (
     cutana_buffer_generator,
     cutana_validate_files_and_count_sources,
 )
+from anomaly_match.utils.get_net_builder import get_net_builder
 from anomaly_match.utils.get_optimizer import get_optimizer
+from anomaly_match.utils.print_cfg import print_cfg
+from anomaly_match.utils.set_log_level import set_log_level
 from anomaly_match.utils.validate_config import validate_config
-from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
-from anomaly_match.pipeline.SessionTracker import SessionTracker
-from anomaly_match.data_io.SessionIOHandler import SessionIOHandler
-from anomaly_match.data_io.load_images import get_fitsbolt_config
 
 
 class Session:
@@ -48,7 +46,6 @@ class Session:
     unlabeled_train_dataset = None
     test_dataset = None
 
-    widget = None
     model: FixMatch = None
 
     active_learning_df = pd.DataFrame(columns=["filename", "label"])
@@ -115,7 +112,6 @@ class Session:
             T=self.cfg.temperature,
             p_cutoff=self.cfg.p_cutoff,
             lambda_u=self.cfg.ulb_loss_ratio,
-            hard_label=True,
             logger=logger,
             session_tracker=self.session_tracker,
         )
@@ -174,7 +170,7 @@ class Session:
             pin_memory=self.cfg.pin_memory,
         )
 
-    def update_predictions(self):
+    def update_predictions(self, progress_callback=None):
         """Updates the predictions using the current model and datasets."""
         with self.out if self.out is not None else nullcontext():
             logger.debug("Updating predictions")
@@ -186,12 +182,6 @@ class Session:
                 pin_memory=self.cfg.pin_memory,
             )
 
-            def progress_callback(current, total):
-                if self.widget is not None and self.widget.ui["progress_bar"] is not None:
-                    self.widget.ui["progress_bar"].value = current / total
-
-            if self.widget is not None:
-                self.widget.ui["train_label"].value = "Updating predictions..."
             scores, imgs, filenames, _ = self.model.get_scored_binary_unlabeled_samples(
                 self.prediction_dataloader,
                 target_class=1,
@@ -205,11 +195,9 @@ class Session:
 
             if self.cfg.test_ratio > 0:
                 logger.debug("Predictions updated, evaluating model")
-                if self.widget is not None:
-                    self.widget.ui["train_label"].value = "Evaluating model..."
                 self.eval_performance = self.model.evaluate(
                     cfg=self.cfg,
-                    progress_callback=lambda current, total: progress_callback(current, total),
+                    progress_callback=progress_callback,
                 )
 
     def sort_by_anomalous(self):
@@ -596,18 +584,6 @@ class Session:
         self._active_learning_counts_cache = (new_normal, new_anomalous)
         return self._active_learning_counts_cache
 
-    def start_UI(self):
-        """Starts the user interface for the session."""
-        from anomaly_match.ui.Widget import Widget
-
-        if self.widget is None:
-            logger.info("Starting new UI... (this may compute furiously for a few seconds)")
-            self.widget = Widget(self)
-            self.widget.start()
-        else:
-            logger.debug("UI already running, restarting")
-            self.widget.start()
-
     def get_label(self, idx):
         """Gets the label for the image at the given index.
 
@@ -717,19 +693,18 @@ class Session:
             with open(temp_file_list, "w") as f:
                 f.write(input_path)
 
-            # Call prediction_process.py with the file list
-            subprocess.run(
-                [
-                    sys.executable,
-                    script_path,
-                    temp_config_path,
-                    temp_file_list,
-                    str(top_N),
-                ]
-            )
+            cmd = [sys.executable, script_path, temp_config_path, temp_file_list, str(top_N)]
         else:
-            # For hdf5 and zarr files, pass the file path directly
-            subprocess.run([sys.executable, script_path, temp_config_path, input_path, str(top_N)])
+            cmd = [sys.executable, script_path, temp_config_path, input_path, str(top_N)]
+
+        logger.info(f"Launching prediction subprocess: {script}")
+        result = subprocess.run(cmd)
+
+        if result.returncode != 0:
+            logger.error(
+                f"Prediction subprocess failed (exit code {result.returncode}). "
+                f"Check prediction.log in {self.cfg.output_dir} for details."
+            )
 
         # Reset logger to old level
         set_log_level(self.cfg.log_level, self.cfg)
@@ -748,8 +723,6 @@ class Session:
                 "Please train and save a model before running predictions."
             )
             logger.error(error_msg)
-            if self.widget is not None:
-                self.widget.ui["train_label"].value = "Error: Model not found!"
             raise FileNotFoundError(error_msg)
 
         # Auto-detect file type based on prediction_search_dir
@@ -760,8 +733,6 @@ class Session:
                 "images, HDF5 files, Zarr files, or Cutana buffer files."
             )
             logger.error(error_msg)
-            if self.widget is not None:
-                self.widget.ui["train_label"].value = "Error: No prediction directory!"
             raise ValueError(error_msg)
 
         detected_file_type = self._auto_detect_prediction_file_type(self.cfg.prediction_search_dir)
@@ -774,8 +745,6 @@ class Session:
                     "Please use CONVERSION_ONLY, LOG, ZSCALE, or ASINH."
                 )
                 logger.error(error_msg)
-                if self.widget is not None:
-                    self.widget.ui["train_label"].value = "Error: MIDTONES not supported!"
                 raise ValueError(error_msg)
 
         # Define supported file extensions
@@ -876,7 +845,6 @@ class Session:
 
         # Creating a generator that loads the csv/parquet in chunks and saves to a temporary file
         elif detected_file_type == "stream":
-
             # Files are read in chunks and saved into this intermediate buffer
             cutana_buffer_path = Path("tmp") / ".cutana_buffer.parquet"
             input_files = cutana_buffer_generator(
@@ -984,7 +952,7 @@ class Session:
                 logger.info("Loading updated results from output files")
                 df = pd.read_csv(output_csv_path)
                 filenames = df["Filename"].values
-                self.filenames = np.array([os.path.basename(f) for f in filenames])
+                self.filenames = np.array([os.path.basename(str(f)) for f in filenames])
                 self.scores = df["Score"].values
 
                 # Load images using consistent format handling (same as load_top_files)
@@ -1011,16 +979,21 @@ class Session:
                     else:
                         self.img_catalog = self.img_catalog.clip(0, 255).astype(np.uint8)
 
-                # Update UI if available
-                if self.widget is not None:
-                    self.widget.display_top_files_scores()
+                # Notify UI that results are available for display
+                if progress_callback:
+                    progress_callback(
+                        file_idx + 1,
+                        num_files,
+                        results_updated=True,
+                    )
+
             else:
                 logger.error(
                     "Output files not found. Prediction process might have failed. On Datalabs, the process may have exceeded the RAM allocation. Please check logs in the folder <anomaly_match/logs>."  # noqa: E501
                 )
 
             # Log statistics
-            if len(self.scores) > 0:
+            if self.scores is not None and len(self.scores) > 0:
                 logger.debug(
                     f"File {file_idx} processed, scores mean={np.mean(self.scores):.4f}, "
                     f"std={np.std(self.scores):.4f}, min={np.min(self.scores):.4f}, "
@@ -1058,7 +1031,10 @@ class Session:
             logger.warning("No images were processed or processing time was too short")
 
         logger.info(f"Processed {num_files} files with {detected_file_type} format")
-        logger.debug(f"Total images scored: {len(self.scores)}")
+        if self.scores is not None:
+            logger.debug(f"Total images scored: {len(self.scores)}")
+        else:
+            logger.warning("No scores were loaded - all prediction subprocesses may have failed")
 
     def load_top_files(self, top_N):
         """Loads the top files from the output directory using consistent image processing."""
@@ -1069,8 +1045,8 @@ class Session:
             logger.info("Loading updated results from output files")
             df = pd.read_csv(output_csv_path)
             filenames = df["Filename"].values
-            # Convert to basename
-            self.filenames = np.array([os.path.basename(f) for f in filenames])
+            # Convert to basename (str() handles cutana int64 source_ids)
+            self.filenames = np.array([os.path.basename(str(f)) for f in filenames])
             self.scores = df["Score"].values
 
             # Load images using consistent format handling
@@ -1105,11 +1081,6 @@ class Session:
             logger.debug(
                 f"Image catalog shape: {self.img_catalog.shape}, dtype: {self.img_catalog.dtype}"
             )
-
-            # Call Widget's display_top_files_scores to update the UI
-            if self.widget is not None:
-                logger.debug("Displaying top files and scores")
-                self.widget.display_top_files_scores()
         else:
             logger.error(
                 f"Output files not found at {output_csv_path} and {output_npy_path}. \n Note that you may need to rename the"

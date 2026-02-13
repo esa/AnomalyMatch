@@ -22,19 +22,20 @@ Requirements:
     - GalaxyZoo images and training_solutions_am_2.csv in datasets/ folder
 """
 
-import os
-import io
 import argparse
+import concurrent.futures
+import gc  # Add garbage collection
+import io
+import os
+
+import h5py
 import numpy as np
 import pandas as pd
-import h5py
-from PIL import Image
-import torch
-from tqdm import tqdm
-from loguru import logger
-import concurrent.futures
 import pyarrow.parquet as pq
-import gc  # Add garbage collection
+import torch
+from loguru import logger
+from PIL import Image
+from tqdm import tqdm
 
 # Configure basic logging
 logger.remove()

@@ -51,6 +51,26 @@ Applies an asinh stretch
  - Minimum and Maximum are determined based on the config parameters described below
 
 
+## Channel Combination
+
+When loading FITS files with multiple extensions, `cfg.normalisation.channel_combination` defines how extensions are linearly combined into output channels before normalisation is applied.
+
+- **Type:** NumPy array of shape `(n_output_channels, n_extensions)`, or `None`
+- **When needed:** When you have more FITS extensions than desired output channels (e.g. 4 extensions -> 3 RGB channels)
+- **Default:** `None` — extensions map directly to channels one-to-one
+- **Order of operations:** Channel combination is applied first, then normalisation
+
+Each row of the array defines one output channel as a weighted sum of the input extensions. For example, with 4 extensions and 3 output channels:
+
+```python
+import numpy as np
+cfg.normalisation.channel_combination = np.array([
+    [1, 0, 0, 0],      # Channel 0 = extension 0
+    [0, 0.5, 0.5, 0],  # Channel 1 = average of extensions 1 and 2
+    [0, 0, 0, 1],      # Channel 2 = extension 3
+])
+```
+
 ## Normalisation settings (optional)
 - cfg.normalisation.maximum_value (None, float, default: None)
     - set the upper clipping value for normalisation, overwrites other settings

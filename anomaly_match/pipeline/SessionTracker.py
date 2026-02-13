@@ -6,9 +6,10 @@
 #   the terms contained in the file 'LICENCE.txt'.
 
 import datetime
-from typing import Dict, List, Optional, Any
-import pandas as pd
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
 from loguru import logger
 
 
