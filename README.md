@@ -23,8 +23,10 @@ High-performance semi-supervised anomaly detection with active learning
       - [Zarr File Requirements](#zarr-file-requirements)
       - [Creating Zarr Files](#creating-zarr-files)
       - [Zarr Configuration](#zarr-configuration)
+      - [Multiple Zarr Files for Prediction](#multiple-zarr-files-for-prediction)
     - [FITS File Handling](#fits-file-handling)
     - [Multispectral Support](#multispectral-support)
+    - [Cutana Streaming Integration](#cutana-streaming-integration)
   - [Normalisation and Stretching](#normalisation-and-stretching)
   - [Key Config Parameters](#key-config-parameters)
   - [Advanced CFG Parameters](#advanced-cfg-parameters)
@@ -79,7 +81,7 @@ relies on ipywidgets.
 
 ```bash
 # Clone the repository
-git clone https://github.com/ESA-Datalabs/AnomalyMatch.git
+git clone https://github.com/ESA/AnomalyMatch.git
 cd AnomalyMatch
 
 # Create and activate conda environment from the environment.yml file
