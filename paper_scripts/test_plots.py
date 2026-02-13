@@ -13,22 +13,23 @@ Usage:
     python test_plots.py --reload # Test loading and recreating plots from saved data
 """
 
-import os
 import argparse
+import os
+
 import numpy as np
 import pandas as pd
-from PIL import Image
 from paper_plots import (
-    plot_score_histogram,
+    plot_astronomaly_comparison,
+    plot_combined_anomaly_detection,
     plot_metrics_over_time,
     plot_roc_prc_curves,
-    plot_top_n_anomaly_detection,
-    plot_combined_anomaly_detection,
-    plot_astronomaly_comparison,
     plot_roc_with_thresholds,
-    plot_top_n_with_thresholds,
+    plot_score_histogram,
     plot_score_vs_user_score_grid,
+    plot_top_n_anomaly_detection,
+    plot_top_n_with_thresholds,
 )
+from PIL import Image
 
 # Create output directory for test plots
 output_dir = "test_plots_output"
@@ -304,9 +305,9 @@ def test_all_plots():
 
 def test_reload_plots(plot_data_dir):
     """Test loading saved plot data and recreating plots from it."""
-    import pickle
-    import os
     import glob
+    import os
+    import pickle
 
     # Directory for reloaded plots
     reload_dir = os.path.join(output_dir, "reloaded_plots")

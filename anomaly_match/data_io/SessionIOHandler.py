@@ -6,17 +6,17 @@
 #   the terms contained in the file 'LICENCE.txt'.
 
 import json
-import pickle
 import os
+import pickle
 from pathlib import Path
-from typing import Dict, Any, Optional, List
-import pandas as pd
-from loguru import logger
-import torch
+from typing import Any, Dict, List, Optional
 
-from anomaly_match.pipeline.SessionTracker import SessionTracker
-from anomaly_match.pipeline.SessionTracker import IterationInfo
+import pandas as pd
+import torch
+from loguru import logger
+
 from anomaly_match.data_io.save_config import save_config_toml
+from anomaly_match.pipeline.SessionTracker import IterationInfo, SessionTracker
 
 
 class SessionIOHandler:
@@ -283,6 +283,7 @@ class SessionIOHandler:
             "best_it": model.best_it,
             "last_normalisation_method": getattr(model, "last_normalisation_method", None),
             "normalisation_method": cfg.normalisation.normalisation_method,
+            "num_channels": cfg.num_channels,
             "fitsbolt_cfg": fitsbolt_cfg,
         }
 
@@ -398,6 +399,15 @@ class SessionIOHandler:
             if normalisation_updated:
                 logger.info(
                     f"Model loaded with normalisation method: {cfg.normalisation.normalisation_method.name}"
+                )
+
+            # Warn if model was trained with a different number of channels
+            saved_channels = checkpoint.get("num_channels")
+            if saved_channels is not None and saved_channels != cfg.num_channels:
+                logger.warning(
+                    f"Channel mismatch: model was trained with {saved_channels} channels "
+                    f"but current dataset has {cfg.num_channels} channels. "
+                    f"This will likely cause errors."
                 )
 
             # Load fitsbolt config if present in checkpoint (DotMap pickles directly)
@@ -691,6 +701,9 @@ class SessionIOHandler:
         """
         session_path = self.get_session_save_path(session_tracker)
 
+        # Create session directory immediately so logs and outputs have a home
+        session_path.mkdir(parents=True, exist_ok=True)
+
         # Update model path to session directory only if not already set by user
         if cfg.model_path is None:
             cfg.model_path = str(session_path / "model.pth")
@@ -700,6 +713,14 @@ class SessionIOHandler:
 
         # Update save directory to session directory
         cfg.save_dir = str(session_path)
+
+        # Add session-specific log file
+        logger.add(
+            str(session_path / "session.log"),
+            rotation="10 MB",
+            format="{time:YYYY-MM-DD HH:mm:ss}|{level}|{message}",
+            level="DEBUG",
+        )
 
         logger.debug(f"Updated config paths to use session directory: {session_path}")
 

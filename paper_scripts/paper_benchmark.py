@@ -235,7 +235,7 @@ def get_prediction_scores(session, labeled_filenames, hdf5_path, progress_bar=No
 
                 if batch_idx % 5 == 0 or batch_idx == num_batches - 1:
                     logger.info(
-                        f"Batch {batch_idx+1}/{num_batches}: Processed {batch_size_actual} images "
+                        f"Batch {batch_idx + 1}/{num_batches}: Processed {batch_size_actual} images "
                         f"in {batch_time:.2f}s ({images_per_sec:.1f} img/s)"
                     )
 
@@ -267,7 +267,7 @@ def get_prediction_scores(session, labeled_filenames, hdf5_path, progress_bar=No
     avg_time_per_image = total_time / processed_images if processed_images > 0 else 0
     logger.info(
         f"Processed {processed_images} images in {total_time:.2f}s "
-        f"({processed_images/total_time:.1f} img/s, {avg_time_per_image*1000:.2f}ms/img)"
+        f"({processed_images / total_time:.1f} img/s, {avg_time_per_image * 1000:.2f}ms/img)"
     )
 
     # Handle mismatched length between scores and filenames
@@ -504,11 +504,11 @@ def run_benchmark(args):
     # Run training and evaluation loop
     for iteration in range(args.training_runs):
         # Create iteration-specific directory
-        iter_dir = os.path.join(run_dir, f"iteration_{iteration+1}")
+        iter_dir = os.path.join(run_dir, f"iteration_{iteration + 1}")
         iter_plots_dir = os.path.join(iter_dir, "plots")
 
         logger.info(
-            f"\n======= Starting training iteration {iteration+1}/{args.training_runs} ======="
+            f"\n======= Starting training iteration {iteration + 1}/{args.training_runs} ======="
         )
 
         # Train model
@@ -516,7 +516,7 @@ def run_benchmark(args):
         train_with_progress_bar(session, cfg)
 
         # Save model after training
-        model_save_path = os.path.join(model_dir, f"model_iter{iteration+1}.pth")
+        model_save_path = os.path.join(model_dir, f"model_iter{iteration + 1}.pth")
         iter_model_path = os.path.join(iter_dir, f"model.pth")
         # session.session_tracker = None
         session.cfg.model_path = model_save_path
@@ -562,12 +562,12 @@ def run_benchmark(args):
         # Log top percentile metrics
         if "top_0.1pct_anomalies_found" in metrics:
             logger.info(
-                f"Iter {iteration+1} - Anomalies in top 0.1%: {metrics['top_0.1pct_anomalies_found']:.2f}%, "
+                f"Iter {iteration + 1} - Anomalies in top 0.1%: {metrics['top_0.1pct_anomalies_found']:.2f}%, "
                 f"Precision: {metrics['top_0.1pct_precision']:.2f}%"
             )
         if "top_1.0pct_anomalies_found" in metrics:
             logger.info(
-                f"Iter {iteration+1} - Anomalies in top 1.0%: {metrics['top_1.0pct_anomalies_found']:.2f}%, "
+                f"Iter {iteration + 1} - Anomalies in top 1.0%: {metrics['top_1.0pct_anomalies_found']:.2f}%, "
                 f"Precision: {metrics['top_1.0pct_precision']:.2f}%"
             )
 
@@ -868,9 +868,9 @@ def run_multi_class_benchmark(args):
     )
 
     for anomaly_class in args.anomaly_classes:
-        logger.info(f"\n\n{'='*50}")
+        logger.info(f"\n\n{'=' * 50}")
         logger.info(f"Starting benchmark for anomaly class {anomaly_class}")
-        logger.info(f"{'='*50}\n")
+        logger.info(f"{'=' * 50}\n")
 
         # Update args for this specific class
         args.anomaly_class = anomaly_class
@@ -1045,11 +1045,11 @@ def run_multi_class_benchmark(args):
         # Run training and evaluation loop
         for iteration in range(args.training_runs):
             # Create iteration-specific directory
-            iter_dir = os.path.join(run_dir, f"iteration_{iteration+1}")
+            iter_dir = os.path.join(run_dir, f"iteration_{iteration + 1}")
             iter_plots_dir = os.path.join(iter_dir, "plots")
 
             logger.info(
-                f"\n======= Starting training iteration {iteration+1}/{args.training_runs} for anomaly class {anomaly_class} ======="
+                f"\n======= Starting training iteration {iteration + 1}/{args.training_runs} for anomaly class {anomaly_class} ======="
             )
 
             # Train model with progress bar
@@ -1057,7 +1057,7 @@ def run_multi_class_benchmark(args):
             train_with_progress_bar(session, cfg)
 
             # Save model after training
-            model_save_path = os.path.join(model_dir, f"model_iter{iteration+1}.pth")
+            model_save_path = os.path.join(model_dir, f"model_iter{iteration + 1}.pth")
             iter_model_path = os.path.join(iter_dir, f"model.pth")
             # session.session_tracker = None
             session.cfg.model_path = model_save_path
@@ -1101,12 +1101,12 @@ def run_multi_class_benchmark(args):
             # Log top percentile metrics
             if "top_0.1pct_anomalies_found" in metrics:
                 logger.info(
-                    f"Iter {iteration+1} - Anomalies in top 0.1%: {metrics['top_0.1pct_anomalies_found']:.2f}%, "
+                    f"Iter {iteration + 1} - Anomalies in top 0.1%: {metrics['top_0.1pct_anomalies_found']:.2f}%, "
                     f"Precision: {metrics['top_0.1pct_precision']:.2f}%"
                 )
             if "top_1.0pct_anomalies_found" in metrics:
                 logger.info(
-                    f"Iter {iteration+1} - Anomalies in top 1.0%: {metrics['top_1.0pct_anomalies_found']:.2f}%, "
+                    f"Iter {iteration + 1} - Anomalies in top 1.0%: {metrics['top_1.0pct_anomalies_found']:.2f}%, "
                     f"Precision: {metrics['top_1.0pct_precision']:.2f}%"
                 )
 

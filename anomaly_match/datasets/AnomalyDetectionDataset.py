@@ -4,23 +4,25 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
-import numpy as np
 import os
+
 import h5py
+import numpy as np
 import pandas as pd
-from PIL import Image
-from sklearn.model_selection import train_test_split
 import torch
 from loguru import logger
+from PIL import Image
+from sklearn.model_selection import train_test_split
 
-from .Label import Label
-
+from anomaly_match.data_io.find_images_in_folder import get_image_names_from_folder
 from anomaly_match.data_io.load_images import (
+    detect_num_channels,
     load_and_process_single_wrapper,
     load_and_process_wrapper,
 )
-from anomaly_match.data_io.find_images_in_folder import get_image_names_from_folder
 from anomaly_match.data_io.metadata_handler import MetadataHandler
+
+from .Label import Label
 
 
 class AnomalyDetectionDataset(torch.utils.data.Dataset):
@@ -55,7 +57,6 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
         # Initialize key variables
         self.seed = cfg.seed
         self.size = cfg.normalisation.image_size
-        self.num_channels = 3
         self.root_dir = cfg.data_dir
         self.transform = transform
         self.cfg = cfg
@@ -80,6 +81,27 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
 
         # Get all filenames first
         self.all_filenames = get_image_names_from_folder(self.root_dir, recursive=False)
+
+        # Auto-detect channel count from images: update config when images have
+        # more channels than configured to avoid silently discarding channels
+        detected_channels = detect_num_channels(self.root_dir, self.all_filenames)
+        if (
+            detected_channels is not None
+            and detected_channels > cfg.normalisation.n_output_channels
+        ):
+            logger.info(
+                f"Detected {detected_channels} channels from images "
+                f"(config had n_output_channels={cfg.normalisation.n_output_channels}), updating"
+            )
+            old_channels = cfg.normalisation.n_output_channels
+            cfg.normalisation.n_output_channels = detected_channels
+            cfg.num_channels = detected_channels
+            # Extend asinh normalisation lists to match new channel count
+            for attr in ("norm_asinh_scale", "norm_asinh_clip"):
+                val = getattr(cfg.normalisation, attr, None)
+                if isinstance(val, list) and len(val) == old_channels:
+                    cfg.normalisation[attr] = val + [val[-1]] * (detected_channels - old_channels)
+        self.num_channels = cfg.normalisation.n_output_channels
 
         # If we have fewer than N_to_load images, set N_to_load to the number of images
         self.N_to_load = min(self.N_to_load, len(self.all_filenames))
@@ -129,10 +151,9 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
             assert col in labeled_data.columns, f"CSV file must contain column '{col}'"
 
         # Check that labels are valid
-        assert set(labeled_data["label"].unique()) <= set(
-            ["normal", "anomaly", "removed"]
-        ), "Labels should be either 'normal', 'anomaly' or 'removed' but found" + str(
-            set(labeled_data["label"].unique())
+        assert set(labeled_data["label"].unique()) <= set(["normal", "anomaly", "removed"]), (
+            "Labels should be either 'normal', 'anomaly' or 'removed' but found"
+            + str(set(labeled_data["label"].unique()))
         )
 
         # Label distribution in the new CSV
@@ -449,7 +470,9 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
             # Load data from the compound dataset
             for entry in f["data"]:
                 filename = entry["filename"].decode("utf-8")  # Decode bytes to string
-                image = np.array(entry["image"]).reshape(self.size + [3])  # Reshape back to image
+                image = np.array(entry["image"]).reshape(
+                    self.size + [self.num_channels]
+                )  # Reshape back to image
                 self.data_dict[filename] = (image, Label.UNKNOWN)
 
             # Load mean and std if they exist
@@ -468,7 +491,7 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
         with h5py.File(self.labeled_hdf5, "r") as f:
             for entry in f["data"]:
                 filename = entry["filename"].decode("utf-8")
-                image = np.array(entry["image"]).reshape(self.size + [3])
+                image = np.array(entry["image"]).reshape(self.size + [self.num_channels])
                 label = entry["label"]
                 self.data_dict[filename] = (image, label)
 
@@ -487,7 +510,7 @@ class AnomalyDetectionDataset(torch.utils.data.Dataset):
                 filename = entry["filename"].decode("utf-8")
                 # Skip if file is now labeled
                 if filename not in self.data_dict:
-                    image = np.array(entry["image"]).reshape(self.size + [3])
+                    image = np.array(entry["image"]).reshape(self.size + [self.num_channels])
                     self.data_dict[filename] = (image, Label.UNKNOWN)
 
     def get_metadata_for_file(self, filename):

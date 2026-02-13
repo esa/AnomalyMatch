@@ -197,3 +197,9 @@ pytest-coverage.txt
 pytest.xml
 # IDE and editor settings
 .vscode/
+.claude/
+pr.md
+# Local Cutana checkout for development
+Cutana/
+# Claude Code temp directories
+tmpclaude-*

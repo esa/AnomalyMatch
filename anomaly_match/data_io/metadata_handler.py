@@ -6,12 +6,12 @@
 #   the terms contained in the file 'LICENCE.txt'.
 
 import os
-import pandas as pd
-import numpy as np
-from loguru import logger
 
-from astropy.coordinates import SkyCoord
+import numpy as np
+import pandas as pd
 from astropy import units as u
+from astropy.coordinates import SkyCoord
+from loguru import logger
 
 
 class MetadataHandler:

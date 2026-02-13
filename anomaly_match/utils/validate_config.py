@@ -5,11 +5,12 @@
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
 
-from dotmap import DotMap
-from loguru import logger
-
 import os
+
+import numpy as np
+from dotmap import DotMap
 from fitsbolt.cfg.create_config import create_config as fb_create_cfg
+from loguru import logger
 
 
 def _return_required_and_optional_keys():
@@ -40,7 +41,7 @@ def _return_required_and_optional_keys():
         # Required numeric parameter"
         "seed": [float, None, None, False, None],  # accepts int or float
         # Required positive integers
-        "num_workers": [int, 1, None, False, None],
+        "num_workers": [int, 0, None, False, None],
         "uratio": [int, 1, None, False, None],
         "batch_size": [int, 1, None, False, None],
         "num_train_iter": [int, 1, None, False, None],
@@ -66,7 +67,28 @@ def _return_required_and_optional_keys():
         "pretrained": [bool, None, None, False, None],
         # Required parameters with allowed values
         "opt": [str, None, None, False, ["SGD", "Adam"]],
-        "net": [str, None, None, False, ["efficientnet-lite0"]],
+        "net": [
+            str,
+            None,
+            None,
+            False,
+            [
+                "efficientnet-lite0",
+                "efficientnet-lite1",
+                "efficientnet-lite2",
+                "efficientnet-lite3",
+                "efficientnet-lite4",
+                "efficientnet-b0",
+                "efficientnet-b1",
+                "efficientnet-b2",
+                "efficientnet-b3",
+                "efficientnet-b4",
+                "efficientnet-b5",
+                "efficientnet-b6",
+                "efficientnet-b7",
+                "test-cnn",
+            ],
+        ],
         "log_level": [
             str,
             None,
@@ -79,6 +101,7 @@ def _return_required_and_optional_keys():
         # Optional directory parameters
         "prediction_search_dir": ["directory", None, None, True, None],
         "N_batch_prediction": [int, 1, None, True, None],
+        "num_channels": [int, 1, None, False, None],
         # fitsbolt config parameters - only validate that it's a DotMap and check size
         "normalisation": ["special_fitsbolt", None, None, False, None],
         "normalisation.image_size": ["special_size", None, None, False, None],
@@ -177,7 +200,7 @@ def validate_config(cfg: DotMap, check_paths: bool = True) -> None:
             return f" ({', '.join(constraints)})" if constraints else ""
 
         # Validate based on data type
-        if dtype == str:
+        if dtype is str:
             if not isinstance(value, str):
                 raise ValueError(
                     f"{param_name} must be a string, got {type(value).__name__}{_format_constraints()}"
@@ -208,7 +231,7 @@ def validate_config(cfg: DotMap, check_paths: bool = True) -> None:
             if check_paths and not os.path.isfile(value):
                 raise ValueError(f"{param_name} file does not exist: {value}")
 
-        elif dtype == int:
+        elif dtype is int:
             if not isinstance(value, int):
                 raise ValueError(
                     f"{param_name} must be an integer, got {type(value).__name__}{_format_constraints()}"
@@ -224,7 +247,7 @@ def validate_config(cfg: DotMap, check_paths: bool = True) -> None:
             if allowed_values is not None and value not in allowed_values:
                 raise ValueError(f"{param_name} must be one of {allowed_values}, got {value}")
 
-        elif dtype == float:
+        elif dtype is float:
             if not isinstance(value, (int, float)):
                 raise ValueError(
                     f"{param_name} must be a number, got {type(value).__name__}{_format_constraints()}"
@@ -240,7 +263,7 @@ def validate_config(cfg: DotMap, check_paths: bool = True) -> None:
             if allowed_values is not None and value not in allowed_values:
                 raise ValueError(f"{param_name} must be one of {allowed_values}, got {value}")
 
-        elif dtype == bool:
+        elif dtype is bool:
             if not isinstance(value, bool):
                 raise ValueError(f"{param_name} must be a boolean, got {type(value).__name__}")
 
@@ -268,6 +291,52 @@ def validate_config(cfg: DotMap, check_paths: bool = True) -> None:
 
     # Also validate normalisation configuration with its own validation function if possible
     if hasattr(cfg, "normalisation"):
+        cc = cfg.normalisation.channel_combination
+        fits_ext = cfg.normalisation.fits_extension
+
+        # Infer n_output_channels from channel_combination matrix if provided
+        if cc is not None and hasattr(cc, "shape") and len(cc.shape) == 2:
+            inferred = cc.shape[0]
+            if inferred != cfg.normalisation.n_output_channels:
+                logger.info(
+                    f"Setting n_output_channels to {inferred} "
+                    f"from channel_combination shape {cc.shape}"
+                )
+                cfg.normalisation.n_output_channels = inferred
+
+        # Auto-create identity channel_combination for multiple FITS extensions
+        # when no explicit matrix is provided.
+        elif fits_ext is not None and isinstance(fits_ext, (list, tuple)) and len(fits_ext) > 1:
+            n_ext = len(fits_ext)
+            cfg.normalisation.channel_combination = np.eye(n_ext)
+            cfg.normalisation.n_output_channels = n_ext
+            logger.info(
+                f"Auto-created {n_ext}x{n_ext} identity channel_combination "
+                f"for {n_ext} FITS extensions (n_output_channels set to {n_ext})"
+            )
+
+        # Guard against n_output_channels being None (e.g. user unset it
+        # expecting auto-inference but only has a single FITS extension).
+        if cfg.normalisation.n_output_channels is None:
+            raise ValueError(
+                "n_output_channels is None and could not be inferred. "
+                "Set normalisation.n_output_channels explicitly or provide "
+                "multiple fits_extension entries or a channel_combination matrix."
+            )
+
+        # Keep cfg.num_channels in sync with n_output_channels
+        cfg.num_channels = cfg.normalisation.n_output_channels
+
+        # Ensure per-channel normalisation lists match n_output_channels
+        n_out = cfg.normalisation.n_output_channels
+        for attr in ("norm_asinh_scale", "norm_asinh_clip"):
+            val = cfg.normalisation[attr]
+            if isinstance(val, list) and len(val) != n_out and len(val) != 1:
+                if n_out < len(val):
+                    cfg.normalisation[attr] = val[:n_out]
+                else:
+                    cfg.normalisation[attr] = val + [val[-1]] * (n_out - len(val))
+
         try:
             # Use fitsbolt's own validation by calling its create_config function
             _ = fb_create_cfg(
@@ -275,9 +344,10 @@ def validate_config(cfg: DotMap, check_paths: bool = True) -> None:
                 size=cfg.normalisation.image_size,
                 fits_extension=cfg.normalisation.fits_extension,
                 interpolation_order=cfg.normalisation.interpolation_order,
+                n_output_channels=cfg.normalisation.n_output_channels,
                 normalisation_method=cfg.normalisation.normalisation_method,
                 channel_combination=cfg.normalisation.channel_combination,
-                num_workers=cfg.num_workers,
+                num_workers=max(cfg.num_workers, 1),
                 norm_maximum_value=cfg.normalisation.norm_maximum_value,
                 norm_minimum_value=cfg.normalisation.norm_minimum_value,
                 norm_log_calculate_minimum_value=cfg.normalisation.norm_log_calculate_minimum_value,
@@ -302,6 +372,8 @@ def validate_config(cfg: DotMap, check_paths: bool = True) -> None:
                     "normalisation.norm_crop_for_maximum_value",
                     "normalisation.norm_asinh_scale",
                     "normalisation.norm_asinh_clip",
+                    "normalisation.apply_flux_conversion",
+                    "normalisation.flux_conversion_zeropoint_keyword",
                 ]
             )
         except Exception as e:

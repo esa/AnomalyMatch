@@ -13,14 +13,15 @@ identifying specific images as anomalies based on their filenames.
 """
 
 import os
-import sys
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
-from pathlib import Path
-from PIL import Image
-import torchvision.transforms as transforms
 import random
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torchvision.transforms as transforms
+from matplotlib.patches import Rectangle
+from PIL import Image
 
 sys.path.append("/media/home/AnomalyMatch")
 sys.path.append("../")

@@ -12,38 +12,40 @@ the performance of AnomalyMatch models during benchmarking.
 """
 
 import os
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import roc_curve
 from loguru import logger
 from paper_utils import save_plot_data
+from sklearn.metrics import roc_curve
+
+from paper_scripts.create_results import GALAXYZOO_THRESHOLDS
 from paper_scripts.plot_colors import (
+    ANOMALY_COLOR,
     BLUE,
-    RED,
+    COLORMAP_NAME,
     GREEN,
-    ORANGE,
-    PURPLE,
-    PERFECT_LINE_COLOR,
-    PERFECT_LINE_STYLE,
-    PERFECT_LINE_ALPHA,
-    REFERENCE_LINE_COLOR,
-    REFERENCE_LINE_STYLE,
-    REFERENCE_LINE_ALPHA,
-    VLINE_COLOR,
-    VLINE_STYLE,
-    VLINE_ALPHA,
+    HIST_ALPHA,
+    HLINE_ALPHA,
     HLINE_COLOR,
     HLINE_STYLE,
-    HLINE_ALPHA,
-    COLORMAP_NAME,
     LAST_ITER_COLOR,
     NORMAL_COLOR,
-    ANOMALY_COLOR,
-    HIST_ALPHA,
+    ORANGE,
+    PERFECT_LINE_ALPHA,
+    PERFECT_LINE_COLOR,
+    PERFECT_LINE_STYLE,
+    PURPLE,
+    RED,
+    REFERENCE_LINE_ALPHA,
+    REFERENCE_LINE_COLOR,
+    REFERENCE_LINE_STYLE,
+    VLINE_ALPHA,
+    VLINE_COLOR,
+    VLINE_STYLE,
 )
-from paper_scripts.create_results import GALAXYZOO_THRESHOLDS
 
 # Scaling factor for all font sizes (adjust this to make all text larger or smaller)
 FONT_SCALE = 1.75
@@ -199,7 +201,7 @@ def plot_roc_prc_curves(metrics, iteration, plots_dir):
     y_scores = np.concatenate([metrics["anomaly_scores"], metrics["normal_scores"]])
     fpr, tpr, _ = roc_curve(y_true, y_scores)  # 1. ROC Curve
     plt.figure(figsize=(8, 8))
-    plt.plot(fpr, tpr, color=BLUE, linewidth=2, label=f'AUROC = {metrics["auroc"]:.3f}')
+    plt.plot(fpr, tpr, color=BLUE, linewidth=2, label=f"AUROC = {metrics['auroc']:.3f}")
     plt.plot(
         [0, 1],
         [0, 1],
@@ -229,7 +231,7 @@ def plot_roc_prc_curves(metrics, iteration, plots_dir):
         metrics["precision"],
         color=RED,
         linewidth=2,
-        label=f'AUPRC = {metrics["auprc"]:.3f}',
+        label=f"AUPRC = {metrics['auprc']:.3f}",
     )
 
     # Note: We're removing the baseline from the PR curve as requested
@@ -251,7 +253,7 @@ def plot_roc_prc_curves(metrics, iteration, plots_dir):
 
     # 3. Combined figure (side by side)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))  # Plot ROC curve
-    ax1.plot(fpr, tpr, color=BLUE, linewidth=2, label=f'AUROC = {metrics["auroc"]:.3f}')
+    ax1.plot(fpr, tpr, color=BLUE, linewidth=2, label=f"AUROC = {metrics['auroc']:.3f}")
     ax1.plot(
         [0, 1],
         [0, 1],
@@ -274,7 +276,7 @@ def plot_roc_prc_curves(metrics, iteration, plots_dir):
         metrics["precision"],
         color=RED,
         linewidth=2,
-        label=f'AUPRC = {metrics["auprc"]:.3f}',
+        label=f"AUPRC = {metrics['auprc']:.3f}",
     )
     ax2.set_xlabel("Recall")
     ax2.set_ylabel("Precision")
@@ -1418,9 +1420,9 @@ def create_grid_plot(merged_df, n_grid, data_dir, plots_dir, iteration, suffix, 
         suffix: Suffix for the output filename
         fig_title: Optional title for the figure
     """
-    from PIL import Image
     import matplotlib.gridspec as gridspec
     import matplotlib.patches as patches
+    from PIL import Image
 
     # Number of user score bins (fewer than ML score bins)
     n_user_grid = 6
@@ -1863,7 +1865,7 @@ def create_grid_plot(merged_df, n_grid, data_dir, plots_dir, iteration, suffix, 
 
     # Add a legend for the visual indicators in the bottom-left corner
     ax_legend = plt.subplot(gs[n_user_grid + 1, 0])
-    legend_text = "+/-n: AM ranks\n" "higher/lower\n" "score than GZ\n"
+    legend_text = "+/-n: AM ranks\nhigher/lower\nscore than GZ\n"
     ax_legend.text(
         0.35,
         0.5,

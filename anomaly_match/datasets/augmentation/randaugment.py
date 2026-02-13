@@ -6,12 +6,12 @@
 #   the terms contained in the file 'LICENCE.txt'.
 import random
 
-import PIL
-import PIL.ImageOps
-import PIL.ImageEnhance
-import PIL.ImageDraw
 import albumentations as A
 import numpy as np
+import PIL
+import PIL.ImageDraw
+import PIL.ImageEnhance
+import PIL.ImageOps
 
 
 def AutoContrast(img, _):

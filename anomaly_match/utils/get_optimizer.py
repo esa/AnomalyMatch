@@ -50,7 +50,6 @@ def get_optimizer(
             nesterov=nesterov,
         )
     elif name == "Adam" or name == "ADAM":
-
         if lr > 0.005:
             raise ValueError("Learning rate is " + str(lr) + ". That is too high for ADAM.")
 

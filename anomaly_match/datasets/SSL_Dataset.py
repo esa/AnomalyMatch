@@ -7,12 +7,13 @@
 import torch
 from loguru import logger
 
-from .BasicDataset import BasicDataset
-from .AnomalyDetectionDataset import AnomalyDetectionDataset
 from anomaly_match.image_processing.transforms import (
-    get_weak_transforms,
     get_prediction_transforms,
+    get_weak_transforms,
 )
+
+from .AnomalyDetectionDataset import AnomalyDetectionDataset
+from .BasicDataset import BasicDataset
 
 
 class SSL_Dataset:
@@ -65,11 +66,11 @@ class SSL_Dataset:
         if self.train:
             filenames, imgs, targets = self.dset.train_data
             unlabeled, unlabeled_filenames = self.dset.unlabeled
-            self.transform = get_weak_transforms()
+            self.transform = get_weak_transforms(num_channels=self.num_channels)
         else:
             filenames, imgs, targets = self.dset.test_data
             unlabeled, unlabeled_filenames = None, None  # no unlabeled data in test
-            self.transform = get_prediction_transforms()
+            self.transform = get_prediction_transforms(num_channels=self.num_channels)
 
         return imgs, targets, unlabeled, filenames, unlabeled_filenames
 
@@ -96,6 +97,7 @@ class SSL_Dataset:
             self.transform,
             use_strong_transform,
             strong_transform,
+            num_channels=self.num_channels,
         )
 
     def get_ssl_dset(
@@ -146,6 +148,7 @@ class SSL_Dataset:
             self.transform,
             use_strong_transform=False,
             strong_transform=None,
+            num_channels=self.num_channels,
         )
 
         ulb_dset = BasicDataset(
@@ -156,6 +159,7 @@ class SSL_Dataset:
             self.transform,
             use_strong_transform,
             strong_transform,
+            num_channels=self.num_channels,
         )
 
         return lb_dset, ulb_dset
@@ -216,6 +220,7 @@ class SSL_Dataset:
             self.transform,
             use_strong_transform=False,
             strong_transform=None,
+            num_channels=self.num_channels,
         )
 
         ulb_dset = BasicDataset(
@@ -226,6 +231,7 @@ class SSL_Dataset:
             self.transform,
             use_strong_transform,
             strong_transform,
+            num_channels=self.num_channels,
         )
 
         return lb_dset, ulb_dset

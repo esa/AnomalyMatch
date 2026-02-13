@@ -61,21 +61,20 @@ jobs:
               *.py) echo "$PYTHON_HEADER" ;;
               *.yml|*.yaml) echo "$YML_HEADER" ;;
               *.md) echo "$MARKDOWN_HEADER" ;;
-              *.ini|.gitignore|.flake8) echo "$INI_HEADER" ;;
+              *.ini|.gitignore) echo "$INI_HEADER" ;;
               *) echo "$INI_HEADER" ;;  # Default to # comments
             esac
           }
           
           # Find all relevant files excluding specified directories
           PYTHON_FILES=$(find . -name "*.py" -not -path "./datalabs_setup/*" -not -path "./utility_scripts/*" -not -path "./.git/*" -not -path "./__pycache__/*" -not -path "./.*/__pycache__/*")
-          YML_FILES=$(find . -name "*.yml" -o -name "*.yaml" | grep -v "./.git/")
-          MARKDOWN_FILES=$(find . -name "*.md" -not -path "./.github/ISSUE_TEMPLATE/*" | grep -v "./.git/")
-          INI_FILES=$(find . -name "*.ini" | grep -v "./.git/")
-          GITIGNORE_FILES=$(find . -name ".gitignore" | grep -v "./.git/")
-          FLAKE8_FILES=$(find . -name ".flake8" | grep -v "./.git/")
-          
+          YML_FILES=$(find . -name "*.yml" -o -name "*.yaml" | grep -v "./.git/" || true)
+          MARKDOWN_FILES=$(find . -name "*.md" -not -path "./.github/ISSUE_TEMPLATE/*" | grep -v "./.git/" || true)
+          INI_FILES=$(find . -name "*.ini" | grep -v "./.git/" || true)
+          GITIGNORE_FILES=$(find . -name ".gitignore" | grep -v "./.git/" || true)
+
           # Combine all files
-          ALL_FILES="$PYTHON_FILES $YML_FILES $MARKDOWN_FILES $INI_FILES $GITIGNORE_FILES $FLAKE8_FILES"
+          ALL_FILES="$PYTHON_FILES $YML_FILES $MARKDOWN_FILES $INI_FILES $GITIGNORE_FILES"
           
           MISSING_HEADERS=()
           
@@ -118,7 +117,7 @@ jobs:
             done
             echo ""
             echo "Please add the correct license header to these files."
-            echo "File types checked: .py, .yml/.yaml, .md, .ini, .gitignore, .flake8"
+            echo "File types checked: .py, .yml/.yaml, .md, .ini, .gitignore"
             echo "Note: Python files exclude datalabs_setup/ and utility_scripts/ directories"
             exit 1
           fi

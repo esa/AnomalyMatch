@@ -7,10 +7,12 @@
 """
 Functions to retrieve image filenames from folders.
 """
+
 import os
 from pathlib import Path
-from loguru import logger
+
 from fitsbolt import SUPPORTED_IMAGE_EXTENSIONS
+from loguru import logger
 
 
 def get_image_names_from_folder(folder_path, recursive=False, extensions=None):

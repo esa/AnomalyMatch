@@ -13,6 +13,7 @@ High-performance semi-supervised anomaly detection with active learning
 - [AnomalyMatch](#anomalymatch)
   - [Table of Contents](#table-of-contents)
   - [Overview](#overview)
+    - [Ecosystem](#ecosystem)
   - [Requirements](#requirements)
   - [Installation](#installation)
   - [Session Tracking](#session-tracking)
@@ -23,6 +24,7 @@ High-performance semi-supervised anomaly detection with active learning
       - [Creating Zarr Files](#creating-zarr-files)
       - [Zarr Configuration](#zarr-configuration)
     - [FITS File Handling](#fits-file-handling)
+    - [Multispectral Support](#multispectral-support)
   - [Normalisation and Stretching](#normalisation-and-stretching)
   - [Key Config Parameters](#key-config-parameters)
   - [Advanced CFG Parameters](#advanced-cfg-parameters)
@@ -34,14 +36,38 @@ High-performance semi-supervised anomaly detection with active learning
 ## Overview
 <img src="resources/datalabs_icon.jpeg" align="right" width="150"/>
 
-This package uses a FixMatch pipeline built on EfficientNet models and provides a mechanism
-for active learning to detect anomalies in images. It also offers a GUI via ipywidgets for labelling and managing the detection process, including the ability to unlabel previously labelled images.
+This package uses a FixMatch pipeline built on EfficientNet models (via [timm](https://github.com/huggingface/pytorch-image-models)) and provides a mechanism
+for active learning to detect anomalies in images. It also offers a GUI (in the separate `anomaly_match_ui` package) for labelling and managing the detection process, including the ability to unlabel previously labelled images.
 
 AnomalyMatch is available plug-and-play on GPUs in [ESA Datalabs](https://datalabs.esa.int/), providing seamless access to high-performance computing resources for large-scale anomaly detection tasks.
 
 For detailed information about the method and its applications, see our papers:
 - [AnomalyMatch: Discovering Rare Objects of Interest with Semi-supervised and Active Learning](https://arxiv.org/abs/2505.03509) - describing the method in detail
 - [Identifying Astrophysical Anomalies in 99.6 Million Cutouts from the Hubble Legacy Archive Using AnomalyMatch](https://arxiv.org/abs/2505.03508) - describing a scaled-up search through 100M cutouts European Space Agency, 2025.)
+
+### Ecosystem
+
+AnomalyMatch relies on two companion libraries for image loading and normalisation:
+
+```
+                ┌──────────────┐
+                │ AnomalyMatch │
+                └──┬───────┬───┘
+      Training/    │       │  Streaming
+      Prediction   │       │  Prediction
+                   ▼       ▼
+            ┌─────────┐ ┌────────┐
+            │ fitsbolt │ │ cutana │
+            └─────────┘ └───┬────┘
+                 ▲           │
+                 └───────────┘
+              (normalisation)
+```
+
+- **[fitsbolt](https://github.com/esa/fitsbolt)** handles FITS/image loading and normalisation (stretching, channel combination, dtype conversion).
+- **[Cutana](https://github.com/esa/cutana)** orchestrates cutout extraction from FITS tiles and delegates normalisation to fitsbolt.
+
+Because both the training and Cutana streaming paths use fitsbolt for normalisation, results are guaranteed to be consistent.
 
 ## Requirements
 Dependencies are listed in the `environment.yml` file. To leverage the full capabilities of 
@@ -53,7 +79,7 @@ relies on ipywidgets.
 
 ```bash
 # Clone the repository
-git clone https://github.com/ESA/AnomalyMatch.git
+git clone https://github.com/ESA-Datalabs/AnomalyMatch.git
 cd AnomalyMatch
 
 # Create and activate conda environment from the environment.yml file
@@ -239,6 +265,62 @@ prediction_search_dir/
 
 When working with FITS files containing multiple images or data products, specify which extension(s) to use in the configuration.
 
+### Multispectral Support
+
+AnomalyMatch supports training and prediction on images with arbitrary channel counts (1 to N channels), not just RGB (3 channels). This is useful for multispectral astronomical data.
+
+**Configuration for N-channel images:**
+
+```python
+import anomaly_match as am
+
+cfg = am.get_default_cfg()
+
+# For FITS files with multiple extensions as channels
+cfg.normalisation.fits_extension = ["VIS", "NIR-H", "NIR-J", "NIR-Y"]
+
+# Asinh normalisation parameters (one per channel)
+cfg.normalisation.norm_asinh_scale = [0.7, 0.7, 0.7, 0.7]
+cfg.normalisation.norm_asinh_clip = [99.8, 99.8, 99.8, 99.8]
+```
+
+`n_output_channels` and `channel_combination` are automatically inferred from `fits_extension`: when multiple extensions are specified without an explicit `channel_combination`, an identity matrix is created and `n_output_channels` is set to match. Per-channel asinh parameters are also extended automatically if needed.
+
+**Combining extensions into fewer channels with `channel_combination`:**
+
+When you have more FITS extensions than desired output channels, use `channel_combination` to define a linear mapping. It is a NumPy array of shape `(n_output_channels, n_extensions)`. `n_output_channels` is automatically inferred from the matrix shape:
+
+```python
+import numpy as np
+
+# 4 FITS extensions → 3 RGB output channels
+cfg.normalisation.fits_extension = ["VIS", "NIR-H", "NIR-J", "NIR-Y"]
+cfg.normalisation.channel_combination = np.array([
+    [1, 0, 0, 0],    # R = VIS
+    [0, 0.5, 0.5, 0], # G = average of NIR-H and NIR-J
+    [0, 0, 0, 1],    # B = NIR-Y
+])
+```
+
+Each row defines one output channel as a weighted sum of the input extensions. `n_output_channels` is set to the number of rows in the matrix. When `channel_combination` is `None` (default), an identity matrix is created automatically for multi-extension configs.
+
+**Supported formats for N-channel data:**
+- **NumPy arrays (`.npy`)**: Shape `(H, W, C)` where C is the number of channels
+- **FITS files**: Multiple extensions combined as channels
+- **HDF5/Zarr**: Arrays with shape `(N, H, W, C)`
+
+**UI Channel Mapping:**
+
+For images with more than 3 channels, the UI provides RGB mapping dropdowns to select which 3 channels to display as Red, Green, and Blue. This allows visual inspection of different channel combinations without affecting the training data.
+
+**Model Architecture:**
+
+When using pretrained models (default), AnomalyMatch automatically adapts the first convolutional layer for N-channel input:
+- The first 3 channels use the pretrained RGB weights
+- Additional channels are initialized with averaged RGB weights
+
+This approach preserves the benefit of pretrained features while supporting arbitrary channel counts.
+
 ### Cutana Streaming Integration
 
 AnomalyMatch supports streaming predictions via [Cutana](https://github.com/esa/cutana), which enables on-the-fly cutout extraction from FITS tiles. This is particularly useful for Euclid mission data, which Cutana primarily targets.
@@ -250,6 +332,10 @@ AnomalyMatch supports streaming predictions via [Cutana](https://github.com/esa/
 3. AnomalyMatch will automatically detect the catalogues and stream cutouts via Cutana
 
 **FITS extension configuration:** When using Cutana streaming, ensure `cfg.normalisation.fits_extension` matches the FITS extensions referenced in your catalogue. For multi-band Euclid data, this might be `["VIS", "NIR-H", "NIR-J"]` or similar, depending on your catalogue structure.
+
+**Normalisation consistency:** AnomalyMatch automatically passes the same fitsbolt normalisation configuration to Cutana, so training and streaming prediction produce identically normalised images. If `channel_combination` is set, it is automatically translated to Cutana's expected format.
+
+**Flux conversion:** Set `cfg.normalisation.apply_flux_conversion = True` when working with Euclid data to convert pixel values to flux density in Jansky using the AB zeropoint (`MAGZERO`) from FITS headers. This is applied consistently in both the training and Cutana prediction paths, before normalisation.
 
 For more details on catalogue format and Cutana configuration, see the [Cutana documentation](https://github.com/esa/cutana).
 
@@ -263,6 +349,10 @@ For more details on catalogue format and Cutana configuration, see the [Cutana d
     - `ASINH`: [Asinh](https://docs.astropy.org/en/stable/api/astropy.visualization.AsinhStretch.html) normalisation with configurable scale and percentile clipping for both grayscale/multichannel and RGB images.
 - It currently allows an enum from [NormalisationMethod](anomaly_match/image_processing/NormalisationMethod.py) 
 - Selecting a new [normalisation](anomaly_match/image_processing/normalisation.py) in the dropdown will apply it when training or predicting. For further detail see [Normalisation-Readme](anomaly_match/image_processing/Normalisationreadme.md)
+
+**Normalisation Consistency:** Normalisation settings (method, channel combination, flux conversion, etc.) are saved in the model checkpoint during training. During prediction, these settings are loaded automatically from the checkpoint — there is no need to re-specify them. Both training and Cutana streaming use fitsbolt for normalisation, guaranteeing identical results.
+
+**Flux Conversion:** For Euclid data, set `cfg.normalisation.apply_flux_conversion = True` to convert pixel values to flux density in Jansky using the AB zeropoint (`MAGZERO`) from FITS headers. This is applied consistently in both training and prediction paths.
 
 ## Key Config Parameters
 - `save_dir`: Path to store the trained model output.
@@ -305,7 +395,7 @@ The following advanced parameters can be configured:
 
 ### Additional Parameters
 - `fits_extension`: Extension(s) to use for FITS files, can be int, string, or list of int/string (default: None)
-- `fits_combination`: Dictonary with keys `R`,`G`,`B` of lists of length of `fits_extension` denoting how the specified fits_extensions are (linearly) mapped to the R,G,B channels. 
+- `channel_combination`: NumPy array of shape `(n_output_channels, n_extensions)` defining how FITS extensions are linearly combined into output channels. When `None` (default), an identity matrix is auto-created for multi-extension configs. `n_output_channels` is inferred from the matrix shape when provided.
 - `interpolation_order`: 0-5 corresponding to [skimage resize interpolation orders](https://scikit-image.org/docs/stable/api/skimage.transform.html#skimage.transform.warp) (default: 1 (Bi-linear))
 - `normalisation_method`: Normalisation method to be applied during file loading. Can also be selected in the UI dropdown. Correspons to an entry from the class NormalisationMethod (default: `NormalisationMethod.CONVERSION_ONLY`)
 

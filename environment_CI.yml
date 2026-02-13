@@ -11,7 +11,6 @@ channels:
 dependencies:
   - astropy
   - dotmap
-  - efficientnet-pytorch
   - h5py
   - imageio
   - ipykernel
@@ -23,6 +22,7 @@ dependencies:
   - python=3.11
   - pytorch>=2.6
   - pytest
+  - pytest-cov
   - pytest-asyncio>=0.23.0
   - pyturbojpeg
   - scikit-learn
@@ -35,7 +35,6 @@ dependencies:
   - pip:
       - opencv-python-headless
       - albumentations
-      - efficientnet_lite_pytorch
-      - efficientnet_lite0_pytorch_model
-      - fitsbolt>=0.1.6
+      - timm
+      - fitsbolt>=0.2
       - cutana>=0.2.1

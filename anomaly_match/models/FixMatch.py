@@ -4,19 +4,18 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+import sys
+
 import torch
 import torch.nn.functional as F
-from sklearn.metrics import roc_auc_score, precision_recall_curve, auc
-
-import sys
+from loguru import logger
+from sklearn.metrics import auc, precision_recall_curve, roc_auc_score
 from tqdm.auto import tqdm
 
-from loguru import logger
-
+from anomaly_match.datasets.data_utils import get_data_loader
+from anomaly_match.utils.accuracy import accuracy
 from anomaly_match.utils.consistency_loss import consistency_loss
 from anomaly_match.utils.cross_entropy_loss import cross_entropy_loss
-from anomaly_match.utils.accuracy import accuracy
-from anomaly_match.datasets.data_utils import get_data_loader
 
 
 class FixMatch:
@@ -29,7 +28,6 @@ class FixMatch:
         T,
         p_cutoff,
         lambda_u,
-        hard_label=True,
         logger=None,
         session_tracker=None,
     ):
@@ -46,7 +44,6 @@ class FixMatch:
             T: Temperature parameter for sharpening predictions
             p_cutoff: Confidence threshold for pseudo-labeling
             lambda_u: Weight for unsupervised loss component
-            hard_label: If True, uses hard pseudo-labels, otherwise soft labels
             logger: Logger instance for outputting information
             session_tracker: Optional session tracker for recording training progress
         """

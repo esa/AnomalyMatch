@@ -5,32 +5,27 @@
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
 import argparse
-import os
-import pickle
-import sys
-
-from dotmap import DotMap
-import torch
-import numpy as np
-from loguru import logger
-from concurrent.futures import ThreadPoolExecutor
 import time
+from concurrent.futures import ThreadPoolExecutor
+
 import h5py
+import numpy as np
+import torch
+from loguru import logger
 from tqdm import tqdm
 
 from anomaly_match.data_io.load_images import process_single_wrapper
-
-from prediction_utils import (
-    load_model,
-    save_results,
-    process_batch_predictions,
-    clear_gpu_cache_if_needed,
-    jpeg_decoder,
-    estimate_batch_size,
-)
-
 from anomaly_match.image_processing.transforms import (
     get_prediction_transforms,
+)
+from prediction_utils import (
+    clear_gpu_cache_if_needed,
+    jpeg_decoder,
+    load_model,
+    load_prediction_config,
+    process_batch_predictions,
+    save_results,
+    setup_prediction_logging,
 )
 
 
@@ -48,8 +43,9 @@ def read_and_decode_image_from_hdf5(image_data, cfg):
                 image = image[:, :, [2, 1, 0]]
         except Exception:
             # If TurboJPEG fails, fall back to PIL
-            from PIL import Image
             import io
+
+            from PIL import Image
 
             image = np.array(Image.open(io.BytesIO(image_bytes)))
 
@@ -172,32 +168,7 @@ def main():
     parser.add_argument("top_n", type=int, default=1000, help="Number of top scores to keep")
     args = parser.parse_args()
 
-    logger.info(f"Loading config from {args.config_path}")
-    # Load cfg from pkl
-    try:
-        with open(args.config_path, "rb") as f:
-            cfg = pickle.load(f)
-            cfg = DotMap(cfg)
-    except Exception as e:
-        logger.error(f"Failed to load config from {args.config_path}: {e}")
-        sys.exit(1)
-
-    logger.info("Setting batch size")
-    batch_size = (
-        estimate_batch_size(cfg) if cfg.N_batch_prediction is None else cfg.N_batch_prediction
-    )
-    logger.info(f"Batch size set to: {batch_size}")
-
-    # Log key configuration parameters
-    logger.debug("Configuration loaded with parameters:")
-    logger.debug(f"  Save file: {cfg.save_file}")
-    logger.debug(f"  Save path: {cfg.save_path}")
-    logger.debug(f"  Model path: {cfg.model_path}")
-    logger.debug(f"  Output directory: {cfg.output_dir}")
-    logger.debug(f"  Image size: {cfg.normalisation.image_size}")
-
-    # Create output directory if it doesn't exist
-    os.makedirs(cfg.output_dir, exist_ok=True)
+    cfg, batch_size = load_prediction_config(args.config_path)
 
     logger.info(f"Processing HDF5 file: {args.hdf5_path}")
 
@@ -211,18 +182,5 @@ def main():
 
 
 if __name__ == "__main__":
-
-    # Configure logging
-    logs_dir = os.path.join(os.path.dirname(__file__), "logs")
-    os.makedirs(logs_dir, exist_ok=True)
-
-    # Remove default handler and set up file logging
-    logger.remove()
-    logger.add(
-        os.path.join(logs_dir, "prediction_thread_{time}.log"),
-        rotation="1 MB",
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
-        level="DEBUG",
-    )
-    logger.add(sys.stderr, level="INFO")
+    setup_prediction_logging("prediction_hdf5")
     main()
