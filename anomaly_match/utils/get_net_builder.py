@@ -134,12 +134,31 @@ def get_net_builder(net_name, pretrained=False, in_channels=3):
         num_classes, in_channels, _timm_name=timm_name, _pretrained=use_pretrained, pretrained=None
     ):
         effective_pretrained = pretrained if pretrained is not None else _pretrained
+        if effective_pretrained:
+            try:
+                return timm.create_model(
+                    _timm_name,
+                    pretrained=True,
+                    num_classes=num_classes,
+                    in_chans=in_channels,
+                    cache_dir=str(_PRETRAINED_CACHE_DIR),
+                )
+            except Exception:
+                logger.warning(
+                    f"Bundled pretrained weights not available (clone with git-lfs to avoid "
+                    f"re-downloading). Downloading {_timm_name} from HuggingFace."
+                )
+                return timm.create_model(
+                    _timm_name,
+                    pretrained=True,
+                    num_classes=num_classes,
+                    in_chans=in_channels,
+                )
         return timm.create_model(
             _timm_name,
-            pretrained=effective_pretrained,
+            pretrained=False,
             num_classes=num_classes,
             in_chans=in_channels,
-            cache_dir=str(_PRETRAINED_CACHE_DIR) if effective_pretrained else None,
         )
 
     return build_model
