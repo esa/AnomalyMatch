@@ -119,7 +119,7 @@ def get_net_builder(net_name, pretrained=False, in_channels=3):
     if net_name == "test-cnn":
         logger.debug("Using test-cnn model (for testing only)")
 
-        def build_test_cnn(num_classes, in_channels, **kwargs):
+        def build_test_cnn(num_classes, in_channels, pretrained=None):
             return TestCNN(num_classes=num_classes, in_channels=in_channels)
 
         return build_test_cnn

@@ -24,6 +24,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
