@@ -4,9 +4,15 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+from pathlib import Path
+
 import timm
 import torch.nn as nn
 from loguru import logger
+
+# Local cache directory for pretrained weights, avoids flock issues on NFS filesystems.
+_PACKAGE_DIR = Path(__file__).resolve().parent.parent
+_PRETRAINED_CACHE_DIR = _PACKAGE_DIR / "pretrained_cache"
 
 # Mapping from AnomalyMatch net names to timm model identifiers.
 # efficientnet-lite variants use the tf_ prefix for TF-style same-padding,
@@ -113,7 +119,7 @@ def get_net_builder(net_name, pretrained=False, in_channels=3):
     if net_name == "test-cnn":
         logger.debug("Using test-cnn model (for testing only)")
 
-        def build_test_cnn(num_classes, in_channels):
+        def build_test_cnn(num_classes, in_channels, **kwargs):
             return TestCNN(num_classes=num_classes, in_channels=in_channels)
 
         return build_test_cnn
@@ -124,12 +130,16 @@ def get_net_builder(net_name, pretrained=False, in_channels=3):
         f"(timm: {timm_name})"
     )
 
-    def build_model(num_classes, in_channels, _timm_name=timm_name, _pretrained=use_pretrained):
+    def build_model(
+        num_classes, in_channels, _timm_name=timm_name, _pretrained=use_pretrained, pretrained=None
+    ):
+        effective_pretrained = pretrained if pretrained is not None else _pretrained
         return timm.create_model(
             _timm_name,
-            pretrained=_pretrained,
+            pretrained=effective_pretrained,
             num_classes=num_classes,
             in_chans=in_channels,
+            cache_dir=str(_PRETRAINED_CACHE_DIR) if effective_pretrained else None,
         )
 
     return build_model

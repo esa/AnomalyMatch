@@ -54,8 +54,15 @@ class FixMatch:
         self.ema_m = ema_m
 
         # Create two versions of the model: one for training and one for evaluation with EMA
+        # eval_model skips pretrained weight download because its weights are immediately
+        # overwritten by copying from train_model below.
         self.train_model = net_builder(num_classes=num_classes, in_channels=in_channels)
-        self.eval_model = net_builder(num_classes=num_classes, in_channels=in_channels)
+        try:
+            self.eval_model = net_builder(
+                num_classes=num_classes, in_channels=in_channels, pretrained=False
+            )
+        except TypeError:
+            self.eval_model = net_builder(num_classes=num_classes, in_channels=in_channels)
         self.T = T
         self.p_cutoff = p_cutoff
         self.lambda_u = lambda_u
