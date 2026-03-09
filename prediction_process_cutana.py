@@ -116,9 +116,7 @@ def evaluate_images_from_cutana(
         # extension names like ['CHANNEL_1','CHANNEL_2','CHANNEL_3']) are only
         # meaningful for reading cutout files — they must not be passed to
         # cutana as-is because source mosaics have different HDU structure.
-        extension_names = _resolve_filter_names_from_catalogue(
-            cutana_sources_path, len(fits_ext)
-        )
+        extension_names = _resolve_filter_names_from_catalogue(cutana_sources_path, len(fits_ext))
     else:
         extension_names = ["PRIMARY"]
 
@@ -140,7 +138,11 @@ def evaluate_images_from_cutana(
     combo_dict = cfg.normalisation.channel_combination_dict
     # DotMap subclasses dict, so empty auto-created DotMaps pass isinstance check.
     # Only use combo_dict when it's a real non-empty dict set by validate_config.
-    combo = combo_dict if isinstance(combo_dict, dict) and len(combo_dict) > 0 else cfg.normalisation.channel_combination
+    combo = (
+        combo_dict
+        if isinstance(combo_dict, dict) and len(combo_dict) > 0
+        else cfg.normalisation.channel_combination
+    )
     if combo is not None and isinstance(combo, dict) and len(combo) > 0:
         # Dict form: keys are filter names, values are weight lists.
         # This is order-independent — no risk of channel jumbling when

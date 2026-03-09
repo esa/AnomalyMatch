@@ -68,9 +68,7 @@ class TestResolveFilterNamesFromCatalogue:
 
     def test_non_euclid_paths_raise(self, tmp_path):
         non_euclid = "['custom_band_a.fits', 'custom_band_b.fits']"
-        cat = _make_euclid_catalogue(
-            tmp_path / "sources.parquet", fits_paths=non_euclid, n=3
-        )
+        cat = _make_euclid_catalogue(tmp_path / "sources.parquet", fits_paths=non_euclid, n=3)
         with pytest.raises(ValueError, match="Could not determine filter names"):
             _resolve_filter_names_from_catalogue(str(cat), n_extensions=2)
 
@@ -92,11 +90,13 @@ class TestStreamingFitsExtensionConfig:
 
     @pytest.fixture
     def channel_combination(self):
-        return np.array([
-            [1.0, 0.0, 0.0],
-            [0.0, 0.9, 0.0],
-            [0.0, 0.0, 0.9],
-        ])
+        return np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, 0.9, 0.0],
+                [0.0, 0.0, 0.9],
+            ]
+        )
 
     @pytest.mark.parametrize(
         "fits_extension",
@@ -118,9 +118,7 @@ class TestStreamingFitsExtensionConfig:
         fits_ext = list(fits_extension)
 
         if len(fits_ext) > 1:
-            extension_names = _resolve_filter_names_from_catalogue(
-                euclid_catalogue, len(fits_ext)
-            )
+            extension_names = _resolve_filter_names_from_catalogue(euclid_catalogue, len(fits_ext))
         else:
             extension_names = ["PRIMARY"]
 
@@ -152,9 +150,7 @@ class TestStreamingFitsExtensionConfig:
         """channel_weights keys must be resolved filter names, not cutout extension names."""
         fits_ext = list(fits_extension)
 
-        extension_names = _resolve_filter_names_from_catalogue(
-            euclid_catalogue, len(fits_ext)
-        )
+        extension_names = _resolve_filter_names_from_catalogue(euclid_catalogue, len(fits_ext))
 
         channel_weights = {}
         for j, ext_name in enumerate(extension_names):
