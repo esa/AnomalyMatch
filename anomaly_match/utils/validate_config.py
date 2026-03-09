@@ -294,8 +294,25 @@ def validate_config(cfg: DotMap, check_paths: bool = True) -> None:
         cc = cfg.normalisation.channel_combination
         fits_ext = cfg.normalisation.fits_extension
 
+        # Dict form channel_combination: keys are filter names, values are
+        # weight lists.  Convert to numpy array for fitsbolt compatibility
+        # while preserving the original dict in the config for streaming.
+        if cc is not None and isinstance(cc, dict):
+            keys = list(cc.keys())
+            cc_array = np.column_stack([np.array(cc[k]) for k in keys])
+            inferred = cc_array.shape[0]
+            if inferred != cfg.normalisation.n_output_channels:
+                logger.info(
+                    f"Setting n_output_channels to {inferred} "
+                    f"from dict channel_combination ({keys})"
+                )
+                cfg.normalisation.n_output_channels = inferred
+            # Store numpy array for fitsbolt, keep dict in config for streaming
+            cfg.normalisation.channel_combination = cc_array
+            cfg.normalisation.channel_combination_dict = cc
+
         # Infer n_output_channels from channel_combination matrix if provided
-        if cc is not None and hasattr(cc, "shape") and len(cc.shape) == 2:
+        elif cc is not None and hasattr(cc, "shape") and len(cc.shape) == 2:
             inferred = cc.shape[0]
             if inferred != cfg.normalisation.n_output_channels:
                 logger.info(
