@@ -65,3 +65,4 @@ _.benchmark  # noqa - torch.backends.cudnn.benchmark attribute
 # Image processing functions used in prediction scripts (root level, excluded from scan)
 process_single_wrapper  # noqa - Used in prediction_utils.py, prediction_process_hdf5.py
 _.n_expected_channels  # noqa - fitsbolt config attribute set dynamically
+_.channel_combination_dict  # noqa - Used in prediction_process_cutana.py (outside scan path)
