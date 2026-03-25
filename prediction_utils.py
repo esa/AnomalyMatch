@@ -24,6 +24,7 @@ from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 from loguru import logger
 from turbojpeg import TurboJPEG
 
+from anomaly_match.data_io.checkpoint_io import load_checkpoint
 from anomaly_match.data_io.load_images import get_fitsbolt_config, process_single_wrapper
 from anomaly_match.utils.get_default_cfg import get_default_cfg
 
@@ -189,10 +190,8 @@ def load_model(cfg):
     else:
         logger.info("Using CPU for inference")
 
-    if torch.cuda.is_available():
-        checkpoint = torch.load(model_path, weights_only=False)
-    else:
-        checkpoint = torch.load(model_path, weights_only=False, map_location=torch.device("cpu"))
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    checkpoint = load_checkpoint(model_path, device=device)
 
     if "eval_model" not in checkpoint:
         raise KeyError(

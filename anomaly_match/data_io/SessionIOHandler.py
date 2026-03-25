@@ -7,14 +7,13 @@
 
 import json
 import os
-import pickle
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
-import torch
 from loguru import logger
 
+from anomaly_match.data_io.checkpoint_io import load_checkpoint, save_checkpoint
 from anomaly_match.data_io.save_config import save_config_toml
 from anomaly_match.pipeline.SessionTracker import IterationInfo, SessionTracker
 
@@ -209,12 +208,12 @@ class SessionIOHandler:
         checkpoints_dir.mkdir(exist_ok=True)
 
         if checkpoint_name is None:
-            checkpoint_name = f"model_iter_{session_tracker.total_model_iterations}.pkl"
+            checkpoint_name = f"model_iter_{session_tracker.total_model_iterations}.safetensors"
 
         checkpoint_path = checkpoints_dir / checkpoint_name
-
-        with open(checkpoint_path, "wb") as f:
-            pickle.dump(model_state, f)
+        save_checkpoint(model_state, checkpoint_path)
+        # save_checkpoint forces .safetensors extension
+        checkpoint_path = checkpoint_path.with_suffix(".safetensors")
 
         # Update the session tracker with the checkpoint path
         session_tracker.update_model_state_path(str(checkpoint_path))
@@ -246,7 +245,7 @@ class SessionIOHandler:
                 if session_tracker.session_iterations
                 else 0
             )
-            model_filename = f"model_iteration_{iteration_num}.pth"
+            model_filename = f"model_iteration_{iteration_num}.safetensors"
             model_path = save_path / model_filename
         else:
             if cfg.model_path is None:
@@ -287,8 +286,9 @@ class SessionIOHandler:
             "fitsbolt_cfg": fitsbolt_cfg,
         }
 
-        # Save model
-        torch.save(save_state, model_path)
+        # Save model (save_checkpoint forces .safetensors extension)
+        save_checkpoint(save_state, model_path)
+        model_path = Path(model_path).with_suffix(".safetensors")
 
         if session_tracker is not None:
             # Ensure there's an active session iteration
@@ -331,7 +331,7 @@ class SessionIOHandler:
 
         try:
             # Load checkpoint
-            checkpoint = torch.load(load_path, weights_only=False)
+            checkpoint = load_checkpoint(load_path)
 
             # Handle distributed training case
             train_model = (
@@ -441,15 +441,8 @@ class SessionIOHandler:
                 logger.error(f"Checkpoint path does not exist: {checkpoint_path}")
                 return None
 
-            # Try loading as pickle first (new format), then as torch (legacy)
-            try:
-                with open(checkpoint_path, "rb") as f:
-                    checkpoint = pickle.load(f)
-                logger.debug(f"Loaded checkpoint from pickle format: {checkpoint_path}")
-            except (pickle.UnpicklingError, EOFError):
-                # Fall back to torch format
-                checkpoint = torch.load(checkpoint_path, weights_only=False, map_location="cpu")
-                logger.debug(f"Loaded checkpoint from torch format: {checkpoint_path}")
+            checkpoint = load_checkpoint(checkpoint_path)
+            logger.debug(f"Loaded checkpoint: {checkpoint_path}")
 
             return checkpoint
 
@@ -611,7 +604,9 @@ class SessionIOHandler:
             "fitsbolt_cfg": fitsbolt_cfg,
         }
 
-        torch.save(save_state, save_filename)
+        save_checkpoint(save_state, save_filename)
+        # save_checkpoint forces .safetensors extension; update save_filename to match
+        save_filename = str(Path(save_filename).with_suffix(".safetensors"))
 
         # Update session tracker if provided
         if session_tracker is not None:
@@ -706,7 +701,7 @@ class SessionIOHandler:
 
         # Update model path to session directory only if not already set by user
         if cfg.model_path is None:
-            cfg.model_path = str(session_path / "model.pth")
+            cfg.model_path = str(session_path / "model.safetensors")
 
         # Update output directory to session directory
         cfg.output_dir = str(session_path)
@@ -805,7 +800,7 @@ def print_session(filepath: str) -> None:
 
         checkpoints_dir = session_path / "checkpoints"
         if checkpoints_dir.exists():
-            checkpoints = list(checkpoints_dir.glob("*.pkl"))
+            checkpoints = list(checkpoints_dir.glob("*.safetensors"))
             print(f"✓ {len(checkpoints)} model checkpoint(s)")
 
         print("=" * 60)

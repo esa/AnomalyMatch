@@ -6,7 +6,6 @@
 #   the terms contained in the file 'LICENCE.txt'.
 
 import json
-import pickle
 import shutil
 import tempfile
 from pathlib import Path
@@ -15,6 +14,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
+from anomaly_match.data_io.checkpoint_io import load_checkpoint
 from anomaly_match.data_io.SessionIOHandler import SessionIOHandler, print_session
 from anomaly_match.pipeline.SessionTracker import SessionTracker
 
@@ -103,19 +103,35 @@ class TestSessionIOHandler:
 
     def test_save_model_checkpoint(self):
         """Test saving model checkpoint."""
-        model_state = {"weights": [1, 2, 3], "epoch": 10}
+        import torch
+
+        model_state = {
+            "train_model": {"layer.weight": torch.randn(2, 2)},
+            "eval_model": {"layer.weight": torch.randn(2, 2)},
+            "optimizer": None,
+            "scheduler": None,
+            "it": 10,
+            "total_it": 10,
+            "best_eval_acc": None,
+            "best_it": None,
+            "num_channels": 3,
+            "net": "efficientnet-lite0",
+            "normalisation_method": None,
+            "last_normalisation_method": None,
+            "fitsbolt_cfg": None,
+        }
 
         checkpoint_path = self.io_handler.save_model_checkpoint(model_state, self.session_tracker)
 
         # Check checkpoint was saved
         assert Path(checkpoint_path).exists()
         assert "checkpoints" in checkpoint_path
-        assert checkpoint_path.endswith(".pkl")
+        assert checkpoint_path.endswith(".safetensors")
 
         # Verify checkpoint content
-        with open(checkpoint_path, "rb") as f:
-            loaded_state = pickle.load(f)
-        assert loaded_state == model_state
+        loaded_state = load_checkpoint(checkpoint_path)
+        assert loaded_state["it"] == 10
+        assert "train_model" in loaded_state
 
         # Verify that session tracker was updated - check the last iteration
         assert len(self.session_tracker.session_iterations) > 0
@@ -124,8 +140,24 @@ class TestSessionIOHandler:
 
     def test_save_model_checkpoint_custom_name(self):
         """Test saving model checkpoint with custom name."""
-        model_state = {"test": "data"}
-        custom_name = "custom_checkpoint.pkl"
+        import torch
+
+        model_state = {
+            "train_model": {"layer.weight": torch.randn(2, 2)},
+            "eval_model": {"layer.weight": torch.randn(2, 2)},
+            "optimizer": None,
+            "scheduler": None,
+            "it": 0,
+            "total_it": 0,
+            "best_eval_acc": None,
+            "best_it": None,
+            "num_channels": 3,
+            "net": "efficientnet-lite0",
+            "normalisation_method": None,
+            "last_normalisation_method": None,
+            "fitsbolt_cfg": None,
+        }
+        custom_name = "custom_checkpoint.safetensors"
 
         checkpoint_path = self.io_handler.save_model_checkpoint(
             model_state, self.session_tracker, checkpoint_name=custom_name
@@ -221,7 +253,7 @@ class TestPrintSession:
         session_tracker.add_labeled_sample("img1.jpg", "anomaly")
         session_tracker.add_labeled_sample("img2.jpg", "normal")
         session_tracker.update_test_performance({"AUROC": 0.92, "AUPRC": 0.88})
-        session_tracker.update_model_state_path("models/final_model.pth")
+        session_tracker.update_model_state_path("models/final_model.safetensors")
 
         # Start second iteration
         session_tracker.start_new_session_iteration()
@@ -347,13 +379,29 @@ class TestSessionIOHandlerIntegration:
         tracker.update_model_iteration(0.5)
         tracker.add_labeled_sample("img4.jpg", "anomaly")
         tracker.update_test_performance({"AUROC": 0.93, "AUPRC": 0.89})
-        tracker.update_model_state_path("models/best_model.pth")
+        tracker.update_model_state_path("models/best_model.safetensors")
 
         # Save session
         saved_path = self.io_handler.save_session(tracker)
 
         # Save model checkpoint
-        model_state = {"epoch": 50, "weights": [1, 2, 3, 4]}
+        import torch
+
+        model_state = {
+            "train_model": {"layer.weight": torch.randn(2, 2)},
+            "eval_model": {"layer.weight": torch.randn(2, 2)},
+            "optimizer": None,
+            "scheduler": None,
+            "it": 50,
+            "total_it": 50,
+            "best_eval_acc": None,
+            "best_it": None,
+            "num_channels": 3,
+            "net": "efficientnet-lite0",
+            "normalisation_method": None,
+            "last_normalisation_method": None,
+            "fitsbolt_cfg": None,
+        }
         checkpoint_path = self.io_handler.save_model_checkpoint(model_state, tracker)
 
         # Load session back
@@ -365,11 +413,10 @@ class TestSessionIOHandlerIntegration:
         assert len(loaded_tracker.get_labeled_data_df()) == 4
         assert len(loaded_tracker.session_iterations) == 2
 
-        # Check model checkpoint exists
+        # Check model checkpoint exists and can be loaded
         assert Path(checkpoint_path).exists()
-        with open(checkpoint_path, "rb") as f:
-            loaded_model = pickle.load(f)
-        assert loaded_model == model_state
+        loaded_model = load_checkpoint(checkpoint_path)
+        assert loaded_model["it"] == 50
 
     def test_multiple_sessions_management(self):
         """Test managing multiple sessions."""

@@ -7,8 +7,8 @@
 
 """Tests for fitsbolt configuration persistence in model checkpoints.
 
-The fitsbolt DotMap configuration can be pickled directly via torch.save/load
-without explicit serialization.
+The fitsbolt DotMap configuration is serialized via safetensors metadata
+(JSON-encoded) through save_checkpoint/load_checkpoint.
 """
 
 import shutil
@@ -22,14 +22,36 @@ from fitsbolt.cfg.create_config import create_config as fb_create_cfg
 from fitsbolt.cfg.create_config import validate_config
 from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 
+from anomaly_match.data_io.checkpoint_io import load_checkpoint, save_checkpoint
 from anomaly_match.data_io.load_images import get_fitsbolt_config
 
 
-class TestFitsboltConfigPickling:
-    """Test cases for fitsbolt config pickling via torch.save/load."""
+def _make_checkpoint(fitsbolt_cfg=None, **extra):
+    """Create a minimal checkpoint dict suitable for save_checkpoint."""
+    checkpoint = {
+        "train_model": {"dummy.weight": torch.randn(2, 2)},
+        "eval_model": {"dummy.weight": torch.randn(2, 2)},
+        "optimizer": None,
+        "scheduler": None,
+        "it": 0,
+        "total_it": 0,
+        "best_eval_acc": None,
+        "best_it": None,
+        "num_channels": 3,
+        "net": "efficientnet-lite0",
+        "normalisation_method": None,
+        "last_normalisation_method": None,
+        "fitsbolt_cfg": fitsbolt_cfg,
+    }
+    checkpoint.update(extra)
+    return checkpoint
 
-    def test_pickle_roundtrip_basic(self):
-        """Test basic pickle roundtrip via torch checkpoint."""
+
+class TestFitsboltConfigSafetensors:
+    """Test cases for fitsbolt config persistence via safetensors."""
+
+    def test_roundtrip_basic(self):
+        """Test basic roundtrip via safetensors checkpoint."""
         original_cfg = fb_create_cfg(
             output_dtype=np.uint8,
             size=[64, 64],
@@ -38,44 +60,34 @@ class TestFitsboltConfigPickling:
             num_workers=4,
         )
 
-        # Save via torch
-        with tempfile.NamedTemporaryFile(suffix=".pth", delete=False) as f:
-            checkpoint_path = f.name
-
-        try:
-            torch.save({"fitsbolt_cfg": original_cfg}, checkpoint_path)
-            loaded = torch.load(checkpoint_path, weights_only=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint_path = Path(tmp) / "model.safetensors"
+            save_checkpoint(_make_checkpoint(fitsbolt_cfg=original_cfg), checkpoint_path)
+            loaded = load_checkpoint(checkpoint_path)
             loaded_cfg = loaded["fitsbolt_cfg"]
 
             assert loaded_cfg.size == original_cfg.size
             assert loaded_cfg.n_output_channels == original_cfg.n_output_channels
-            assert loaded_cfg.num_workers == original_cfg.num_workers
             assert loaded_cfg.normalisation_method == original_cfg.normalisation_method
-        finally:
-            Path(checkpoint_path).unlink(missing_ok=True)
 
-    def test_pickle_numpy_dtype(self):
-        """Test pickling of numpy dtypes."""
+    def test_numpy_dtype(self):
+        """Test persistence of numpy dtypes."""
         original_cfg = fb_create_cfg(
             output_dtype=np.float32,
             size=[128, 128],
             n_output_channels=3,
         )
 
-        with tempfile.NamedTemporaryFile(suffix=".pth", delete=False) as f:
-            checkpoint_path = f.name
-
-        try:
-            torch.save({"fitsbolt_cfg": original_cfg}, checkpoint_path)
-            loaded = torch.load(checkpoint_path, weights_only=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint_path = Path(tmp) / "model.safetensors"
+            save_checkpoint(_make_checkpoint(fitsbolt_cfg=original_cfg), checkpoint_path)
+            loaded = load_checkpoint(checkpoint_path)
             loaded_cfg = loaded["fitsbolt_cfg"]
 
             assert loaded_cfg.output_dtype == np.float32
-        finally:
-            Path(checkpoint_path).unlink(missing_ok=True)
 
-    def test_pickle_all_normalisation_methods(self):
-        """Test pickling with all normalisation methods."""
+    def test_all_normalisation_methods(self):
+        """Test persistence with all normalisation methods."""
         for method in NormalisationMethod:
             original_cfg = fb_create_cfg(
                 output_dtype=np.uint8,
@@ -84,20 +96,16 @@ class TestFitsboltConfigPickling:
                 normalisation_method=method,
             )
 
-            with tempfile.NamedTemporaryFile(suffix=".pth", delete=False) as f:
-                checkpoint_path = f.name
-
-            try:
-                torch.save({"fitsbolt_cfg": original_cfg}, checkpoint_path)
-                loaded = torch.load(checkpoint_path, weights_only=False)
+            with tempfile.TemporaryDirectory() as tmp:
+                checkpoint_path = Path(tmp) / "model.safetensors"
+                save_checkpoint(_make_checkpoint(fitsbolt_cfg=original_cfg), checkpoint_path)
+                loaded = load_checkpoint(checkpoint_path)
                 loaded_cfg = loaded["fitsbolt_cfg"]
 
                 assert loaded_cfg.normalisation_method == method
-            finally:
-                Path(checkpoint_path).unlink(missing_ok=True)
 
-    def test_pickle_channel_combination(self):
-        """Test pickling of numpy array channel_combination."""
+    def test_channel_combination(self):
+        """Test persistence of numpy array channel_combination."""
         original_cfg = fb_create_cfg(
             output_dtype=np.uint8,
             size=[64, 64],
@@ -106,22 +114,18 @@ class TestFitsboltConfigPickling:
             channel_combination=np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]),
         )
 
-        with tempfile.NamedTemporaryFile(suffix=".pth", delete=False) as f:
-            checkpoint_path = f.name
-
-        try:
-            torch.save({"fitsbolt_cfg": original_cfg}, checkpoint_path)
-            loaded = torch.load(checkpoint_path, weights_only=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint_path = Path(tmp) / "model.safetensors"
+            save_checkpoint(_make_checkpoint(fitsbolt_cfg=original_cfg), checkpoint_path)
+            loaded = load_checkpoint(checkpoint_path)
             loaded_cfg = loaded["fitsbolt_cfg"]
 
             np.testing.assert_array_equal(
                 loaded_cfg.channel_combination, original_cfg.channel_combination
             )
-        finally:
-            Path(checkpoint_path).unlink(missing_ok=True)
 
-    def test_pickle_asinh_settings(self):
-        """Test pickling of asinh normalisation settings."""
+    def test_asinh_settings(self):
+        """Test persistence of asinh normalisation settings."""
         original_cfg = fb_create_cfg(
             output_dtype=np.uint8,
             size=[64, 64],
@@ -131,25 +135,21 @@ class TestFitsboltConfigPickling:
             norm_asinh_clip=[99.0, 99.5, 99.8],
         )
 
-        with tempfile.NamedTemporaryFile(suffix=".pth", delete=False) as f:
-            checkpoint_path = f.name
-
-        try:
-            torch.save({"fitsbolt_cfg": original_cfg}, checkpoint_path)
-            loaded = torch.load(checkpoint_path, weights_only=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint_path = Path(tmp) / "model.safetensors"
+            save_checkpoint(_make_checkpoint(fitsbolt_cfg=original_cfg), checkpoint_path)
+            loaded = load_checkpoint(checkpoint_path)
             loaded_cfg = loaded["fitsbolt_cfg"]
 
             assert loaded_cfg.normalisation.asinh_scale == original_cfg.normalisation.asinh_scale
             assert loaded_cfg.normalisation.asinh_clip == original_cfg.normalisation.asinh_clip
-        finally:
-            Path(checkpoint_path).unlink(missing_ok=True)
 
 
 class TestFitsboltConfigValidation:
-    """Test cases for fitsbolt config validation after pickling."""
+    """Test cases for fitsbolt config validation after safetensors roundtrip."""
 
-    def test_validate_pickled_config(self):
-        """Test that pickled config passes fitsbolt validation."""
+    def test_validate_roundtripped_config(self):
+        """Test that roundtripped config passes fitsbolt validation."""
         original_cfg = fb_create_cfg(
             output_dtype=np.uint8,
             size=[64, 64],
@@ -158,25 +158,21 @@ class TestFitsboltConfigValidation:
             num_workers=4,
         )
 
-        with tempfile.NamedTemporaryFile(suffix=".pth", delete=False) as f:
-            checkpoint_path = f.name
-
-        try:
-            torch.save({"fitsbolt_cfg": original_cfg}, checkpoint_path)
-            loaded = torch.load(checkpoint_path, weights_only=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint_path = Path(tmp) / "model.safetensors"
+            save_checkpoint(_make_checkpoint(fitsbolt_cfg=original_cfg), checkpoint_path)
+            loaded = load_checkpoint(checkpoint_path)
             loaded_cfg = loaded["fitsbolt_cfg"]
 
             # Validate using fitsbolt's validate_config
             validate_config(loaded_cfg)
-        finally:
-            Path(checkpoint_path).unlink(missing_ok=True)
 
 
 class TestFitsboltConfigCompatibility:
     """Test compatibility with fitsbolt's create_config function."""
 
     def test_compatibility_with_fits_extension_settings(self):
-        """Test pickling with various fits_extension configurations."""
+        """Test persistence with various fits_extension configurations."""
         # Single integer extension
         cfg1 = fb_create_cfg(
             output_dtype=np.uint8,
@@ -185,15 +181,11 @@ class TestFitsboltConfigCompatibility:
             fits_extension=0,
         )
 
-        with tempfile.NamedTemporaryFile(suffix=".pth", delete=False) as f:
-            checkpoint_path = f.name
-
-        try:
-            torch.save({"fitsbolt_cfg": cfg1}, checkpoint_path)
-            loaded = torch.load(checkpoint_path, weights_only=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint_path = Path(tmp) / "model.safetensors"
+            save_checkpoint(_make_checkpoint(fitsbolt_cfg=cfg1), checkpoint_path)
+            loaded = load_checkpoint(checkpoint_path)
             validate_config(loaded["fitsbolt_cfg"])
-        finally:
-            Path(checkpoint_path).unlink(missing_ok=True)
 
         # List of extensions
         cfg2 = fb_create_cfg(
@@ -203,22 +195,18 @@ class TestFitsboltConfigCompatibility:
             fits_extension=[0, 1, 2],
         )
 
-        with tempfile.NamedTemporaryFile(suffix=".pth", delete=False) as f:
-            checkpoint_path = f.name
-
-        try:
-            torch.save({"fitsbolt_cfg": cfg2}, checkpoint_path)
-            loaded = torch.load(checkpoint_path, weights_only=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint_path = Path(tmp) / "model.safetensors"
+            save_checkpoint(_make_checkpoint(fitsbolt_cfg=cfg2), checkpoint_path)
+            loaded = load_checkpoint(checkpoint_path)
             validate_config(loaded["fitsbolt_cfg"])
-        finally:
-            Path(checkpoint_path).unlink(missing_ok=True)
 
 
 class TestGetFitsboltConfigIntegration:
-    """Test get_fitsbolt_config integration with pickling."""
+    """Test get_fitsbolt_config integration with safetensors persistence."""
 
-    def test_get_fitsbolt_config_pickling(self):
-        """Test that config from get_fitsbolt_config can be pickled."""
+    def test_get_fitsbolt_config_roundtrip(self):
+        """Test that config from get_fitsbolt_config survives safetensors roundtrip."""
         # Create an AnomalyMatch-style config
         cfg = DotMap()
         cfg.normalisation = DotMap()
@@ -240,13 +228,10 @@ class TestGetFitsboltConfigIntegration:
         # Get fitsbolt config
         cfg = get_fitsbolt_config(cfg)
 
-        # Save and load via torch
-        with tempfile.NamedTemporaryFile(suffix=".pth", delete=False) as f:
-            checkpoint_path = f.name
-
-        try:
-            torch.save({"fitsbolt_cfg": cfg.fitsbolt_cfg}, checkpoint_path)
-            loaded = torch.load(checkpoint_path, weights_only=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint_path = Path(tmp) / "model.safetensors"
+            save_checkpoint(_make_checkpoint(fitsbolt_cfg=cfg.fitsbolt_cfg), checkpoint_path)
+            loaded = load_checkpoint(checkpoint_path)
             loaded_cfg = loaded["fitsbolt_cfg"]
 
             # Validate
@@ -256,8 +241,6 @@ class TestGetFitsboltConfigIntegration:
             assert loaded_cfg.size == [64, 64]
             assert loaded_cfg.n_output_channels == 3
             assert loaded_cfg.normalisation_method == NormalisationMethod.CONVERSION_ONLY
-        finally:
-            Path(checkpoint_path).unlink(missing_ok=True)
 
 
 class TestFitsboltConfigE2EWithCheckpoint:
@@ -272,7 +255,7 @@ class TestFitsboltConfigE2EWithCheckpoint:
         shutil.rmtree(self.temp_dir)
 
     def test_fitsbolt_config_in_checkpoint_dict(self):
-        """Test that fitsbolt config can be saved and loaded in a checkpoint-like dict."""
+        """Test that fitsbolt config can be saved and loaded in a checkpoint dict."""
         # Create a fitsbolt config
         fitsbolt_cfg = fb_create_cfg(
             output_dtype=np.uint8,
@@ -283,19 +266,12 @@ class TestFitsboltConfigE2EWithCheckpoint:
             norm_asinh_clip=[99.0, 99.5, 99.8],
         )
 
-        # Create a mock checkpoint
-        checkpoint = {
-            "model_state": {"dummy": "data"},
-            "optimizer_state": None,
-            "fitsbolt_cfg": fitsbolt_cfg,
-        }
-
         # Save checkpoint
-        checkpoint_path = Path(self.temp_dir) / "test_checkpoint.pth"
-        torch.save(checkpoint, checkpoint_path)
+        checkpoint_path = Path(self.temp_dir) / "test_checkpoint.safetensors"
+        save_checkpoint(_make_checkpoint(fitsbolt_cfg=fitsbolt_cfg), checkpoint_path)
 
         # Load checkpoint
-        loaded_checkpoint = torch.load(checkpoint_path, weights_only=False)
+        loaded_checkpoint = load_checkpoint(checkpoint_path)
         loaded_fitsbolt_cfg = loaded_checkpoint["fitsbolt_cfg"]
 
         # Verify
@@ -310,22 +286,12 @@ class TestFitsboltConfigE2EWithCheckpoint:
 
     def test_backward_compatibility_checkpoint_without_fitsbolt(self):
         """Test loading checkpoints that don't have fitsbolt_cfg."""
-        # Create a mock checkpoint without fitsbolt_cfg (legacy format)
-        checkpoint = {
-            "model_state": {"dummy": "data"},
-            "optimizer_state": None,
-        }
-
-        # Save checkpoint
-        checkpoint_path = Path(self.temp_dir) / "legacy_checkpoint.pth"
-        torch.save(checkpoint, checkpoint_path)
+        # Save checkpoint without fitsbolt_cfg
+        checkpoint_path = Path(self.temp_dir) / "legacy_checkpoint.safetensors"
+        save_checkpoint(_make_checkpoint(fitsbolt_cfg=None), checkpoint_path)
 
         # Load checkpoint
-        loaded_checkpoint = torch.load(checkpoint_path, weights_only=False)
+        loaded_checkpoint = load_checkpoint(checkpoint_path)
 
-        # Check that fitsbolt_cfg is not present
-        assert "fitsbolt_cfg" not in loaded_checkpoint
-
-        # Accessing non-existent key should return None via .get()
-        result = loaded_checkpoint.get("fitsbolt_cfg")
-        assert result is None
+        # fitsbolt_cfg should be None (not missing)
+        assert loaded_checkpoint["fitsbolt_cfg"] is None

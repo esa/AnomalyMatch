@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 import torch
 
+from anomaly_match.data_io.checkpoint_io import load_checkpoint
 from anomaly_match.data_io.SessionIOHandler import SessionIOHandler
 from anomaly_match.pipeline.SessionTracker import SessionTracker
 
@@ -67,25 +68,25 @@ class TestRunAndLabelSavingMigration:
         """Create a mock configuration."""
         config = Mock()
         config.normalisation_method = "min_max"
-        config.model_path = "test_model.pth"
+        config.model_path = "test_model.safetensors"
         # Explicitly set fitsbolt_cfg to None to avoid pickling issues with Mock
         config.fitsbolt_cfg = None
         return config
 
     def test_save_run_basic(self, session_io, mock_model, temp_dir):
         """Test basic save_run functionality."""
-        save_name = "test_model.pth"
+        save_name = "test_model.safetensors"
         save_path = temp_dir
 
         result_path = session_io.save_run(mock_model, save_name, save_path)
 
-        # Check that the model was saved
+        # Check that the model was saved (save_checkpoint forces .safetensors extension)
         expected_path = os.path.join(save_path, save_name)
         assert result_path == expected_path
         assert os.path.exists(expected_path)
 
         # Verify the saved model can be loaded
-        checkpoint = torch.load(expected_path, weights_only=False)
+        checkpoint = load_checkpoint(expected_path)
         assert "train_model" in checkpoint
         assert "eval_model" in checkpoint
         assert "optimizer" in checkpoint
@@ -95,7 +96,7 @@ class TestRunAndLabelSavingMigration:
 
     def test_save_run_with_session_tracker(self, session_io, mock_model, session_tracker, temp_dir):
         """Test save_run with session tracker integration."""
-        save_name = "test_model.pth"
+        save_name = "test_model.safetensors"
         save_path = temp_dir
 
         # Start a session iteration
@@ -111,7 +112,7 @@ class TestRunAndLabelSavingMigration:
 
     def test_save_run_with_config(self, session_io, mock_model, mock_config, temp_dir):
         """Test save_run with configuration saving."""
-        save_name = "test_model.pth"
+        save_name = "test_model.safetensors"
         save_path = temp_dir
 
         # Mock the config saving function
@@ -182,7 +183,7 @@ class TestRunAndLabelSavingMigration:
         self, session_io, session_tracker, mock_model, mock_config, temp_dir
     ):
         """Test the complete integration flow for training run saving."""
-        save_name = "final_model.pth"
+        save_name = "final_model.safetensors"
         save_path = temp_dir
 
         # Simulate a training session
@@ -199,7 +200,7 @@ class TestRunAndLabelSavingMigration:
         assert session_tracker.session_iterations[0].model_state_path == model_path
 
         # Verify model checkpoint structure
-        checkpoint = torch.load(model_path, weights_only=False)
+        checkpoint = load_checkpoint(model_path)
         assert all(key in checkpoint for key in ["train_model", "eval_model", "optimizer", "it"])
 
     def test_integration_label_saving_flow(self, session_io, session_tracker, temp_dir):

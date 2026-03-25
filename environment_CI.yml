@@ -35,6 +35,7 @@ dependencies:
   - pip:
       - opencv-python-headless
       - albumentations
+      - safetensors
       - timm
       - fitsbolt>=0.2
       - cutana>=0.2.1

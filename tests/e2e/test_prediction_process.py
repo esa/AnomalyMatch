@@ -40,7 +40,7 @@ def test_config():
     cfg.net = "efficientnet-lite0"
     cfg.pretrained = True
     cfg.num_channels = 3
-    cfg.model_path = "tests/test_data/test_model.pth"
+    cfg.model_path = "tests/test_data/test_model.safetensors"
     cfg.gpu = 0
     cfg.output_dir = tempfile.mkdtemp()
     cfg.normalisation.normalisation_method = NormalisationMethod.CONVERSION_ONLY
