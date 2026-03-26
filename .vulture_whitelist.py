@@ -12,8 +12,6 @@ Format: function_name  # noqa - comment explaining why it's used
 """
 
 # SessionIOHandler methods - public API used in tests
-save_model_checkpoint  # noqa - Used in test_session_io_handler.py, test_model_io_integration.py
-load_model_checkpoint  # noqa - Used in test_model_io_integration.py
 list_sessions  # noqa - Used in test_session_io_handler.py
 save_run  # noqa - Used in test_run_label_migration.py
 save_labels_to_output_dir  # noqa - Used in test_run_label_migration.py

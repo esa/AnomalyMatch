@@ -14,7 +14,6 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from anomaly_match.data_io.checkpoint_io import load_checkpoint
 from anomaly_match.data_io.SessionIOHandler import SessionIOHandler, print_session
 from anomaly_match.pipeline.SessionTracker import SessionTracker
 
@@ -100,71 +99,6 @@ class TestSessionIOHandler:
         assert save_path == custom_path
         assert save_path.exists()
         assert (save_path / "session_metadata.json").exists()
-
-    def test_save_model_checkpoint(self):
-        """Test saving model checkpoint."""
-        import torch
-
-        model_state = {
-            "train_model": {"layer.weight": torch.randn(2, 2)},
-            "eval_model": {"layer.weight": torch.randn(2, 2)},
-            "optimizer": None,
-            "scheduler": None,
-            "it": 10,
-            "total_it": 10,
-            "best_eval_acc": None,
-            "best_it": None,
-            "num_channels": 3,
-            "net": "efficientnet-lite0",
-            "normalisation_method": None,
-            "last_normalisation_method": None,
-            "fitsbolt_cfg": None,
-        }
-
-        checkpoint_path = self.io_handler.save_model_checkpoint(model_state, self.session_tracker)
-
-        # Check checkpoint was saved
-        assert Path(checkpoint_path).exists()
-        assert "checkpoints" in checkpoint_path
-        assert checkpoint_path.endswith(".safetensors")
-
-        # Verify checkpoint content
-        loaded_state = load_checkpoint(checkpoint_path)
-        assert loaded_state["it"] == 10
-        assert "train_model" in loaded_state
-
-        # Verify that session tracker was updated - check the last iteration
-        assert len(self.session_tracker.session_iterations) > 0
-        last_iter = self.session_tracker.session_iterations[-1]
-        assert last_iter.model_state_path == checkpoint_path
-
-    def test_save_model_checkpoint_custom_name(self):
-        """Test saving model checkpoint with custom name."""
-        import torch
-
-        model_state = {
-            "train_model": {"layer.weight": torch.randn(2, 2)},
-            "eval_model": {"layer.weight": torch.randn(2, 2)},
-            "optimizer": None,
-            "scheduler": None,
-            "it": 0,
-            "total_it": 0,
-            "best_eval_acc": None,
-            "best_it": None,
-            "num_channels": 3,
-            "net": "efficientnet-lite0",
-            "normalisation_method": None,
-            "last_normalisation_method": None,
-            "fitsbolt_cfg": None,
-        }
-        custom_name = "custom_checkpoint.safetensors"
-
-        checkpoint_path = self.io_handler.save_model_checkpoint(
-            model_state, self.session_tracker, checkpoint_name=custom_name
-        )
-
-        assert checkpoint_path.endswith(custom_name)
-        assert Path(checkpoint_path).exists()
 
     def test_load_session_complete_cycle(self):
         """Test complete save/load cycle."""
@@ -384,26 +318,6 @@ class TestSessionIOHandlerIntegration:
         # Save session
         saved_path = self.io_handler.save_session(tracker)
 
-        # Save model checkpoint
-        import torch
-
-        model_state = {
-            "train_model": {"layer.weight": torch.randn(2, 2)},
-            "eval_model": {"layer.weight": torch.randn(2, 2)},
-            "optimizer": None,
-            "scheduler": None,
-            "it": 50,
-            "total_it": 50,
-            "best_eval_acc": None,
-            "best_it": None,
-            "num_channels": 3,
-            "net": "efficientnet-lite0",
-            "normalisation_method": None,
-            "last_normalisation_method": None,
-            "fitsbolt_cfg": None,
-        }
-        checkpoint_path = self.io_handler.save_model_checkpoint(model_state, tracker)
-
         # Load session back
         loaded_tracker = self.io_handler.load_session(saved_path)
 
@@ -412,11 +326,6 @@ class TestSessionIOHandlerIntegration:
         assert loaded_tracker.total_model_iterations == tracker.total_model_iterations
         assert len(loaded_tracker.get_labeled_data_df()) == 4
         assert len(loaded_tracker.session_iterations) == 2
-
-        # Check model checkpoint exists and can be loaded
-        assert Path(checkpoint_path).exists()
-        loaded_model = load_checkpoint(checkpoint_path)
-        assert loaded_model["it"] == 50
 
     def test_multiple_sessions_management(self):
         """Test managing multiple sessions."""

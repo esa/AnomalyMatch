@@ -184,43 +184,6 @@ class SessionIOHandler:
             except Exception as e:
                 logger.warning(f"Failed to save test scores: {e}")
 
-    def save_model_checkpoint(
-        self,
-        model_state: Dict[str, Any],
-        session_tracker: SessionTracker,
-        checkpoint_name: str = None,
-    ) -> str:
-        """
-        Save a model checkpoint within the session directory.
-
-        Args:
-            model_state: Model state dictionary to save.
-            session_tracker: Associated session tracker.
-            checkpoint_name: Optional custom checkpoint name.
-
-        Returns:
-            Path to saved checkpoint.
-        """
-        save_path = self.get_session_save_path(session_tracker)
-        save_path.mkdir(parents=True, exist_ok=True)
-
-        checkpoints_dir = save_path / "checkpoints"
-        checkpoints_dir.mkdir(exist_ok=True)
-
-        if checkpoint_name is None:
-            checkpoint_name = f"model_iter_{session_tracker.total_model_iterations}.safetensors"
-
-        checkpoint_path = checkpoints_dir / checkpoint_name
-        save_checkpoint(model_state, checkpoint_path)
-        # save_checkpoint forces .safetensors extension
-        checkpoint_path = checkpoint_path.with_suffix(".safetensors")
-
-        # Update the session tracker with the checkpoint path
-        session_tracker.update_model_state_path(str(checkpoint_path))
-
-        logger.debug(f"Saved model checkpoint to: {checkpoint_path}")
-        return str(checkpoint_path)
-
     def save_model(self, model, cfg, session_tracker: SessionTracker = None) -> str:
         """
         Save the model to the session directory if session_tracker is available,
@@ -425,30 +388,6 @@ class SessionIOHandler:
         except Exception as e:
             logger.error(f"Failed to load model from {load_path}: {e}")
             return False
-
-    def load_model_checkpoint(self, checkpoint_path: str) -> Optional[Dict[str, Any]]:
-        """
-        Load a model checkpoint from the specified path.
-
-        Args:
-            checkpoint_path: Path to the checkpoint file
-
-        Returns:
-            Dictionary containing the checkpoint data, or None if loading failed
-        """
-        try:
-            if not os.path.exists(checkpoint_path):
-                logger.error(f"Checkpoint path does not exist: {checkpoint_path}")
-                return None
-
-            checkpoint = load_checkpoint(checkpoint_path)
-            logger.debug(f"Loaded checkpoint: {checkpoint_path}")
-
-            return checkpoint
-
-        except Exception as e:
-            logger.error(f"Failed to load checkpoint from {checkpoint_path}: {e}")
-            return None
 
     def load_session(self, session_path: Path) -> SessionTracker:
         """

@@ -142,46 +142,6 @@ class TestModelIOIntegration:
 
         assert not success
 
-    def test_load_model_checkpoint(self):
-        """Test loading model checkpoint via save_model_checkpoint."""
-        # Create and save a checkpoint with standard checkpoint structure
-        model_state = {
-            "train_model": self.mock_model.train_model.state_dict(),
-            "eval_model": self.mock_model.eval_model.state_dict(),
-            "optimizer": None,
-            "scheduler": None,
-            "it": 0,
-            "total_it": self.mock_model.total_it,
-            "best_eval_acc": None,
-            "best_it": None,
-            "num_channels": 3,
-            "net": "efficientnet-lite0",
-            "normalisation_method": None,
-            "last_normalisation_method": None,
-            "fitsbolt_cfg": None,
-        }
-
-        checkpoint_path = self.session_io.save_model_checkpoint(
-            model_state, self.session_tracker, "test_checkpoint.safetensors"
-        )
-
-        # Load checkpoint
-        loaded_checkpoint = self.session_io.load_model_checkpoint(checkpoint_path)
-
-        # Verify checkpoint was loaded
-        assert loaded_checkpoint is not None
-        assert "train_model" in loaded_checkpoint
-        assert "total_it" in loaded_checkpoint
-        assert loaded_checkpoint["total_it"] == self.mock_model.total_it
-
-    def test_load_model_checkpoint_nonexistent(self):
-        """Test loading nonexistent checkpoint."""
-        checkpoint = self.session_io.load_model_checkpoint(
-            str(self.temp_dir / "nonexistent.safetensors")
-        )
-
-        assert checkpoint is None
-
 
 TEST_MODEL_PATH = Path(__file__).parent.parent / "test_data" / "test_model.safetensors"
 
