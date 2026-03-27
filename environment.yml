@@ -38,4 +38,5 @@ dependencies:
       - cutana>=0.2.1
       - fitsbolt>=0.2
       - opencv-python-headless
+      - safetensors
       - timm

@@ -46,6 +46,7 @@ dependencies = [
     "psutil",
     "pyarrow",
     "pyturbojpeg",
+    "safetensors",
     "scikit-image",
     "scikit-learn",
     "scipy",

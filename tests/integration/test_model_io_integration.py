@@ -15,6 +15,7 @@ import torch.nn as nn
 from dotmap import DotMap
 from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 
+from anomaly_match.data_io.checkpoint_io import load_checkpoint
 from anomaly_match.data_io.SessionIOHandler import SessionIOHandler
 from anomaly_match.pipeline.SessionTracker import SessionTracker
 from anomaly_match.utils.get_net_builder import get_net_builder
@@ -59,7 +60,7 @@ class TestModelIOIntegration:
         from anomaly_match.utils.get_default_cfg import get_default_cfg
 
         self.cfg = get_default_cfg()
-        self.cfg.model_path = str(self.temp_dir / "test_model.pth")
+        self.cfg.model_path = str(self.temp_dir / "test_model.safetensors")
 
     def teardown_method(self):
         """Clean up test fixtures."""
@@ -135,47 +136,19 @@ class TestModelIOIntegration:
 
     def test_load_model_nonexistent_file(self):
         """Test loading from nonexistent file."""
-        self.cfg.model_path = str(self.temp_dir / "nonexistent.pth")
+        self.cfg.model_path = str(self.temp_dir / "nonexistent.safetensors")
 
         success = self.session_io.load_model(self.mock_model, self.cfg)
 
         assert not success
 
-    def test_load_model_checkpoint(self):
-        """Test loading model checkpoint."""
-        # Create and save a checkpoint
-        model_state = {
-            "train_model_state_dict": self.mock_model.train_model.state_dict(),
-            "eval_model_state_dict": self.mock_model.eval_model.state_dict(),
-            "total_it": self.mock_model.total_it,
-        }
 
-        checkpoint_path = self.session_io.save_model_checkpoint(
-            model_state, self.session_tracker, "test_checkpoint.pkl"
-        )
-
-        # Load checkpoint
-        loaded_checkpoint = self.session_io.load_model_checkpoint(checkpoint_path)
-
-        # Verify checkpoint was loaded
-        assert loaded_checkpoint is not None
-        assert "train_model_state_dict" in loaded_checkpoint
-        assert "total_it" in loaded_checkpoint
-        assert loaded_checkpoint["total_it"] == self.mock_model.total_it
-
-    def test_load_model_checkpoint_nonexistent(self):
-        """Test loading nonexistent checkpoint."""
-        checkpoint = self.session_io.load_model_checkpoint(str(self.temp_dir / "nonexistent.pkl"))
-
-        assert checkpoint is None
+TEST_MODEL_PATH = Path(__file__).parent.parent / "test_data" / "test_model.safetensors"
 
 
-TEST_MODEL_PATH = Path(__file__).parent.parent / "test_data" / "test_model.pth"
-
-
-@pytest.mark.skipif(not TEST_MODEL_PATH.exists(), reason="test_model.pth not available")
+@pytest.mark.skipif(not TEST_MODEL_PATH.exists(), reason="test_model.safetensors not available")
 class TestStoredModelLoading:
-    """Regression tests for loading the stored test_model.pth checkpoint.
+    """Regression tests for loading the stored test_model.safetensors checkpoint.
 
     These tests verify that the checked-in test model remains compatible
     with the current model architecture (timm-based EfficientNet).
@@ -183,7 +156,7 @@ class TestStoredModelLoading:
 
     def test_stored_model_has_expected_keys(self):
         """Verify the stored checkpoint contains expected top-level keys."""
-        checkpoint = torch.load(str(TEST_MODEL_PATH), weights_only=False, map_location="cpu")
+        checkpoint = load_checkpoint(TEST_MODEL_PATH)
 
         assert "eval_model" in checkpoint, (
             f"Checkpoint missing 'eval_model' key. Found: {list(checkpoint.keys())}"
@@ -192,7 +165,7 @@ class TestStoredModelLoading:
 
     def test_stored_model_loads_into_efficientnet_lite0(self):
         """Verify stored model state_dict is compatible with the current architecture."""
-        checkpoint = torch.load(str(TEST_MODEL_PATH), weights_only=False, map_location="cpu")
+        checkpoint = load_checkpoint(TEST_MODEL_PATH)
 
         net_builder = get_net_builder("efficientnet-lite0", pretrained=False, in_channels=3)
         model = net_builder(num_classes=2, in_channels=3)

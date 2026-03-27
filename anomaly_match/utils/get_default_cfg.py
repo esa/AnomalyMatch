@@ -32,7 +32,7 @@ def get_default_cfg():
     cfg.metadata_file = None  # Path to the metadata CSV file
     cfg.prediction_search_dir = None
     cfg.save_path = os.path.join(cfg.save_dir)
-    cfg.save_file = create_model_string(cfg) + ".pth"
+    cfg.save_file = create_model_string(cfg) + ".safetensors"
     cfg.model_path = None  # Will be set by SessionIOHandler when session is active
     cfg.N_batch_prediction = None  # User specified batch size for evaluating a directory, if None: determined automatically
     cfg.subprocess_buffer_size = (
