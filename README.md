@@ -17,6 +17,7 @@ High-performance semi-supervised anomaly detection with active learning
   - [Requirements](#requirements)
   - [Installation](#installation)
   - [Session Tracking](#session-tracking)
+  - [Programmatic Evaluation (Headless Mode)](#programmatic-evaluation-headless-mode)
   - [Recommended Folder Structure](#recommended-folder-structure)
   - [Supported File Formats](#supported-file-formats)
     - [Zarr File Support](#zarr-file-support)
@@ -119,6 +120,52 @@ am.print_session('/path/to/session/directory')
 ```
 
 Session tracking is automatic and integrates seamlessly with existing workflows.
+
+## Programmatic Evaluation (Headless Mode)
+
+AnomalyMatch can be used without the UI for batch evaluation in scripts and automated pipelines. After training a model interactively (or loading a pretrained checkpoint), you can run predictions programmatically:
+
+```python
+import anomaly_match as am
+
+cfg = am.get_default_cfg()
+cfg.name = "batch_evaluation"
+
+# Trained model checkpoint
+cfg.model_path = "/path/to/model.pth"
+
+# Directory containing images, HDF5, or Zarr files to evaluate
+cfg.prediction_search_dir = "/path/to/images_to_evaluate"
+
+# Training data dir and label file (required by Session initialisation —
+# point to original training data or any dir with labelled + unlabelled images)
+cfg.data_dir = "/path/to/training_images"
+cfg.label_file = "/path/to/labeled_data.csv"
+
+# Image size must match training
+cfg.normalisation.image_size = [210, 210]
+
+# Skip test set (not needed for batch prediction)
+cfg.test_ratio = 0.0
+
+am.set_log_level("info", cfg)
+
+# Run evaluation
+session = am.Session(cfg)
+session.load_model()          # loads checkpoint and restores normalisation settings
+session.evaluate_all_images(top_N=1000)
+session.save_session()
+
+# Results are saved as CSV + NPY in cfg.output_dir
+print(f"Results saved to: {cfg.output_dir}")
+print(f"Top score: {session.scores[0]:.4f} — {session.filenames[0]}")
+```
+
+**Notes:**
+- `data_dir` and `label_file` are required because Session always initialises the training dataset. Point them to the original training data (or any directory with a few labelled + unlabelled images with the same channel count as the model).
+- Normalisation settings are loaded from the model checkpoint during `load_model()`, so they don't need to be re-specified.
+- `top_N` controls how many top-scoring images are retained. Results are saved as `{save_file}_top{top_N}.csv` (with `Filename` and `Score` columns) and a `.npy` file (images) in `cfg.output_dir`.
+- For FITS files with multiple extensions, set `cfg.normalisation.fits_extension` (e.g., `[1, 2, 3]`).
 
 ## Recommended Folder Structure
 - project/
