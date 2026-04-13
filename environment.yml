@@ -6,8 +6,6 @@
 #   the terms contained in the file 'LICENCE.txt'.
 name: am
 channels:
-  - pytorch
-  - nvidia
   - conda-forge
 dependencies:
   - astropy
@@ -23,7 +21,7 @@ dependencies:
   - pyarrow
   - python=3.11
   - pytorch>=2.6
-  - pytorch-cuda=12.4
+  - pytorch-gpu
   - pyturbojpeg
   - scikit-image
   - scikit-learn
