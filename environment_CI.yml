@@ -38,4 +38,4 @@ dependencies:
       - safetensors
       - timm
       - fitsbolt>=0.2
-      - cutana>=0.2.1
+      - cutana>=0.3.0

@@ -86,7 +86,7 @@ def _run_cutana_normalised(csv_path, fitsbolt_cfg, n_output_channels=3):
     config.external_fitsbolt_cfg = fitsbolt_cfg
 
     orchestrator = cutana.StreamingOrchestrator(config)
-    orchestrator.init_streaming(batch_size=10, write_to_disk=False, synchronised_loading=False)
+    orchestrator.init_streaming(batch_size=10, write_to_disk=False)
 
     all_cutouts = []
     for _ in range(orchestrator.get_batch_count()):
@@ -112,7 +112,7 @@ def _extract_raw_cutouts(csv_path, output_dir):
     config.output_dir = output_dir
 
     orchestrator = cutana.StreamingOrchestrator(config)
-    orchestrator.init_streaming(batch_size=10, write_to_disk=True, synchronised_loading=False)
+    orchestrator.init_streaming(batch_size=10, write_to_disk=True)
     for _ in range(orchestrator.get_batch_count()):
         orchestrator.next_batch()
     orchestrator.cleanup()

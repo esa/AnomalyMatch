@@ -210,9 +210,7 @@ def evaluate_images_from_cutana(
 
         cutana_orchestrator = cutana.StreamingOrchestrator(cutana_config)
 
-        cutana_orchestrator.init_streaming(
-            batch_size=batch_size, write_to_disk=False, synchronised_loading=False
-        )
+        cutana_orchestrator.init_streaming(batch_size=batch_size, write_to_disk=False)
     except Exception as e:
         logger.error(f"Failed to initialize Cutana orchestrator: {e}")
         raise

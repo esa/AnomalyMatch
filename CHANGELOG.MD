@@ -5,6 +5,20 @@
 [//]: # (this file, may be copied, modified, propagated, or distributed except according to)
 [//]: # (the terms contained in the file 'LICENCE.txt'.)
 
+## [v1.3.1] – 2026-05-11
+
+### Fixed
+- **Cutana 0.3.0 compatibility** by removing the obsolete `synchronised_loading` kwarg from `StreamingOrchestrator.init_streaming` calls
+- **Pretrained weight loading** when the repository is cloned without `git-lfs`: fall back to a HuggingFace download instead of failing on LFS pointer files (#7)
+
+### Changed
+- **Security:** replaced pickle-based `torch.save` / `torch.load` checkpointing with `safetensors`, removing the pickle deserialisation risk on untrusted model files (#9)
+- **PyTorch minimum** raised to `>=2.6` in the conda environments to pick up upstream CVE fixes (#11)
+- **Cutana minimum** raised to `>=0.3.0` in `environment.yml`, `environment_CI.yml`, and `pyproject.toml`
+
+### Documentation
+- **Programmatic Evaluation (Headless Mode)** section added to the README, showing how to run batch predictions through `Session.load_model()` + `Session.evaluate_all_images()` without launching the UI (#10)
+
 ## [v1.3.0] – 2026-02-11
 
 ### Added
