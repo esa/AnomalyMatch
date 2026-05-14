@@ -7,11 +7,14 @@
 
 """Unit tests for checkpoint_io: safetensors-based model checkpoint serialization."""
 
+import json
+
 import numpy as np
 import pytest
 import torch
 from dotmap import DotMap
 from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
+from safetensors import safe_open
 
 from anomaly_match.data_io.checkpoint_io import load_checkpoint, save_checkpoint
 
@@ -228,10 +231,6 @@ class TestSecurity:
 
     def test_metadata_is_plain_json(self, tmp_path):
         """All metadata in the safetensors header is valid JSON strings."""
-        import json
-
-        from safetensors import safe_open
-
         path = save_checkpoint(_make_full_checkpoint(), tmp_path / "model")
         with safe_open(str(path), framework="pt") as f:
             metadata = f.metadata()

@@ -210,9 +210,7 @@ def evaluate_images_from_cutana(
 
         cutana_orchestrator = cutana.StreamingOrchestrator(cutana_config)
 
-        cutana_orchestrator.init_streaming(
-            batch_size=batch_size, write_to_disk=False, synchronised_loading=False
-        )
+        cutana_orchestrator.init_streaming(batch_size=batch_size, write_to_disk=False)
     except Exception as e:
         logger.error(f"Failed to initialize Cutana orchestrator: {e}")
         raise
@@ -266,7 +264,11 @@ def evaluate_images_from_cutana(
         # Handle empty batches (cutana returns [] if all cutouts failed)
         if isinstance(batch_data, list):
             if len(batch_data) == 0:
-                logger.warning(f"Batch {batch_idx} returned empty cutouts (list), skipping")
+                logger.warning(
+                    f"Batch {batch_idx} returned empty cutouts (list), skipping. "
+                    f"Please ensure that number of extensions in Cutana source "
+                    f"catalogues matches those of the training set."
+                )
                 continue
             # Convert list to numpy array if needed
             batch_data = np.array(batch_data)
