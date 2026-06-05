@@ -104,11 +104,17 @@ session_name_timestamp/
 ├── session_metadata.json    # Complete session tracking data
 ├── labeled_data.csv         # All labelled samples
 ├── config.toml              # Final configuration
-├── model.pth                # Model checkpoint
+├── model_iteration_0.safetensors  # Model checkpoint (one per training iteration)
 └── iteration_scores/        # Per-iteration prediction scores
     ├── iteration_1_unlabelled_scores.csv
     ├── iteration_1_test_scores.csv
     └── ...
+```
+
+**Model checkpoint format (since v1.3.1):** Checkpoints are saved as `.safetensors` (secure — no pickle-based code execution) instead of `.pth`. Checkpoints written by older versions (`.pth`/`.pkl`) **cannot** be loaded by the current code and fail with `SafetensorError: Error while deserializing header`. Re-train the model with the current version to obtain a `.safetensors` checkpoint. To instead keep using an existing `.pth` model, install the last pre-safetensors release (`v1.3.0`):
+
+```bash
+pip install "git+https://github.com/esa/AnomalyMatch.git@v1.3.0"
 ```
 
 **Iteration Scores:** After each training iteration, AnomalyMatch stores prediction scores for both unlabelled and test data (if `test_ratio > 0`). These CSV files contain filenames and their corresponding anomaly scores, enabling analysis of how predictions evolve across training iterations.
@@ -132,7 +138,7 @@ cfg = am.get_default_cfg()
 cfg.name = "batch_evaluation"
 
 # Trained model checkpoint
-cfg.model_path = "/path/to/model.pth"
+cfg.model_path = "/path/to/model.safetensors"
 
 # Directory containing images, HDF5, or Zarr files to evaluate
 cfg.prediction_search_dir = "/path/to/images_to_evaluate"
