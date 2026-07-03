@@ -16,7 +16,11 @@ from dotmap import DotMap
 from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 from safetensors import safe_open
 
-from anomaly_match.data_io.checkpoint_io import load_checkpoint, save_checkpoint
+from anomaly_match.data_io.checkpoint_io import (
+    convert_legacy_checkpoint_to_safetensors,
+    load_checkpoint,
+    save_checkpoint,
+)
 
 
 def _make_state_dict(seed=0):
@@ -215,6 +219,68 @@ class TestFileFormat:
         loaded = load_checkpoint(path)
         assert "train_model" in loaded
         assert "eval_model" in loaded
+
+
+class TestLegacyConversion:
+    def test_converts_checkpoint(self, tmp_path):
+        model = torch.nn.Linear(3, 2)
+        optimizer = torch.optim.Adam(model.parameters())
+        model(torch.randn(1, 3)).sum().backward()
+        optimizer.step()
+        original = _make_full_checkpoint(
+            train_model=model.state_dict(),
+            eval_model=model.state_dict(),
+            optimizer=optimizer.state_dict(),
+        )
+        legacy_path = tmp_path / "model.pth"
+        torch.save(original, legacy_path)
+
+        output = convert_legacy_checkpoint_to_safetensors(legacy_path, trusted=True)
+        loaded = load_checkpoint(output)
+
+        assert output == tmp_path / "model.safetensors"
+        assert output.exists()
+        assert loaded.keys() == original.keys()
+        assert torch.equal(loaded["train_model"]["weight"], original["train_model"]["weight"])
+        assert loaded["it"] == original["it"]
+
+    def test_requires_trusted_before_loading(self, tmp_path, monkeypatch):
+        legacy_path = tmp_path / "model.pth"
+        legacy_path.touch()
+
+        def fail_if_called(*args, **kwargs):
+            pytest.fail("torch.load must not be called without explicit trust")
+
+        monkeypatch.setattr(torch, "load", fail_if_called)
+        with pytest.raises(ValueError, match="arbitrary code"):
+            convert_legacy_checkpoint_to_safetensors(legacy_path)
+
+    def test_rejects_unsupported_extension(self, tmp_path):
+        path = tmp_path / "model.txt"
+        path.touch()
+        with pytest.raises(ValueError, match=r"expected \.pth or \.pkl"):
+            convert_legacy_checkpoint_to_safetensors(path, trusted=True)
+
+    def test_rejects_missing_file(self, tmp_path):
+        with pytest.raises(FileNotFoundError, match="Legacy checkpoint not found"):
+            convert_legacy_checkpoint_to_safetensors(tmp_path / "missing.pth", trusted=True)
+
+    def test_rejects_non_dictionary_checkpoint(self, tmp_path):
+        legacy_path = tmp_path / "model.pth"
+        torch.save(["not", "a", "checkpoint"], legacy_path)
+        with pytest.raises(ValueError, match="checkpoint dictionary"):
+            convert_legacy_checkpoint_to_safetensors(legacy_path, trusted=True)
+
+    def test_respects_explicit_output_and_forces_suffix(self, tmp_path):
+        legacy_path = tmp_path / "model.pkl"
+        torch.save(_make_full_checkpoint(), legacy_path)
+
+        output = convert_legacy_checkpoint_to_safetensors(
+            legacy_path, tmp_path / "converted.pth", trusted=True
+        )
+
+        assert output == tmp_path / "converted.safetensors"
+        assert output.exists()
 
 
 class TestSecurity:

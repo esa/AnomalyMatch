@@ -13,6 +13,7 @@
 
 ### Changed
 - **Security:** replaced pickle-based `torch.save` / `torch.load` checkpointing with `safetensors`, removing the pickle deserialisation risk on untrusted model files (#9)
+- Added an explicit, trust-gated utility for converting legacy `.pth`/`.pkl` checkpoints to `.safetensors`
 - **PyTorch minimum** raised to `>=2.6` in the conda environments to pick up upstream CVE fixes (#11)
 - **Cutana minimum** raised to `>=0.3.0` in `environment.yml`, `environment_CI.yml`, and `pyproject.toml`
 

@@ -111,11 +111,19 @@ session_name_timestamp/
     └── ...
 ```
 
-**Model checkpoint format (since v1.3.1):** Checkpoints are saved as `.safetensors` (secure — no pickle-based code execution) instead of `.pth`. Checkpoints written by older versions (`.pth`/`.pkl`) **cannot** be loaded by the current code and fail with `SafetensorError: Error while deserializing header`. Re-train the model with the current version to obtain a `.safetensors` checkpoint. To instead keep using an existing `.pth` model, install the last pre-safetensors release (`v1.3.0`):
+**Model checkpoint format (since v1.3.1):** Checkpoints are saved and loaded as `.safetensors` (secure — no pickle-based code execution). Checkpoints written by older versions (`.pth`/`.pkl`) are not loaded directly by the application.
+
+### Converting legacy checkpoints
+
+If you have a legacy checkpoint created by a trusted older AnomalyMatch version, convert it once:
 
 ```bash
-pip install "git+https://github.com/esa/AnomalyMatch.git@v1.3.0"
+python scripts/convert_legacy_checkpoint.py path/to/model.pth --trusted
 ```
+
+This writes `path/to/model.safetensors`, which can then be used as `model_path`. Use `--output` to choose another destination.
+
+Only run this command on checkpoints you trust. Legacy PyTorch/pickle checkpoints can execute arbitrary code when loaded.
 
 **Iteration Scores:** After each training iteration, AnomalyMatch stores prediction scores for both unlabelled and test data (if `test_ratio > 0`). These CSV files contain filenames and their corresponding anomaly scores, enabling analysis of how predictions evolve across training iterations.
 

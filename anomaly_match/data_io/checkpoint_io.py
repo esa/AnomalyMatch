@@ -232,6 +232,48 @@ def save_checkpoint(save_state: dict[str, Any], path: str | Path) -> Path:
     return path
 
 
+def convert_legacy_checkpoint_to_safetensors(
+    legacy_path: str | Path,
+    output_path: str | Path | None = None,
+    *,
+    trusted: bool = False,
+    map_location: str = "cpu",
+) -> Path:
+    """Convert one trusted pickle-based checkpoint to ``.safetensors``.
+
+    This deliberately unsafe deserialization is isolated from normal checkpoint
+    loading and must be explicitly enabled for each conversion.
+    """
+    if not trusted:
+        raise ValueError(
+            "Conversion requires trusted=True. Legacy PyTorch/pickle checkpoints "
+            "can execute arbitrary code when loaded; only convert files from trusted sources."
+        )
+
+    legacy_path = Path(legacy_path)
+    if legacy_path.suffix.lower() not in {".pth", ".pkl"}:
+        raise ValueError(
+            f"Unsupported legacy checkpoint extension {legacy_path.suffix!r}; "
+            "expected .pth or .pkl."
+        )
+    if not legacy_path.is_file():
+        raise FileNotFoundError(f"Legacy checkpoint not found: {legacy_path}")
+
+    checkpoint = torch.load(legacy_path, map_location=map_location, weights_only=False)
+    if not isinstance(checkpoint, dict):
+        raise ValueError("Legacy checkpoint must contain a checkpoint dictionary.")
+    for model_key in ("train_model", "eval_model"):
+        state_dict = checkpoint.get(model_key)
+        if not isinstance(state_dict, dict) or not all(
+            isinstance(value, torch.Tensor) for value in state_dict.values()
+        ):
+            raise ValueError(
+                f"Legacy checkpoint key {model_key!r} must contain a tensor state dictionary."
+            )
+
+    return save_checkpoint(checkpoint, output_path or legacy_path.with_suffix(".safetensors"))
+
+
 def load_checkpoint(path: str | Path, device: str = "cpu") -> dict[str, Any]:
     """Load a model checkpoint from a ``.safetensors`` file.
 
