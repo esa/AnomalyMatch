@@ -8,6 +8,7 @@
 """Unit tests for checkpoint_io: safetensors-based model checkpoint serialization."""
 
 import json
+import pickle
 
 import numpy as np
 import pytest
@@ -244,6 +245,21 @@ class TestLegacyConversion:
         assert torch.equal(loaded["train_model"]["weight"], original["train_model"]["weight"])
         assert loaded["it"] == original["it"]
 
+    def test_converts_plain_pickle_checkpoint(self, tmp_path):
+        original = _make_full_checkpoint()
+        legacy_path = tmp_path / "model.pkl"
+        with legacy_path.open("wb") as file:
+            pickle.dump(original, file)
+
+        output = convert_legacy_checkpoint_to_safetensors(legacy_path, trusted=True)
+        loaded = load_checkpoint(output)
+
+        assert loaded["it"] == original["it"]
+        assert torch.equal(
+            loaded["train_model"]["layer.weight"],
+            original["train_model"]["layer.weight"],
+        )
+
     def test_requires_trusted_before_loading(self, tmp_path, monkeypatch):
         legacy_path = tmp_path / "model.pth"
         legacy_path.touch()
@@ -271,7 +287,7 @@ class TestLegacyConversion:
         with pytest.raises(ValueError, match="checkpoint dictionary"):
             convert_legacy_checkpoint_to_safetensors(legacy_path, trusted=True)
 
-    def test_respects_explicit_output_and_forces_suffix(self, tmp_path):
+    def test_converts_torch_saved_pkl_and_respects_output(self, tmp_path):
         legacy_path = tmp_path / "model.pkl"
         torch.save(_make_full_checkpoint(), legacy_path)
 

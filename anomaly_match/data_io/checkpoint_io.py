@@ -22,6 +22,7 @@ Checkpoint layout inside a single ``.safetensors`` file:
 from __future__ import annotations
 
 import json
+import pickle
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -232,6 +233,17 @@ def save_checkpoint(save_state: dict[str, Any], path: str | Path) -> Path:
     return path
 
 
+def _load_trusted_legacy_checkpoint(path: Path, map_location: str) -> dict[str, Any]:
+    if path.suffix.lower() == ".pkl":
+        try:
+            with path.open("rb") as file:
+                return pickle.load(file)
+        except (pickle.UnpicklingError, EOFError):
+            pass
+
+    return torch.load(path, map_location=map_location, weights_only=False)
+
+
 def convert_legacy_checkpoint_to_safetensors(
     legacy_path: str | Path,
     output_path: str | Path | None = None,
@@ -259,7 +271,7 @@ def convert_legacy_checkpoint_to_safetensors(
     if not legacy_path.is_file():
         raise FileNotFoundError(f"Legacy checkpoint not found: {legacy_path}")
 
-    checkpoint = torch.load(legacy_path, map_location=map_location, weights_only=False)
+    checkpoint = _load_trusted_legacy_checkpoint(legacy_path, map_location)
     if not isinstance(checkpoint, dict):
         raise ValueError("Legacy checkpoint must contain a checkpoint dictionary.")
     for model_key in ("train_model", "eval_model"):
