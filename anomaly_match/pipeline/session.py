@@ -36,6 +36,7 @@ from anomaly_match.utils.get_net_builder import get_net_builder
 from anomaly_match.utils.get_optimizer import get_optimizer
 from anomaly_match.utils.print_cfg import print_cfg
 from anomaly_match.utils.set_log_level import set_log_level
+from anomaly_match.utils.set_seeds import set_seeds
 from anomaly_match.utils.validate_config import validate_config
 
 
@@ -83,6 +84,11 @@ class Session:
         # Validate the config
         validate_config(cfg)
 
+        # Seed all RNGs before datasets and model are built so that the train/test
+        # split, weight initialisation and augmentation sampling are reproducible.
+        # cfg.seed was defined and validated but never actually applied.
+        set_seeds(int(cfg.seed))
+
         self.cfg = cfg
         self.cached_image_normalisation_enum = cfg.normalisation.normalisation_method
         self.out = None  # Initialize out attribute to None
@@ -115,6 +121,15 @@ class Session:
             logger=logger,
             session_tracker=self.session_tracker,
         )
+
+        # Apply the configured BatchNorm momentum (cfg.bn_momentum = 1 - ema_m, ~0.01).
+        # It was computed and validated but never set on the model, so BatchNorm ran at
+        # timm's 0.1 default (~10x too fast for our small batch size), destabilising the
+        # running statistics during fine-tuning.
+        for submodel in (self.model.train_model, self.model.eval_model):
+            for module in submodel.modules():
+                if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
+                    module.momentum = self.cfg.bn_momentum
 
         # get optimizer, ADAM and SGD are supported.
         optimizer = get_optimizer(

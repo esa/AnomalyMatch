@@ -95,6 +95,30 @@ def _resolve_timm_name(net_name, pretrained):
     return timm_base, False
 
 
+def _reset_classifier_head(model):
+    """Reset the classifier head to PyTorch's default Linear initialisation.
+
+    timm initialises EfficientNet classifiers with TF-EfficientNet's
+    ``1/sqrt(fan_in + fan_out)`` scale, which is tuned for the 1000-class ImageNet
+    head. For AnomalyMatch's 2-class head this produces weights that are roughly
+    ``num_classes`` times too large (std ~0.4 vs PyTorch's ~0.016). Such an
+    overconfident fresh head makes almost every unlabeled image clear the FixMatch
+    ``p_cutoff`` from the very first step with essentially random pseudo-labels,
+    poisoning the backbone during fine-tuning. Resetting to PyTorch's default
+    kaiming-uniform init restores the pre-timm fine-tuning quality.
+
+    Args:
+        model: A timm model exposing ``get_classifier()``.
+
+    Returns:
+        The same model, with its classifier head re-initialised in place.
+    """
+    classifier = model.get_classifier()
+    if isinstance(classifier, nn.Linear):
+        classifier.reset_parameters()
+    return model
+
+
 def get_net_builder(net_name, pretrained=False, in_channels=3):
     """Create a neural network builder function for the specified architecture.
 
@@ -136,7 +160,7 @@ def get_net_builder(net_name, pretrained=False, in_channels=3):
         effective_pretrained = pretrained if pretrained is not None else _pretrained
         if effective_pretrained:
             try:
-                return timm.create_model(
+                model = timm.create_model(
                     _timm_name,
                     pretrained=True,
                     num_classes=num_classes,
@@ -148,17 +172,22 @@ def get_net_builder(net_name, pretrained=False, in_channels=3):
                     f"Bundled pretrained weights not available (clone with git-lfs to avoid "
                     f"re-downloading). Downloading {_timm_name} from HuggingFace."
                 )
-                return timm.create_model(
+                model = timm.create_model(
                     _timm_name,
                     pretrained=True,
                     num_classes=num_classes,
                     in_chans=in_channels,
                 )
-        return timm.create_model(
-            _timm_name,
-            pretrained=False,
-            num_classes=num_classes,
-            in_chans=in_channels,
-        )
+        else:
+            model = timm.create_model(
+                _timm_name,
+                pretrained=False,
+                num_classes=num_classes,
+                in_chans=in_channels,
+            )
+        # timm's fresh classifier head is scaled for the 1000-class ImageNet head and
+        # is ~num_classes too large for AnomalyMatch's 2-class head; reset it to
+        # PyTorch's default init to avoid poisoning FixMatch fine-tuning.
+        return _reset_classifier_head(model)
 
     return build_model
