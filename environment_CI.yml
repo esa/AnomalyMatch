@@ -37,5 +37,5 @@ dependencies:
       - albumentations
       - safetensors
       - timm
-      - fitsbolt>=0.2
+      - fitsbolt==0.2.0
       - cutana>=0.3.0

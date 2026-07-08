@@ -10,6 +10,9 @@
 ### Fixed
 - **efficientnet-lite0 fine-tuning regression** introduced by the timm backbone swap in v1.3.0, which dropped FixMatch AUROC from ~0.96 to ~0.81. Three model-level defaults silently lost in the migration are restored: the classifier head is reset to PyTorch initialisation (timm's TF-EfficientNet scaling over-scaled the 2-class head ~25x, so the overconfident fresh head cleared the FixMatch confidence threshold from step one and poisoned the backbone with random pseudo-labels), `cfg.bn_momentum` is now applied to both models' BatchNorm layers instead of leaving them at timm's 10x-too-fast default, and `set_seeds()` is called after config validation so training is reproducible again (#16)
 
+### Changed
+- **Pinned `fitsbolt==0.2.0`** in `pyproject.toml`, `environment.yml`, and `environment_CI.yml`. fitsbolt 0.2.1 split a channel-combination validation into a standalone check guarded by `... and cfg.fits_extension is not None`, but operator precedence evaluates `len(cfg.fits_extension)` before the guard, raising `TypeError` on the non-FITS prediction path (where `fits_extension` is legitimately `None`). 0.3.0 carries the same bug, so the previous open `>=0.2` range broke prediction as soon as 0.2.1/0.3.0 were published
+
 ## [v1.3.1] – 2026-05-11
 
 ### Fixed
