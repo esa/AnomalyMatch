@@ -5,6 +5,11 @@
 [//]: # (this file, may be copied, modified, propagated, or distributed except according to)
 [//]: # (the terms contained in the file 'LICENCE.txt'.)
 
+## [v1.3.2] – 2026-07-08
+
+### Fixed
+- **efficientnet-lite0 fine-tuning regression** introduced by the timm backbone swap in v1.3.0, which dropped FixMatch AUROC from ~0.96 to ~0.81. Three model-level defaults silently lost in the migration are restored: the classifier head is reset to PyTorch initialisation (timm's TF-EfficientNet scaling over-scaled the 2-class head ~25x, so the overconfident fresh head cleared the FixMatch confidence threshold from step one and poisoned the backbone with random pseudo-labels), `cfg.bn_momentum` is now applied to both models' BatchNorm layers instead of leaving them at timm's 10x-too-fast default, and `set_seeds()` is called after config validation so training is reproducible again (#16)
+
 ## [v1.3.1] – 2026-05-11
 
 ### Fixed

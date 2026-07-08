@@ -12,7 +12,7 @@ from .utils.get_default_cfg import get_default_cfg
 from .utils.print_cfg import print_cfg
 from .utils.set_log_level import set_log_level
 
-__version__ = "1.3.1"
+__version__ = "1.3.2"
 
 __all__ = [
     "get_default_cfg",
