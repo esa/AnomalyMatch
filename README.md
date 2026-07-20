@@ -9,6 +9,8 @@ High-performance semi-supervised anomaly detection with active learning
 
 ![Demo search of Hubble Legacy Archive cutouts](resources/demo.gif)
 
+> 🤝 **Contributions are welcome!** See the [Contribution Guidelines](CONTRIBUTING.md) to get started.
+
 ## Table of Contents
 - [AnomalyMatch](#anomalymatch)
   - [Table of Contents](#table-of-contents)
