@@ -64,11 +64,14 @@ Each row of the array defines one output channel as a weighted sum of the input 
 
 ```python
 import numpy as np
-cfg.normalisation.channel_combination = np.array([
-    [1, 0, 0, 0],      # Channel 0 = extension 0
-    [0, 0.5, 0.5, 0],  # Channel 1 = average of extensions 1 and 2
-    [0, 0, 0, 1],      # Channel 2 = extension 3
-])
+
+cfg.normalisation.channel_combination = np.array(
+    [
+        [1, 0, 0, 0],  # Channel 0 = extension 0
+        [0, 0.5, 0.5, 0],  # Channel 1 = average of extensions 1 and 2
+        [0, 0, 0, 1],  # Channel 2 = extension 3
+    ]
+)
 ```
 
 ## Normalisation settings (optional)

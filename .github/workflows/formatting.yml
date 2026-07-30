@@ -13,11 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      # Pin the ruff version: the action otherwise resolves to the latest
+      # release, so a new ruff can fail CI on unchanged code (0.16 began
+      # formatting fenced code blocks in Markdown).
       - uses: astral-sh/ruff-action@v3
         with:
+          version: "0.16.0"
           args: "check"
           src: "."
       - uses: astral-sh/ruff-action@v3
         with:
+          version: "0.16.0"
           args: "format --check"
           src: "."

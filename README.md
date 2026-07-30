@@ -122,7 +122,8 @@ pip install "git+https://github.com/esa/AnomalyMatch.git@v1.3.0"
 You can view any saved session using:
 ```python
 import anomaly_match as am
-am.print_session('/path/to/session/directory')
+
+am.print_session("/path/to/session/directory")
 ```
 
 Session tracking is automatic and integrates seamlessly with existing workflows.
@@ -158,7 +159,7 @@ am.set_log_level("info", cfg)
 
 # Run evaluation
 session = am.Session(cfg)
-session.load_model()          # loads checkpoint and restores normalisation settings
+session.load_model()  # loads checkpoint and restores normalisation settings
 session.evaluate_all_images(top_N=1000)
 session.save_session()
 
@@ -242,11 +243,12 @@ pip install images_to_zarr
 ```python
 # Convert a directory of images to 150x150 pixel zarr format
 import images_to_zarr as i2z
+
 i2z.convert(
     output_dir="path/to/output.zarr",
-    folders="path/to/images", 
-    resize=(150, 150), 
-    chunk_shape=(1000, 4, 150, 150)  # 1000 images per chunk
+    folders="path/to/images",
+    resize=(150, 150),
+    chunk_shape=(1000, 4, 150, 150),  # 1000 images per chunk
 )
 ```
 
@@ -350,11 +352,13 @@ import numpy as np
 
 # 4 FITS extensions → 3 RGB output channels
 cfg.normalisation.fits_extension = ["VIS", "NIR-H", "NIR-J", "NIR-Y"]
-cfg.normalisation.channel_combination = np.array([
-    [1, 0, 0, 0],    # R = VIS
-    [0, 0.5, 0.5, 0], # G = average of NIR-H and NIR-J
-    [0, 0, 0, 1],    # B = NIR-Y
-])
+cfg.normalisation.channel_combination = np.array(
+    [
+        [1, 0, 0, 0],  # R = VIS
+        [0, 0.5, 0.5, 0],  # G = average of NIR-H and NIR-J
+        [0, 0, 0, 1],  # B = NIR-Y
+    ]
+)
 ```
 
 Each row defines one output channel as a weighted sum of the input extensions. `n_output_channels` is set to the number of rows in the matrix. When `channel_combination` is `None` (default), an identity matrix is created automatically for multi-extension configs.
