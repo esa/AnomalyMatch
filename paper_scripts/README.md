@@ -56,10 +56,10 @@ You will now need to copy the input image files from the galaxyzoo dataset manua
 2. **Configure experiments** in `create_results.py` by setting the appropriate flags:
    ```python
    # Toggle which experiment sets to run
-   RUN_MINIIMAGENET = True       # MiniImageNet experiments
-   RUN_GALAXYMNIST = True        # GalaxyMNIST experiments
+   RUN_MINIIMAGENET = True  # MiniImageNet experiments
+   RUN_GALAXYMNIST = True  # GalaxyMNIST experiments
    RUN_TRAINING_ITERATIONS_STUDY = True  # Different training iterations
-   RUN_ACTIVE_LEARNING_ABLATION = True   # With/without active learning
+   RUN_ACTIVE_LEARNING_ABLATION = True  # With/without active learning
    RUN_N_SAMPLES_ABLATION = True  # Ablation study with varying sample sizes
    ```
 
