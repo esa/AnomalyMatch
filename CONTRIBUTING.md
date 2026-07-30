@@ -7,78 +7,112 @@
 # Contributing to AnomalyMatch
 
 Thank you for your interest in improving AnomalyMatch! AnomalyMatch is developed
-by the European Space Agency (ESA) and released under the ESA Public License
-(ESA-PL). These guidelines keep contributions smooth for everyone. This process
-is still evolving, so feedback on the guidelines themselves is welcome too.
+by the ESAC Data Science team at the European Space Agency (ESA) and released
+under the ESA Public License (ESA-PL).
+
+## Read this first: community governance
+
+The rules that apply to all our projects (code of conduct, contribution
+workflow, Contributor License Agreement, and licensing) live in one place:
+
+> **[ESAC Data Science Community Governance](https://www.cosmos.esa.int/web/data-science/contributing-to-our-software)**
+
+**Please read it before opening a pull request.** In particular:
+
+- **A signed Contributor License Agreement (CLA) is required before we can merge
+  your contribution.** Signing it confirms that the work is yours to give and
+  grants ESA the right to redistribute it under the project license. You keep
+  the copyright to your contribution, and you only need to sign once. The form,
+  the submission address, and the full explanation are in the governance
+  document.
+- For **small changes** (typos, small fixes, documentation), open a pull request
+  directly. For **larger changes**, open an issue first so we can scope the work
+  together.
+- Please report security vulnerabilities privately, not in a public issue.
+
+The rest of this document covers only the technical specifics of contributing to
+AnomalyMatch.
 
 ## Issues and bug reports
 
-We welcome all issues, bug reports, and feature requests — please open one via
-the GitHub issue tracker and use the provided templates where available. Clear
-reproduction steps, your environment details, and expected vs. actual behaviour
-help us resolve things quickly.
+Open issues via the GitHub issue tracker and use the provided templates. Clear
+reproduction steps, your environment details (OS, Python version, GPU and CUDA
+version, AnomalyMatch version), and the expected versus actual behaviour help us
+resolve things quickly.
 
-## Contributor License Agreement (required before merge)
+## Development environment
 
-Because contributions are redistributed under an ESA open-source license, we can
-only merge your changes once we have a signed Contributor License Agreement (CLA)
-on file. The CLA clarifies the intellectual-property terms and protects both you
-and the project.
+Dependencies are declared in `environment.yml` and installed with conda:
 
-1. Download the CLA from **[TBD — link to CLA download page]**.
-2. Fill it in and sign it.
-3. Send the signed agreement to **[TBD — submission email address]**, with
-   **pablo.gomez at esa.int** in CC.
+```bash
+conda env create -f environment.yml
+conda activate am
+pip install -e .          # editable install for development
+```
 
-Due to intellectual-property requirements, **we can only merge your contribution
-once we have received your signed CLA.** You only need to sign it once — it
-covers your future contributions.
+A GPU is strongly recommended for anything involving training or prediction over
+large datasets. The UI relies on ipywidgets, so a Jupyter environment is the
+easiest way to exercise it (see `StarterNotebook.ipynb`).
 
-## Pull requests
+## Branching model
 
-Contributions are accepted as pull requests against the `main` branch.
+AnomalyMatch uses a two-branch model:
 
-- For small changes (typos, small bug fixes, docs), feel free to open a pull
-  request directly.
-- For larger or non-trivial changes, please **open an issue first** so we can
-  scope the work together and make sure it fits the project's direction before
-  you invest significant effort.
-- Keep each pull request focused on a single logical change — it is much easier
-  to review.
+- **`develop`** is the integration branch. **Target `develop` for features,
+  fixes, and refactors.**
+- **`main`** is reserved for releases and hotfixes.
+
+Stacking a pull request on another feature branch is fine; otherwise branch from
+and target `develop`. Use descriptive branch names with the same prefix as your
+commit type (`feat/...`, `fix/...`, `docs/...`).
 
 ## Coding conventions
 
-- **Commits & branches:** Follow [Conventional Commits](https://www.conventionalcommits.org/)
-  for commit messages (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`,
-  `ci:`, …) and use matching branch prefixes (`feat/…`, `fix/…`, `docs/…`).
-- **Formatting & linting:** Code is linted and formatted with
-  [Ruff](https://docs.astral.sh/ruff/). Run `ruff check .` and `ruff format .`
-  before pushing.
-- **License headers:** Every source file must start with the standard ESA license
-  header — copy it from any existing file of the same type. CI rejects files
+- **Commits and branches:** follow
+  [Conventional Commits](https://www.conventionalcommits.org/) for commit
+  messages (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `ci:`) and
+  use matching branch prefixes.
+- **Formatting and linting:** code is linted and formatted with
+  [Ruff](https://docs.astral.sh/ruff/) (line length 100). Run both before
+  pushing:
+
+  ```bash
+  ruff check .
+  ruff format .
+  ```
+
+- **License headers:** every source file must start with the standard ESA license
+  header. Copy it from any existing file of the same type. CI rejects files
   without it.
-- **Tests:** Add or update tests for your change and make sure the suite passes
-  locally (`pytest --cov=anomaly_match tests/`).
+- **Style:** follow PEP 8 and document concisely. Comments should explain why,
+  not restate what the code does.
+- **Configuration:** configuration is accessed through DotMap with direct field
+  access (`cfg.a.b`). Do not use `getattr()` or `.get()` fallbacks for config
+  values. Defaults live in `anomaly_match/utils/get_default_cfg.py`.
+
+## Tests
+
+Add or update tests for your change, and make sure the suite passes locally
+before pushing:
+
+```bash
+pytest                              # full suite
+pytest --cov=anomaly_match tests/   # with coverage
+pytest tests/unit/test_file.py -v   # a single file
+```
 
 ## Continuous integration
 
-Only pull requests that pass all CI checks will be merged. CI runs:
+Only pull requests that pass all CI checks are merged. CI runs:
 
 - License-header check
-- Ruff lint + format check
+- Ruff lint and format check
 - Dead-code (Vulture) check
 - Test suite
 
-Please make sure these pass locally first — CI is not a substitute for running
-the checks yourself.
-
-## Code of conduct
-
-We want AnomalyMatch to be a welcoming, respectful, and inclusive space for
-everyone. Please be kind and constructive, assume good intent, and treat fellow
-contributors with courtesy regardless of their background or experience.
-Harassment or discriminatory behaviour of any kind will not be tolerated.
+Please make sure these pass locally first. CI is a safety net, not a substitute
+for running the checks yourself.
 
 ## Questions
 
-Not sure about something? Open an issue — we are happy to help.
+Not sure about something? Open an issue. We are happy to help.
