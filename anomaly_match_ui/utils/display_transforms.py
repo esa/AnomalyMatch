@@ -55,8 +55,10 @@ def prepare_for_display(img, rgb_mapping=None):
         # Validate rgb_mapping
         if len(rgb_mapping) != 3:
             raise ValueError(f"rgb_mapping must have 3 elements, got {len(rgb_mapping)}")
-        if any(i >= channels for i in rgb_mapping):
-            raise ValueError(f"rgb_mapping indices {rgb_mapping} exceed channel count {channels}")
+        if any(i < 0 or i >= channels for i in rgb_mapping):
+            raise ValueError(
+                f"rgb_mapping indices {rgb_mapping} must be between 0 and {channels - 1}"
+            )
 
         result = img[:, :, rgb_mapping]
 
