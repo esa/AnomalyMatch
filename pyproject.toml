@@ -32,9 +32,9 @@ classifiers = [
 dependencies = [
     "albumentations",
     "astropy",
-    "cutana>=0.3.0",
+    "cutana>=0.4.0",
     "dotmap",
-    "fitsbolt==0.2.0",
+    "fitsbolt>=0.3.1,<0.4",
     "h5py",
     "ipykernel",
     "ipywidgets",

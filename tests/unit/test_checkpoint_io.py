@@ -156,6 +156,31 @@ class TestSaveLoadRoundTrip:
         assert loaded_fb.output_dtype == np.uint8
         assert np.array_equal(loaded_fb.channel_combination, fb_cfg.channel_combination)
 
+    def test_legacy_fitsbolt_cfg_upgraded_for_prediction(self, tmp_path):
+        """Checkpoints saved with fitsbolt<0.3 must still preprocess images under fitsbolt>=0.3."""
+        from fitsbolt.cfg.create_config import create_config
+
+        from anomaly_match.data_io.load_images import process_single_wrapper
+
+        fb_dict = create_config(size=[32, 32]).toDict()
+        # Recreate the fitsbolt 0.2 schema: no subsampling keys, scalar midtones parameters.
+        for key in ("minmax_n_samples", "percentile_n_samples", "asinh_n_samples"):
+            del fb_dict["normalisation"][key]
+        fb_dict["normalisation"]["midtones"]["percentile"] = 99.8
+        fb_dict["normalisation"]["midtones"]["desired_mean"] = 0.2
+
+        path = save_checkpoint(_make_full_checkpoint(fitsbolt_cfg=DotMap(fb_dict)), tmp_path / "m")
+        loaded_fb = load_checkpoint(path)["fitsbolt_cfg"]
+        assert loaded_fb.normalisation.midtones.percentile == [99.8]
+        assert loaded_fb.normalisation.minmax_n_samples is None
+
+        image = np.random.default_rng(0).random((48, 48, 3)).astype(np.float32)
+        for method in NormalisationMethod:
+            cfg = DotMap({"fitsbolt_cfg": DotMap(loaded_fb.toDict(), _dynamic=False)})
+            cfg.fitsbolt_cfg.normalisation_method = method
+            out = process_single_wrapper(image, cfg)
+            assert out.shape == (32, 32, 3), method
+
     def test_labeled_data_csv_roundtrip(self, tmp_path):
         """Verify labeled_data_csv string survives round-trip."""
         csv = "filename,label\nimg1.jpg,anomaly\nimg2.jpg,normal\n"

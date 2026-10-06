@@ -839,8 +839,8 @@ class TestImageIO:
         """Test different interpolation orders when resizing images.
 
         This test creates a 40x40 image and a 200x200 image, then resizes both to 100x100
-        using different interpolation orders (0-5), which correspond to different polynomial
-        interpolation methods in scikit-image.
+        using different interpolation orders (0-4), which map to OpenCV interpolation flags in
+        fitsbolt>=0.3: 0=nearest, 1=linear, 2=cubic, 3=lanczos4, 4=area.
         """
         # Create a small (40x40) test image with a clear pattern
         small_img = np.zeros((40, 40, 3), dtype=np.uint8)
@@ -882,8 +882,8 @@ class TestImageIO:
         # Store results from different interpolation orders to compare them
         upscaled_results = []
 
-        # Check each interpolation order (0-5)
-        for order in range(6):
+        # Check each interpolation order (0-4)
+        for order in range(5):
             _update_config(test_config, interpolation_order=order)
 
             # Resize small image (40x40 → 100x100) - upsampling
@@ -977,7 +977,8 @@ class TestImageIO:
 
             # Higher order interpolation (order > 1) should lead to smoother transitions
             # This is difficult to quantify precisely, but we can check for values between the extremes for upscaling
-            if order >= 3:
+            # Order 4 (INTER_AREA) degenerates to nearest-like output when upscaling.
+            if order in (2, 3):
                 # For boundary regions, check that there are intermediate values
                 # between the pure colors in neighboring quadrants
                 # Sample near the boundary but not exactly on it
@@ -993,9 +994,9 @@ class TestImageIO:
                 )
 
         # Compare results between different interpolation orders to verify they're not identical
-        # We'll compare order 0 (nearest neighbor) with orders 1, 3, and 5
-        # These should produce visibly different results
-        for i, upscaled_im in enumerate(upscaled_results):
+        # These should produce visibly different results. Order 4 (INTER_AREA) is excluded:
+        # when upscaling OpenCV makes it identical to nearest neighbour (order 0).
+        for i, upscaled_im in enumerate(upscaled_results[:4]):
             if i != 0:
                 assert not np.array_equal(upscaled_results[0], upscaled_results[i]), (
                     "Order 0 and order {i} interpolation should produce different results"

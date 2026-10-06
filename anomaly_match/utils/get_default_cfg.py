@@ -65,9 +65,9 @@ def get_default_cfg():
     cfg.normalisation.channel_combination = None
 
     # further interpolation and normalisation settings
-    cfg.normalisation.interpolation_order = (
-        1  # order of interpolation for resizing with skimage, 0-5
-    )
+    # interpolation for resizing (fitsbolt>=0.3 uses OpenCV):
+    # 0=nearest, 1=linear, 2=cubic, 3=lanczos4, 4=area (always used when downscaling)
+    cfg.normalisation.interpolation_order = 1
     cfg.normalisation.normalisation_method = NormalisationMethod.CONVERSION_ONLY
     # settings for normalisation:
     cfg.normalisation.norm_maximum_value = None  # None or float

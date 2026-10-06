@@ -5,6 +5,16 @@
 [//]: # (this file, may be copied, modified, propagated, or distributed except according to)
 [//]: # (the terms contained in the file 'LICENCE.txt'.)
 
+## [Unreleased]
+
+### Changed
+- **Relaxed the fitsbolt pin to `fitsbolt>=0.3.1,<0.4` and require `cutana>=0.4.0`** in `pyproject.toml`, `environment.yml`, and `environment_CI.yml`. fitsbolt 0.3.1 fixes the `fits_extension=None` validation crash that motivated the `==0.2.0` pin, and cutana 0.4.0 requires it, so the old pin forced cutana back to 0.3.1
+- Image resizing in fitsbolt>=0.3 uses OpenCV instead of scikit-image: `interpolation_order` now accepts 0–4 (0=nearest, 1=linear, 2=cubic, 3=lanczos4, 4=area) and downscaling always uses area interpolation. The default (1, linear) is unaffected
+
+### Fixed
+- **Checkpoints saved with fitsbolt<0.3 failed at prediction under fitsbolt 0.3** (`TypeError` for every normalisation method except ZSCALE) because their stored `fitsbolt_cfg` lacks the new `*_n_samples` keys and stores midtones parameters as scalars. `load_checkpoint` now upgrades such configs in place, preserving the exact pre-0.3 behaviour
+- `test_cutana_vs_training_normalisation` matched cutana cutouts to training images by position, but cutana's streaming orchestrator yields batches in completion order; cutouts are now matched by source ID
+
 ## [v1.3.2] – 2026-07-08
 
 ### Fixed

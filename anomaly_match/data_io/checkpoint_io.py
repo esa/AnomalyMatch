@@ -232,6 +232,33 @@ def save_checkpoint(save_state: dict[str, Any], path: str | Path) -> Path:
     return path
 
 
+def _upgrade_legacy_fitsbolt_cfg(fb_data: dict) -> dict:
+    """Bring a fitsbolt config saved by fitsbolt<0.3 up to the >=0.3 schema.
+
+    fitsbolt 0.3 reads ``normalisation.{minmax,percentile,asinh}_n_samples``
+    directly and expects the midtones parameters as per-channel lists. Older
+    checkpoints lack those keys / store scalars, which crashes prediction.
+
+    Args:
+        fb_data: Decoded fitsbolt config dictionary from checkpoint metadata.
+
+    Returns:
+        The same dictionary, upgraded in place.
+    """
+    if "normalisation" not in fb_data:
+        # Partial configs (not produced by fitsbolt's create_config) have nothing to upgrade.
+        return fb_data
+    norm = fb_data["normalisation"]
+    for key in ("minmax_n_samples", "percentile_n_samples", "asinh_n_samples"):
+        # None means "use all pixels", i.e. the exact pre-0.3 behaviour.
+        norm.setdefault(key, None)
+    midtones = norm["midtones"]
+    for key in ("percentile", "desired_mean"):
+        if isinstance(midtones[key], (int, float)):
+            midtones[key] = [midtones[key]]
+    return fb_data
+
+
 def load_checkpoint(path: str | Path, device: str = "cpu") -> dict[str, Any]:
     """Load a model checkpoint from a ``.safetensors`` file.
 
@@ -315,6 +342,7 @@ def load_checkpoint(path: str | Path, device: str = "cpu") -> dict[str, Any]:
         # _dynamic=False prevents DotMap from auto-creating empty child maps
         # on missing-key access, which would break fitsbolt's validate_config
         # (e.g. channel_combination should stay absent, not become DotMap()).
+        fb_data = _upgrade_legacy_fitsbolt_cfg(fb_data)
         checkpoint["fitsbolt_cfg"] = DotMap(fb_data, _dynamic=False)
     else:
         checkpoint["fitsbolt_cfg"] = None

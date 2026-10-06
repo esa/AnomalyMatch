@@ -81,14 +81,18 @@ def _make_cutana_config(csv_path, n_output_channels=3):
 
 
 def _run_cutana_normalised(csv_path, fitsbolt_cfg, n_output_channels=3):
-    """Run cutana with external_fitsbolt_cfg and return normalised cutout arrays."""
+    """Run cutana with external_fitsbolt_cfg and return normalised cutouts keyed by source ID.
+
+    Cutana's streaming orchestrator returns batches in completion order, so cutouts are
+    matched to sources through the batch metadata rather than by position.
+    """
     config = _make_cutana_config(csv_path, n_output_channels)
     config.external_fitsbolt_cfg = fitsbolt_cfg
 
     orchestrator = cutana.StreamingOrchestrator(config)
     orchestrator.init_streaming(batch_size=10, write_to_disk=False)
 
-    all_cutouts = []
+    cutouts_by_source = {}
     for _ in range(orchestrator.get_batch_count()):
         batch = orchestrator.next_batch()
         cutouts = batch["cutouts"]
@@ -96,11 +100,11 @@ def _run_cutana_normalised(csv_path, fitsbolt_cfg, n_output_channels=3):
             continue
         if isinstance(cutouts, list):
             cutouts = np.array(cutouts)
-        for i in range(cutouts.shape[0]):
-            all_cutouts.append(np.array(cutouts[i]))
+        for i, source in enumerate(batch["metadata"]):
+            cutouts_by_source[source["source_id"]] = np.array(cutouts[i])
 
     orchestrator.cleanup()
-    return all_cutouts
+    return cutouts_by_source
 
 
 def _extract_raw_cutouts(csv_path, output_dir):
@@ -132,7 +136,7 @@ def cutana_test_data(tmp_path_factory):
 
     Returns:
         tuple: (clean_fits_paths, rewritten_csv_path)
-            - clean_fits_paths: list of FITS file paths with raw cutout data in HDU[0]
+            - clean_fits_paths: dict of source ID -> FITS file path with raw cutout data in HDU[0]
             - rewritten_csv_path: path to CSV with absolute FITS tile paths
     """
     if not os.path.exists(_CSV_CATALOGUE) or not os.path.exists(_FITS_TILE):
@@ -153,13 +157,17 @@ def cutana_test_data(tmp_path_factory):
         pytest.skip("Cutana did not produce any cutouts from the test tile")
 
     # Save as clean FITS files with data in HDU[0] for the training path
-    clean_fits_paths = []
+    with open(rewritten_csv) as f:
+        source_ids = [row["SourceID"] for row in csv.DictReader(f)]
+    clean_fits_paths = {}
     for i, raw_path in enumerate(raw_fits_paths):
+        # Cutana embeds the source ID in the cutout filename
+        (source_id,) = [sid for sid in source_ids if sid in os.path.basename(raw_path)]
         with fits.open(raw_path) as hdul:
             raw_data = hdul[1].data
         clean_path = str(tmp_path / f"cutout_{i}.fits")
         fits.PrimaryHDU(raw_data.astype(np.float32)).writeto(clean_path, overwrite=True)
-        clean_fits_paths.append(clean_path)
+        clean_fits_paths[source_id] = clean_path
 
     return clean_fits_paths, rewritten_csv
 
@@ -210,18 +218,23 @@ def test_cutana_vs_training_normalisation(cutana_test_data):
         cutana_normalised = _run_cutana_normalised(
             rewritten_csv, cfg.fitsbolt_cfg, n_output_channels=3
         )
-        if len(cutana_normalised) != len(clean_fits_paths):
+        if cutana_normalised.keys() != clean_fits_paths.keys():
             failures.append(
-                f"{method.name}: cutana returned {len(cutana_normalised)} cutouts "
-                f"but {len(clean_fits_paths)} raw cutouts were extracted"
+                f"{method.name}: cutana returned sources {sorted(cutana_normalised)} "
+                f"but raw cutouts were extracted for {sorted(clean_fits_paths)}"
             )
             continue
+        source_ids = sorted(clean_fits_paths)
 
         format_cfg = create_cutana_format_cfg(cfg)
-        prediction_images = [convert_cutana_cutout(c, format_cfg) for c in cutana_normalised]
+        prediction_images = [
+            convert_cutana_cutout(cutana_normalised[sid], format_cfg) for sid in source_ids
+        ]
 
         # --- Training path: load raw FITS via fitsbolt ---
-        training_pairs = load_and_process_wrapper(clean_fits_paths, cfg, show_progress=False)
+        training_pairs = load_and_process_wrapper(
+            [clean_fits_paths[sid] for sid in source_ids], cfg, show_progress=False
+        )
 
         # --- Compare ---
         for i, (pred_img, (_, train_img)) in enumerate(zip(prediction_images, training_pairs)):
