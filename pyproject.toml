@@ -80,10 +80,10 @@ docs = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["anomaly_match*", "assets"]
+include = ["anomaly_match*"]
 
 [tool.setuptools.package-data]
-assets = ["*.svg", "*.png"]
+"anomaly_match_ui.assets" = ["*.svg", "*.png"]
 
 [tool.setuptools.package-dir]
 "" = "."

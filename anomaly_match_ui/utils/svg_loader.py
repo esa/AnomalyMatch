@@ -11,17 +11,22 @@ from __future__ import annotations
 import base64
 import importlib.resources
 
+# Namespaced under anomaly_match_ui: a top-level ``assets`` package collides with
+# other distributions (cutana ships one), and whichever site-packages copy is found
+# first shadows ours, so the logos go missing.
+_ASSETS_PACKAGE = "anomaly_match_ui.assets"
+
 
 def _load_png_base64(filename: str) -> str:
     """Load a PNG from the assets package as a base64 data URI.
 
     Args:
-        filename: Name of the PNG file inside the ``assets`` package.
+        filename: Name of the PNG file inside the ``anomaly_match_ui.assets`` package.
 
     Returns:
         A ``data:image/png;base64,...`` URI string for embedding in HTML.
     """
-    ref = importlib.resources.files("assets").joinpath(filename)
+    ref = importlib.resources.files(_ASSETS_PACKAGE).joinpath(filename)
     data = ref.read_bytes()
     b64 = base64.b64encode(data).decode("ascii")
     return f"data:image/png;base64,{b64}"
@@ -71,12 +76,12 @@ def load_icon_svg(filename: str) -> str:
     """Load an SVG icon from the assets package.
 
     Args:
-        filename: Name of the SVG file inside the ``assets`` package.
+        filename: Name of the SVG file inside the ``anomaly_match_ui.assets`` package.
 
     Returns:
         The SVG markup as a string.
     """
-    ref = importlib.resources.files("assets").joinpath(filename)
+    ref = importlib.resources.files(_ASSETS_PACKAGE).joinpath(filename)
     return ref.read_text(encoding="utf-8")
 
 
