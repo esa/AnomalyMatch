@@ -63,6 +63,27 @@ def test_get_net_builder():
     assert callable(net_builder)
 
 
+def test_efficientnet_classifier_head_init_is_pytorch_scale():
+    """The 2-class head must use PyTorch's 1/sqrt(fan_in) init, not timm's.
+
+    timm builds efficientnet with TF-EfficientNet's 1/sqrt(fan_in+fan_out) head
+    init (tuned for 1000 classes), which is ~num_classes× too large for a 2-class
+    head and makes the fresh head overconfident — breaking FixMatch's confidence-
+    gated pseudo-labelling. get_net_builder resets it to PyTorch scale.
+    """
+    # pretrained=False avoids a download; timm still applies its (over-scaled)
+    # classifier init, so this exercises the reset.
+    model = get_net_builder("efficientnet-lite0", pretrained=False)(num_classes=2, in_channels=3)
+    weight = model.get_classifier().weight
+    fan_in = weight.shape[1]
+    pytorch_bound = 1.0 / (fan_in**0.5)
+    # PyTorch-default uniform init: std ≈ bound/sqrt(3). timm's over-scaled init
+    # would give std ≈ 1/sqrt(2) ≈ 0.4 here — an order of magnitude larger.
+    assert weight.std().item() < 2 * pytorch_bound, (
+        f"classifier weight std {weight.std().item():.4f} too large — head init not reset"
+    )
+
+
 def test_set_seeds():
     # Test that setting seeds doesn't raise errors
     set_seeds(42)

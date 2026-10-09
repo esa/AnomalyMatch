@@ -5,6 +5,8 @@
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
 
+"""Configuration serialization utilities."""
+
 from pathlib import Path
 from typing import Any, Dict, Union
 
@@ -16,8 +18,10 @@ from loguru import logger
 
 def _critical_optional_fields() -> list:
     """Get a list of critical optional fields that should be preserved in the config.
+
     These fields are necessary for prediction processes and other components,
     and should not be removed even if they are not strictly required for validation.
+
     Returns:
         List of critical optional fields
     """
@@ -36,8 +40,7 @@ def _critical_optional_fields() -> list:
 
 
 def _convert_enum_to_string(config_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Convert NormalisationMethod enum to string for TOML serialization.
+    """Convert NormalisationMethod enum to string for TOML serialization.
 
     Args:
         config_dict: Configuration dictionary that may contain normalisation_method enum
@@ -55,16 +58,14 @@ def _convert_enum_to_string(config_dict: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def save_config_toml(config: Union[DotMap, Dict[str, Any]], file_path: Union[str, Path]) -> None:
-    """
-    Save configuration to TOML file.
+    """Save configuration to TOML file.
 
     Args:
         config: Configuration object (DotMap) or dictionary to save
         file_path: Path where to save the TOML file
 
     Raises:
-        ValueError: If config cannot be serialized to TOML
-        IOError: If file cannot be written
+        IOError: If file cannot be written.
     """
     file_path = Path(file_path)
 

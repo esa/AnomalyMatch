@@ -4,7 +4,7 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
-from anomaly_match_ui.widget import shorten_filename
+from anomaly_match_ui.screens.training_screen import shorten_filename
 
 
 class TestShortenFilename:

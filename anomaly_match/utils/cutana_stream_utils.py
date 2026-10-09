@@ -4,9 +4,13 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+"""Cutana streaming data utilities."""
+
+from __future__ import annotations
 
 import math
 import warnings
+from collections.abc import Generator
 from pathlib import Path
 
 import pandas as pd
@@ -24,13 +28,12 @@ def cutana_validate_files_and_count_sources(
     read from parquet metadata when possible to avoid scanning every row.
 
     Args:
-        files (list[Path | str]): list of file paths to validate (CSV or Parquet).
-        chunk_size (int): number of rows to read per chunk.
+        files: list of file paths to validate (CSV or Parquet).
+        chunk_size: number of rows to read per chunk.
 
     Returns:
-        tuple[list[Path], int, int]: valid files, total number of sources, and total number of chunks.
+        valid files, total number of sources, and total number of chunks.
     """
-
     # Schema is validated once from the first valid file (all catalogue files
     # are expected to share the same column layout).
     columns_validated = False
@@ -90,18 +93,43 @@ def cutana_validate_files_and_count_sources(
     return valid_files, total_sources, total_chunks
 
 
-def cutana_buffer_generator(files: list[Path | str], buffer_path: Path, chunk_size: int = 100_000):
+def cutana_buffer_generator(
+    files: list[Path | str], buffer_path: Path, chunk_size: int = 100_000
+) -> Generator[Path, None, None]:
     """Generate temporary buffer files by reading catalogue files in chunks.
 
+    Each chunk is written to a distinct ``<buffer_path>.N.parquet`` file
+    so a just-exited prediction subprocess can't race the next chunk's
+    write on the same inode (previously caused the chunk loop to hang
+    after chunk 1 on NFS).  The index-suffixed files are cleaned up as
+    later chunks are written so total disk usage stays at one chunk.
+
     Args:
-        files (list[Path | str]): list of file paths to process (CSV or Parquet).
-        buffer_path (Path): path where temporary buffer parquet will be written.
-        chunk_size (int): number of rows to read per chunk.
+        files: list of file paths to process (CSV or Parquet).
+        buffer_path: base path; per-chunk files are written alongside
+            with an index suffix.
+        chunk_size: number of rows to read per chunk.
 
     Yields:
         Path: path to the buffer file containing the current chunk.
     """
-    buffer_path.parent.mkdir(parents=True, exist_ok=True)
+    base = Path(buffer_path)
+    base.parent.mkdir(parents=True, exist_ok=True)
+    previous: Path | None = None
+    chunk_idx = 0
+
+    def _write_chunk(df: pd.DataFrame) -> Path:
+        nonlocal previous, chunk_idx
+        out = base.with_name(f"{base.stem}.{chunk_idx}{base.suffix}")
+        df.to_parquet(out, index=False)
+        if previous is not None and previous != out and previous.exists():
+            try:
+                previous.unlink()
+            except OSError as exc:
+                logger.debug("Could not delete stale chunk buffer {}: {}", previous, exc)
+        previous = out
+        chunk_idx += 1
+        return out
 
     for file in files:
         if isinstance(file, Path):
@@ -111,12 +139,16 @@ def cutana_buffer_generator(files: list[Path | str], buffer_path: Path, chunk_si
 
         if file_type == "csv":
             for df in pd.read_csv(file, chunksize=chunk_size):
-                df.to_parquet(buffer_path, index=False)
-                yield buffer_path
+                yield _write_chunk(df)
 
         else:  # if not CSV then Parquet
             parquet_file = pq.ParquetFile(file)
             for batch in parquet_file.iter_batches(batch_size=chunk_size):
-                df = batch.to_pandas()
-                df.to_parquet(buffer_path, index=False)
-                yield buffer_path
+                yield _write_chunk(batch.to_pandas())
+
+    # Clean up the last chunk after the consumer is done.
+    if previous is not None and previous.exists():
+        try:
+            previous.unlink()
+        except OSError as exc:
+            logger.debug("Could not delete final chunk buffer {}: {}", previous, exc)

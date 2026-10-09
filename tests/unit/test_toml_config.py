@@ -134,7 +134,5 @@ class TestConfigIntegration:
         assert isinstance(config.batch_size, int)
         assert isinstance(config.name, str)
 
-        # Verify image_size is NOT in default config (user must set it)
-        assert "image_size" not in config.normalisation, (
-            "image_size should not have a default value"
-        )
+        # Verify image_size has a sensible default (64x64 when using bundled test data)
+        assert config.normalisation.image_size == [64, 64]

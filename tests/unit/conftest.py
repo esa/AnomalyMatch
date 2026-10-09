@@ -23,7 +23,7 @@ def base_config():
 
     cfg = am.get_default_cfg()
     am.set_log_level("debug", cfg)
-    cfg.data_dir = "tests/test_data/"
+    cfg.data_dir = "tests/test_data/grayscale/"
     cfg.normalisation.image_size = [64, 64]
     cfg.normalisation.n_output_channels = 3
     cfg.net = "test-cnn"

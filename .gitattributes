@@ -1,1 +1,10 @@
+# NOTE: these rules only apply to files committed *after* git-lfs was set up
+# locally. The test FITS/parquet fixtures already in history predate them and
+# are stored as plain blobs — converting those needs `git lfs migrate`, which
+# rewrites history. Until that happens, the CI "large files" check in
+# .github/workflows/run_tests.yml is what actually keeps new binaries out.
+tests/test_data/**/*.pth filter=lfs diff=lfs merge=lfs -text
+tests/test_data/**/*.parquet filter=lfs diff=lfs merge=lfs -text
+tests/test_data/**/*.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/zarr/test_images.zarr/** filter=lfs diff=lfs merge=lfs -text
 anomaly_match/pretrained_cache/models--timm--*/blobs/* filter=lfs diff=lfs merge=lfs -text

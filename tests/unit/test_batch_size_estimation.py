@@ -54,20 +54,20 @@ def verify_batch_size_estimation(
 
     # Calculate memory occupied according to model with the estimated batch size
     memory_occupied = (
-        coeffs["a"] * estimated_batch_size * S2 * test_config.num_channels
-        + coeffs["b"] * estimated_batch_size
-        + coeffs["c"]
+        coeffs["a"] * estimated_batch_size * S2
+        + coeffs["b"] * estimated_batch_size * test_config.num_channels
+        + coeffs["d"]
     )
 
-    # How much memory actually is avaiable according to the specification
+    # How much memory actually is available according to the specification
     usable_vram = available_vram * (1 - safety_margin)
 
     # What the batch size should be if everything works properly
     true_batch_size = max(
         1,
         int(
-            (usable_vram - coeffs["c"])
-            / (coeffs["a"] * S2 * test_config.num_channels + coeffs["b"])
+            (usable_vram - coeffs["d"])
+            / (coeffs["a"] * S2 + coeffs["b"] * test_config.num_channels)
         ),
     )
 
@@ -158,7 +158,7 @@ def test_estimate_batch_size_invalid_model_coefficients(test_config, monkeypatch
     monkeypatch.setattr(
         prediction_utils,
         "MEMORY_COEFFICIENTS",
-        {"efficientnet-lite0": {"a": -0.1, "b": -0.1, "c": -0.1}},
+        {"efficientnet-lite0": {"a": -0.1, "b": -0.1, "d": -0.1}},
     )
 
     batch_size = estimate_batch_size(test_config, available_vram=4096)

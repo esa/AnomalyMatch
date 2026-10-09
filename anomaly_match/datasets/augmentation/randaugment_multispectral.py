@@ -13,6 +13,8 @@ like AutoContrast, Brightness, Color, and Contrast that assume RGB images.
 Based on the approach from DistMSMatch/MSMatch.
 """
 
+from __future__ import annotations
+
 import random
 
 import albumentations as A
@@ -20,7 +22,7 @@ import numpy as np
 from scipy.ndimage import uniform_filter
 
 
-def Identity(img, v):
+def Identity(img: np.ndarray, v: float) -> np.ndarray:
     """Return the image unchanged.
 
     Args:
@@ -33,7 +35,7 @@ def Identity(img, v):
     return img
 
 
-def Posterize(img, v):
+def Posterize(img: np.ndarray, v: float) -> np.ndarray:
     """Reduce the number of bits for each channel.
 
     Args:
@@ -49,7 +51,7 @@ def Posterize(img, v):
     return ((img >> shift) << shift).astype(np.uint8)
 
 
-def Rotate(img, v):
+def Rotate(img: np.ndarray, v: float) -> np.ndarray:
     """Rotate the image by v degrees.
 
     Args:
@@ -63,7 +65,7 @@ def Rotate(img, v):
     return transform(image=img)["image"]
 
 
-def Sharpness(img, v):
+def Sharpness(img: np.ndarray, v: float) -> np.ndarray:
     """Adjust the sharpness of the image using unsharp masking.
 
     Args:
@@ -79,7 +81,7 @@ def Sharpness(img, v):
     return np.clip(sharpened, 0, 255).astype(np.uint8)
 
 
-def ShearX(img, v):
+def ShearX(img: np.ndarray, v: float) -> np.ndarray:
     """Apply horizontal shear to the image.
 
     Args:
@@ -93,7 +95,7 @@ def ShearX(img, v):
     return transform(image=img)["image"]
 
 
-def ShearY(img, v):
+def ShearY(img: np.ndarray, v: float) -> np.ndarray:
     """Apply vertical shear to the image.
 
     Args:
@@ -107,7 +109,7 @@ def ShearY(img, v):
     return transform(image=img)["image"]
 
 
-def TranslateX(img, v):
+def TranslateX(img: np.ndarray, v: float) -> np.ndarray:
     """Translate the image horizontally by a percentage of its width.
 
     Args:
@@ -121,7 +123,7 @@ def TranslateX(img, v):
     return transform(image=img)["image"]
 
 
-def TranslateY(img, v):
+def TranslateY(img: np.ndarray, v: float) -> np.ndarray:
     """Translate the image vertically by a percentage of its height.
 
     Args:
@@ -135,7 +137,7 @@ def TranslateY(img, v):
     return transform(image=img)["image"]
 
 
-def Solarize(img, v):
+def Solarize(img: np.ndarray, v: float) -> np.ndarray:
     """Invert all pixel values above a threshold.
 
     Args:
@@ -149,7 +151,7 @@ def Solarize(img, v):
     return np.where(img >= v, 255 - img, img).astype(np.uint8)
 
 
-def Cutout(img, v, num_channels=None):
+def Cutout(img: np.ndarray, v: float, num_channels: int | None = None) -> np.ndarray:
     """Apply cutout augmentation to the image.
 
     Creates a square mask at a random location in the image.
@@ -184,7 +186,7 @@ def Cutout(img, v, num_channels=None):
     return img_out
 
 
-def multispectral_augment_list():
+def multispectral_augment_list() -> list[tuple]:
     """Return a list of available augmentation operations with their value ranges.
 
     These operations work with arbitrary channel counts, excluding PIL-dependent
@@ -212,6 +214,11 @@ class MultispectralRandAugment:
     Randomly applies a series of channel-agnostic image transformations
     that work with arbitrary channel counts.
 
+    Args:
+        n: Number of augmentation operations to apply
+        m: Magnitude parameter (unused, kept for API compatibility)
+        num_channels: Number of channels in the images
+
     Attributes:
         n: Number of augmentation operations to apply
         m: Magnitude parameter (unused, kept for API compatibility)
@@ -219,20 +226,13 @@ class MultispectralRandAugment:
         augment_list: List of available augmentation operations
     """
 
-    def __init__(self, n, m, num_channels=4):
-        """Initialize the MultispectralRandAugment pipeline.
-
-        Args:
-            n: Number of augmentation operations to apply
-            m: Magnitude parameter (unused, kept for API compatibility)
-            num_channels: Number of channels in the images
-        """
+    def __init__(self, n: int, m: int, num_channels: int = 4) -> None:
         self.n = n
         self.m = m
         self.num_channels = num_channels
         self.augment_list = multispectral_augment_list()
 
-    def __call__(self, img):
+    def __call__(self, img: np.ndarray) -> np.ndarray:
         """Apply random augmentations to the input image.
 
         Args:

@@ -88,8 +88,8 @@ class TestSessionIOHandler:
         # Verify labeled data CSV
         df = pd.read_csv(save_path / "labeled_data.csv")
         assert len(df) == 2
-        assert "test1.jpg" in df["filename"].values
-        assert "test2.jpg" in df["filename"].values
+        assert "test1.jpg" in df["id"].values
+        assert "test2.jpg" in df["id"].values
 
     def test_save_session_custom_path(self):
         """Test saving session to custom path."""
@@ -116,7 +116,7 @@ class TestSessionIOHandler:
         original_df = self.session_tracker.get_labeled_data_df()
         loaded_df = loaded_tracker.get_labeled_data_df()
         assert len(loaded_df) == len(original_df)
-        assert loaded_df["filename"].tolist() == original_df["filename"].tolist()
+        assert loaded_df["id"].tolist() == original_df["id"].tolist()
 
     def test_load_session_nonexistent_path(self):
         """Test loading session from nonexistent path."""
@@ -169,6 +169,162 @@ class TestSessionIOHandler:
 
         assert "error" in summary
         assert "Session metadata not found" in summary["error"]
+
+    def test_filter_labels_csv_to_ids_drops_unknown_ids(self):
+        """Filter keeps only rows whose id is in the valid set."""
+        csv_path = Path(self.temp_dir) / "labels.csv"
+        pd.DataFrame(
+            {"id": ["a", "b", "c", "d"], "label": ["anomaly", "normal", "anomaly", "normal"]}
+        ).to_csv(csv_path, index=False)
+
+        kept, dropped = SessionIOHandler.filter_labels_csv_to_ids(str(csv_path), {"a", "c"})
+
+        assert (kept, dropped) == (2, 2)
+        df = pd.read_csv(csv_path)
+        assert set(df["id"]) == {"a", "c"}
+
+    def test_filter_labels_csv_to_ids_keeps_all_when_all_known(self):
+        """No rows dropped when every id is valid."""
+        csv_path = Path(self.temp_dir) / "labels.csv"
+        pd.DataFrame({"id": ["a", "b"], "label": ["anomaly", "normal"]}).to_csv(
+            csv_path, index=False
+        )
+
+        kept, dropped = SessionIOHandler.filter_labels_csv_to_ids(str(csv_path), {"a", "b"})
+
+        assert (kept, dropped) == (2, 0)
+
+    def test_filter_labels_csv_to_ids_handles_integer_ids(self):
+        """IDs coerced to str so int-valued Cutana SourceIDs match string cache ids."""
+        csv_path = Path(self.temp_dir) / "labels.csv"
+        pd.DataFrame({"id": [123, 456, 789], "label": ["anomaly", "normal", "anomaly"]}).to_csv(
+            csv_path, index=False
+        )
+
+        kept, dropped = SessionIOHandler.filter_labels_csv_to_ids(str(csv_path), {"123", "789"})
+
+        assert (kept, dropped) == (2, 1)
+        df = pd.read_csv(csv_path)
+        assert set(df["id"].astype(str)) == {"123", "789"}
+
+    def test_filter_labels_csv_to_ids_survives_blank_id_row(self):
+        """One blank id must not float64-ify the column and drop every label.
+
+        Regression for the second half of #556: this runs in place right
+        before training, so a post-hoc ``astype(str)`` turning 123 into
+        "123.0" silently wiped the whole label set and trained on nothing.
+        """
+        # Written literally: a DataFrame with a None id is already float64, so
+        # it would serialise "123.0" and test the wrong thing.  This is what
+        # merge_gallery_labels actually puts on disk.
+        csv_path = Path(self.temp_dir) / "labels.csv"
+        csv_path.write_text("id,label\n123,anomaly\n456,normal\n,normal\n789,anomaly\n")
+
+        kept, dropped = SessionIOHandler.filter_labels_csv_to_ids(str(csv_path), {"123", "789"})
+
+        # The blank-id row is unmatchable and drops out with 456.
+        assert (kept, dropped) == (2, 2)
+        df = pd.read_csv(csv_path, dtype={"id": str})
+        assert set(df["id"]) == {"123", "789"}
+
+    def test_filter_labels_csv_to_ids_preserves_zero_padded_ids(self):
+        """Zero-padded ids must match and survive the in-place rewrite as-is."""
+        csv_path = Path(self.temp_dir) / "labels.csv"
+        pd.DataFrame({"id": ["007", "042"], "label": ["anomaly", "normal"]}).to_csv(
+            csv_path, index=False
+        )
+
+        kept, dropped = SessionIOHandler.filter_labels_csv_to_ids(str(csv_path), {"007"})
+
+        assert (kept, dropped) == (1, 1)
+        df = pd.read_csv(csv_path, dtype={"id": str})
+        assert list(df["id"]) == ["007"]
+
+    @pytest.mark.parametrize("blank_id_row", [False, True], ids=["int_ids", "float_ids"])
+    def test_merge_gallery_labels_overwrites_numeric_ids(self, blank_id_row):
+        """Relabelling a numeric-id source overwrites its row instead of adding one.
+
+        Regression for #556: ``read_csv`` infers int64 for numeric catalogue
+        ids while the gallery hands back str, so the merge saw 51 and "51" as
+        different keys and grew the CSV by one row per relabelled source.
+
+        The ``float_ids`` case is the same bug reached by a different
+        inference: one blank id anywhere in the file makes pandas type the
+        whole column ``float64``, where a post-hoc ``astype(str)`` would
+        produce ``"51.0"`` and match nothing.
+
+        Args:
+            blank_id_row: Append a row with an empty id, so pandas infers
+                ``float64`` for the id column instead of ``int64``.
+        """
+        src = Path(self.temp_dir) / "labelled_data.csv"
+        frame = pd.DataFrame(
+            {"id": list(range(1, 501)), "label": ["anomaly"] * 50 + ["normal"] * 450}
+        )
+        if blank_id_row:
+            frame = pd.concat([frame, pd.DataFrame([{"id": "", "label": "normal"}])])
+        frame.to_csv(src, index=False)
+        original = pd.read_csv(src)
+        expected_rows = 501 if blank_id_row else 500
+
+        out = Path(self.temp_dir) / "merged.csv"
+        self.io_handler.merge_gallery_labels(
+            str(src), {str(i): "anomaly" for i in range(51, 56)}, str(out)
+        )
+
+        merged = pd.read_csv(out, dtype={"id": str})
+        assert len(merged) == expected_rows, "relabelling must not grow the CSV"
+        assert not merged.loc[merged["id"].notna(), "id"].duplicated().any()
+        # The 5 sources moved out of 'normal' rather than being added twice.
+        expected_counts = {"normal": 446 if blank_id_row else 445, "anomaly": 55}
+        assert merged["label"].value_counts().to_dict() == expected_counts
+        relabelled = merged["id"].isin([str(i) for i in range(51, 56)])
+        assert relabelled.sum() == 5, "ids must round-trip as written, not as floats"
+        assert set(merged.loc[relabelled, "label"]) == {"anomaly"}
+        # The user's input CSV is read-only — only the session copy is written.
+        pd.testing.assert_frame_equal(original, pd.read_csv(src))
+
+    def test_merge_gallery_labels_rejects_csv_without_id_column(self):
+        """A labels CSV missing the merge key is a hard error, not a silent replace."""
+        src = Path(self.temp_dir) / "labelled_data.csv"
+        pd.DataFrame({"filename": ["a.jpg"], "label": ["normal"]}).to_csv(src, index=False)
+
+        out = Path(self.temp_dir) / "merged.csv"
+        with pytest.raises(ValueError, match="no 'id' column"):
+            self.io_handler.merge_gallery_labels(str(src), {"b.jpg": "anomaly"}, str(out))
+
+    def test_merge_gallery_labels_overwrites_string_ids(self):
+        """The image-folder path (filename ids) must keep overwriting correctly."""
+        src = Path(self.temp_dir) / "labelled_data.csv"
+        pd.DataFrame(
+            {"id": ["a.jpg", "b.jpg", "c.jpg"], "label": ["normal", "normal", "anomaly"]}
+        ).to_csv(src, index=False)
+
+        out = Path(self.temp_dir) / "merged.csv"
+        self.io_handler.merge_gallery_labels(str(src), {"b.jpg": "anomaly"}, str(out))
+
+        merged = pd.read_csv(out)
+        assert len(merged) == 3
+        assert dict(zip(merged["id"], merged["label"])) == {
+            "a.jpg": "normal",
+            "b.jpg": "anomaly",
+            "c.jpg": "anomaly",
+        }
+
+    def test_merge_gallery_labels_removed_drops_numeric_id(self):
+        """A 'removed' override must also match an int-typed existing id."""
+        src = Path(self.temp_dir) / "labelled_data.csv"
+        pd.DataFrame({"id": [10, 20], "label": ["anomaly", "normal"]}).to_csv(src, index=False)
+
+        out = Path(self.temp_dir) / "merged.csv"
+        self.io_handler.merge_gallery_labels(str(src), {"10": "removed"}, str(out))
+
+        merged = pd.read_csv(out)
+        assert len(merged) == 2
+        assert dict(zip(merged["id"].astype(str), merged["label"])) == {
+            "10": "removed",
+            "20": "normal",
+        }
 
 
 class TestPrintSession:

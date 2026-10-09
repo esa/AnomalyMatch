@@ -4,6 +4,11 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+
+"""RandAugment data augmentation implementation."""
+
+from __future__ import annotations
+
 import random
 
 import albumentations as A
@@ -12,14 +17,14 @@ import PIL
 import PIL.ImageDraw
 import PIL.ImageEnhance
 import PIL.ImageOps
+from PIL import Image
 
 
-def AutoContrast(img, _):
+def AutoContrast(img: Image.Image, _: float) -> Image.Image:
     """Apply automatic contrast to the image.
 
     Args:
         img: PIL Image to be processed
-        _: Unused parameter
 
     Returns:
         PIL Image with automatic contrast applied
@@ -27,7 +32,7 @@ def AutoContrast(img, _):
     return PIL.ImageOps.autocontrast(img)
 
 
-def Brightness(img, v):
+def Brightness(img: Image.Image, v: float) -> Image.Image:
     """Adjust the brightness of the image.
 
     Args:
@@ -41,7 +46,7 @@ def Brightness(img, v):
     return PIL.ImageEnhance.Brightness(img).enhance(v)
 
 
-def Color(img, v):
+def Color(img: Image.Image, v: float) -> Image.Image:
     """Adjust the color saturation of the image.
 
     Args:
@@ -55,7 +60,7 @@ def Color(img, v):
     return PIL.ImageEnhance.Color(img).enhance(v)
 
 
-def Contrast(img, v):
+def Contrast(img: Image.Image, v: float) -> Image.Image:
     """Adjust the contrast of the image.
 
     Args:
@@ -69,12 +74,11 @@ def Contrast(img, v):
     return PIL.ImageEnhance.Contrast(img).enhance(v)
 
 
-def Equalize(img, _):
+def Equalize(img: Image.Image, _: float) -> Image.Image:
     """Equalize the histogram of the image.
 
     Args:
         img: PIL Image to be processed
-        _: Unused parameter
 
     Returns:
         PIL Image with equalized histogram
@@ -82,7 +86,7 @@ def Equalize(img, _):
     return PIL.ImageOps.equalize(img)
 
 
-def Identity(img, v):
+def Identity(img: Image.Image, v: float) -> Image.Image:
     """Return the image unchanged.
 
     Args:
@@ -95,7 +99,7 @@ def Identity(img, v):
     return img
 
 
-def Posterize(img, v):
+def Posterize(img: Image.Image, v: float) -> Image.Image:
     """Reduce the number of bits for each color channel.
 
     Args:
@@ -110,7 +114,7 @@ def Posterize(img, v):
     return PIL.ImageOps.posterize(img, v)
 
 
-def Rotate(img, v):
+def Rotate(img: Image.Image, v: float) -> Image.Image:
     """Rotate the image by v degrees.
 
     Args:
@@ -123,7 +127,7 @@ def Rotate(img, v):
     return img.rotate(v)
 
 
-def Sharpness(img, v):
+def Sharpness(img: Image.Image, v: float) -> Image.Image:
     """Adjust the sharpness of the image.
 
     Args:
@@ -137,7 +141,7 @@ def Sharpness(img, v):
     return PIL.ImageEnhance.Sharpness(img).enhance(v)
 
 
-def ShearX(img, v):
+def ShearX(img: Image.Image, v: float) -> Image.Image:
     """Apply horizontal shear to the image.
 
     Args:
@@ -150,7 +154,7 @@ def ShearX(img, v):
     return img.transform(img.size, PIL.Image.AFFINE, (1, v, 0, 0, 1, 0))
 
 
-def ShearY(img, v):
+def ShearY(img: Image.Image, v: float) -> Image.Image:
     """Apply vertical shear to the image.
 
     Args:
@@ -163,7 +167,7 @@ def ShearY(img, v):
     return img.transform(img.size, PIL.Image.AFFINE, (1, 0, 0, v, 1, 0))
 
 
-def TranslateX(img, v):
+def TranslateX(img: Image.Image, v: float) -> Image.Image:
     """Translate the image horizontally by a percentage of its width.
 
     Args:
@@ -177,7 +181,7 @@ def TranslateX(img, v):
     return img.transform(img.size, PIL.Image.AFFINE, (1, 0, v, 0, 1, 0))
 
 
-def TranslateY(img, v):
+def TranslateY(img: Image.Image, v: float) -> Image.Image:
     """Translate the image vertically by a percentage of its height.
 
     Args:
@@ -191,7 +195,7 @@ def TranslateY(img, v):
     return img.transform(img.size, PIL.Image.AFFINE, (1, 0, 0, 0, 1, v))
 
 
-def Solarize(img, v):
+def Solarize(img: Image.Image, v: float) -> Image.Image:
     """Invert all pixel values above a threshold.
 
     Args:
@@ -205,7 +209,7 @@ def Solarize(img, v):
     return PIL.ImageOps.solarize(img, v)
 
 
-def Cutout(img, v):
+def Cutout(img: Image.Image | np.ndarray, v: float) -> Image.Image | np.ndarray:
     """Apply cutout augmentation to the image.
 
     Creates a square mask at a random location in the image.
@@ -229,7 +233,7 @@ def Cutout(img, v):
         return CutoutAbs(img, v)
 
 
-def CutoutAbs(img, v):
+def CutoutAbs(img: Image.Image, v: float) -> Image.Image:
     """Apply cutout augmentation with absolute size to the image.
 
     Creates a square mask at a random location in the image with specified absolute size.
@@ -259,7 +263,7 @@ def CutoutAbs(img, v):
     return img
 
 
-def augment_list():
+def augment_list() -> list[tuple]:
     """Return a list of available augmentation operations with their value ranges.
 
     Returns:
@@ -289,24 +293,22 @@ class RandAugment:
 
     Randomly applies a series of image transformations.
 
+    Args:
+        n: Number of augmentation operations to apply
+        m: Magnitude parameter [0, 30] (deprecated)
+
     Attributes:
         n: Number of augmentation operations to apply
         m: Magnitude parameter (deprecated)
         augment_list: List of available augmentation operations
     """
 
-    def __init__(self, n, m):
-        """Initialize the RandAugment pipeline.
-
-        Args:
-            n: Number of augmentation operations to apply
-            m: Magnitude parameter [0, 30] (deprecated)
-        """
+    def __init__(self, n: int, m: int) -> None:
         self.n = n
         self.m = m
         self.augment_list = augment_list()
 
-    def __call__(self, img):
+    def __call__(self, img: Image.Image) -> Image.Image:
         """Apply random augmentations to the input image.
 
         Args:

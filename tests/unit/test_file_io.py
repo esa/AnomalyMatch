@@ -106,6 +106,10 @@ class TestImageIO:
         # Add fitsbolt configuration needed by the wrapper functions
         cfg.normalisation.image_size = None
         cfg.normalisation.n_output_channels = 3
+        # Test FITS fixtures don't carry a MAGZERO header.  The default
+        # flipped to True in #411; opt back out here so the flux path
+        # doesn't try to read a keyword these tests never set.
+        cfg.normalisation.apply_flux_conversion = False
 
         return cfg
 
@@ -839,8 +843,22 @@ class TestImageIO:
         """Test different interpolation orders when resizing images.
 
         This test creates a 40x40 image and a 200x200 image, then resizes both to 100x100
-        using different interpolation orders (0-5), which correspond to different polynomial
-        interpolation methods in scikit-image.
+        using every interpolation order fitsbolt accepts.
+
+        Since fitsbolt 0.3.0 resizing is backed by OpenCV rather than scikit-image, so
+        ``interpolation_order`` selects a cv2 flag instead of a spline order and the valid
+        range is 0-4:
+
+        ==== ==================== ===========================================
+        0    ``INTER_NEAREST``    sharp, blocky
+        1    ``INTER_LINEAR``     mildly smooth
+        2    ``INTER_CUBIC``      smooth
+        3    ``INTER_LANCZOS4``   smoothest
+        4    ``INTER_AREA``       equivalent to nearest neighbour when upscaling
+        ==== ==================== ===========================================
+
+        Note fitsbolt always downscales with ``INTER_AREA``, so the order only affects the
+        upscaled result.
         """
         # Create a small (40x40) test image with a clear pattern
         small_img = np.zeros((40, 40, 3), dtype=np.uint8)
@@ -882,8 +900,8 @@ class TestImageIO:
         # Store results from different interpolation orders to compare them
         upscaled_results = []
 
-        # Check each interpolation order (0-5)
-        for order in range(6):
+        # Check each interpolation order fitsbolt accepts (cv2 flags, 0-4)
+        for order in range(5):
             _update_config(test_config, interpolation_order=order)
 
             # Resize small image (40x40 → 100x100) - upsampling
@@ -975,9 +993,10 @@ class TestImageIO:
                     "Large image order 0 should have sharp transitions at boundary"
                 )
 
-            # Higher order interpolation (order > 1) should lead to smoother transitions
-            # This is difficult to quantify precisely, but we can check for values between the extremes for upscaling
-            if order >= 3:
+            # INTER_CUBIC and INTER_LANCZOS4 should lead to smoother transitions. Order 4
+            # (INTER_AREA) is deliberately excluded: cv2 falls back to nearest neighbour
+            # for it when upscaling, so it produces no intermediate values.
+            if order in (2, 3):
                 # For boundary regions, check that there are intermediate values
                 # between the pure colors in neighboring quadrants
                 # Sample near the boundary but not exactly on it
@@ -992,17 +1011,21 @@ class TestImageIO:
                     f"Small image order {order} should have intermediate values at boundaries"
                 )
 
-        # Compare results between different interpolation orders to verify they're not identical
-        # We'll compare order 0 (nearest neighbor) with orders 1, 3, and 5
-        # These should produce visibly different results
-        for i, upscaled_im in enumerate(upscaled_results):
-            if i != 0:
-                assert not np.array_equal(upscaled_results[0], upscaled_results[i]), (
-                    "Order 0 and order {i} interpolation should produce different results"
-                )
-                assert not np.array_equal(upscaled_results[i - 1], upscaled_results[i]), (
-                    f"Order {i - 1} and order {i} interpolation should produce different results"
-                )
+        # The genuinely distinct upscaling kernels (nearest, linear, cubic, lanczos4) must
+        # each produce a different result.
+        for i in range(1, 4):
+            assert not np.array_equal(upscaled_results[0], upscaled_results[i]), (
+                f"Order 0 and order {i} interpolation should produce different results"
+            )
+            assert not np.array_equal(upscaled_results[i - 1], upscaled_results[i]), (
+                f"Order {i - 1} and order {i} interpolation should produce different results"
+            )
+
+        # Order 4 (INTER_AREA) is the exception: cv2 documents it as equivalent to
+        # INTER_NEAREST when upscaling, so pin that instead of asserting it differs.
+        assert np.array_equal(upscaled_results[4], upscaled_results[0]), (
+            "Order 4 (INTER_AREA) should match nearest neighbour when upscaling"
+        )
 
     def test_fits_combination_configurations(self, test_config):
         """Test different configurations of the fits_combination dictionary."""

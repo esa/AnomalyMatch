@@ -6,9 +6,12 @@
 #   the terms contained in the file 'LICENCE.txt'.
 """Tests for configuration validation edge cases."""
 
+import numpy as np
 import pytest
+from dotmap import DotMap
 from loguru import logger
 
+from anomaly_match.data_io.load_images import get_fitsbolt_config
 from anomaly_match.utils.get_default_cfg import get_default_cfg
 from anomaly_match.utils.validate_config import (
     _get_all_keys,
@@ -112,6 +115,25 @@ class TestValidateConfigRanges:
     def test_n_to_load_below_minimum(self, valid_cfg):
         valid_cfg.N_to_load = 5
         with pytest.raises(ValueError, match="must be >= 10"):
+            validate_config(valid_cfg)
+
+    def test_cutout_padding_factor_accepts_sub_unit_values(self, valid_cfg):
+        """Padding factors < 1.0 are valid (range is [0.25, 10.0])."""
+        valid_cfg.normalisation.cutout_padding_factor = 0.75
+        validate_config(valid_cfg)  # must not raise
+
+    def test_cutout_padding_factor_accepts_minimum(self, valid_cfg):
+        valid_cfg.normalisation.cutout_padding_factor = 0.25
+        validate_config(valid_cfg)  # must not raise
+
+    def test_cutout_padding_factor_below_minimum_raises(self, valid_cfg):
+        valid_cfg.normalisation.cutout_padding_factor = 0.1
+        with pytest.raises(ValueError, match="cutout_padding_factor.*must be >= 0.25"):
+            validate_config(valid_cfg)
+
+    def test_cutout_padding_factor_above_maximum_raises(self, valid_cfg):
+        valid_cfg.normalisation.cutout_padding_factor = 11.0
+        with pytest.raises(ValueError, match="cutout_padding_factor.*must be <= 10.0"):
             validate_config(valid_cfg)
 
 
@@ -278,8 +300,119 @@ class TestFitsExtensionChannelAutoAdjust:
             validate_config(valid_cfg)
 
 
+class TestValidateAgreesWithFitsboltConfigBuild:
+    """A config that validates must also build a fitsbolt config.
+
+    validate_config and get_fitsbolt_config judge the same matrix by different rules,
+    so it is possible to make validation pass and then have the run die at
+    get_fitsbolt_config inside the training subprocess. These pin the two together.
+    """
+
+    @pytest.mark.parametrize(
+        "fits_extension",
+        [None, [0, 1, 2], ["VIS", "NIR-H", "NIR-J"]],
+        ids=["non-fits", "integer-extensions", "named-extensions"],
+    )
+    @pytest.mark.parametrize(
+        "matrix",
+        [
+            np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]]),
+            np.array([[1.0, -0.5, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
+        ],
+        ids=["blank-row", "negative-weight"],
+    )
+    def test_validation_matches_fitsbolt_config_build(self, valid_cfg, fits_extension, matrix):
+        """Blank rows pass everywhere; negative weights only where AnomalyMatch combines."""
+        valid_cfg.normalisation.fits_extension = fits_extension
+        valid_cfg.normalisation.channel_combination = matrix
+        fitsbolt_applies_matrix = fits_extension is not None
+        if fitsbolt_applies_matrix and (matrix < 0).any():
+            with pytest.raises(ValueError, match="negative"):
+                validate_config(valid_cfg)
+            with pytest.raises(ValueError, match="negative"):
+                get_fitsbolt_config(valid_cfg)
+            return
+        validate_config(valid_cfg)
+        get_fitsbolt_config(valid_cfg)
+
+
 class TestValidateConfigUnexpectedKeys:
     def test_warns_on_unexpected_keys(self, valid_cfg, caplog):
         valid_cfg.unexpected_key = "some_value"
         validate_config(valid_cfg)
         assert "Found unexpected keys in config" in caplog.text
+
+
+class TestChannelCombinationWithoutFitsExtension:
+    """Non-FITS sources (Cutana, Zarr, image folders) leave ``fits_extension`` unset.
+
+    They apply the band-mixing matrix themselves, so fitsbolt is handed ``None`` and
+    its validator — which rejects negative weights that are legal on this path —
+    never sees the matrix. AnomalyMatch checks the matrix's structure itself instead.
+    """
+
+    def test_empty_dotmap_matrix_treated_as_none(self, valid_cfg):
+        """``DotMap.copy()`` turns a None channel_combination into an empty DotMap().
+
+        fitsbolt would otherwise report a nonsense shape for it, so the helper must
+        collapse anything that is not a real matrix back to None.
+        """
+        # Single extension: more than one would hit the auto-identity branch and
+        # replace the DotMap with np.eye() before the helper ever sees it.
+        valid_cfg.normalisation.fits_extension = [0]
+        valid_cfg.normalisation.channel_combination = DotMap()
+        validate_config(valid_cfg)
+        assert valid_cfg.normalisation.n_output_channels == 3
+
+    @pytest.mark.parametrize(
+        "matrix, expected",
+        [
+            ("not-a-matrix", "must be a numpy array"),
+            (np.array([["a", "b"], ["c", "d"]]), "must contain numbers"),
+            (np.ones((2, 3, 4)), "must be 2-D"),
+            (np.zeros((3, 0)), "at least one row and one column"),
+            (np.array([[np.nan, 0.0], [0.0, 1.0]]), "finite"),
+            (np.array([[np.inf, 0.0], [0.0, 1.0]]), "finite"),
+            ([[1.0, 0.0], [1.0]], "rectangular"),
+        ],
+    )
+    def test_malformed_matrix_rejected(self, valid_cfg, matrix, expected):
+        """AnomalyMatch replaces the structural checks fitsbolt no longer performs here.
+
+        Without them a malformed matrix passes config validation and only fails much
+        later, inside the decoder.
+        """
+        valid_cfg.normalisation.n_output_channels = 3
+        valid_cfg.normalisation.channel_combination = matrix
+        with pytest.raises(ValueError, match=expected):
+            validate_config(valid_cfg)
+
+    def test_negative_weights_warn_but_pass(self, valid_cfg, caplog):
+        """Negative weights are legal here, unlike under fitsbolt, which rejects them.
+
+        The existing warning about negative weights being clipped only makes sense if
+        they are allowed to reach the decoder at all.
+        """
+        valid_cfg.normalisation.channel_combination = np.array([[1.0, -0.5, 0.0, 0.0]])
+        validate_config(valid_cfg)
+        assert "negative weights" in caplog.text
+        assert valid_cfg.normalisation.n_output_channels == 1
+
+    def test_matrix_still_checked_against_fits_extension(self, valid_cfg):
+        """FITS sources still get fitsbolt's column check — this PR must not weaken it.
+
+        Matches fitsbolt's column cross-check specifically: every structural error from
+        ``_validate_channel_combination`` also names ``channel_combination``.
+        """
+        valid_cfg.normalisation.fits_extension = [0, 1]
+        valid_cfg.normalisation.channel_combination = np.eye(3, 4)
+        with pytest.raises(ValueError, match=r"channel_combination\.shape\[1\]"):
+            validate_config(valid_cfg)
+
+    def test_list_matrix_infers_like_ndarray(self, valid_cfg):
+        """A nested list and the equivalent ndarray must validate identically."""
+        valid_cfg.normalisation.n_output_channels = 3
+        valid_cfg.normalisation.channel_combination = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]]
+        validate_config(valid_cfg)
+        assert valid_cfg.normalisation.n_output_channels == 2
+        assert isinstance(valid_cfg.normalisation.channel_combination, np.ndarray)

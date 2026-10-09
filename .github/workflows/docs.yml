@@ -1,0 +1,80 @@
+#   Copyright (c) European Space Agency, 2025.
+#
+#   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
+#   is part of this source code package. No part of the package, including
+#   this file, may be copied, modified, propagated, or distributed except according to
+#   the terms contained in the file 'LICENCE.txt'.
+name: API docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Read by default: build-docs runs pull request authored code, so write is
+# granted only to the deploy job that needs it
+permissions:
+  contents: read
+
+jobs:
+  # Runs everywhere, including forks and pull requests: the deploy job below is
+  # gated to one repository, so without this nothing would ever check the docs build
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      # Python version comes from .python-version, which uv reads automatically.
+      # Versions come from pyproject's `docs` dependency group, never repeated here;
+      # `--group` installs just that group, so the docs build never pulls torch and
+      # the rest of the runtime stack it does not use.  `uv pip install` rather than
+      # `uv sync`, which would write a uv.lock resolving the whole project — torch
+      # included — to install three docs tools.
+      - name: Install docs dependencies
+        run: |
+          uv venv
+          uv pip install --group docs
+      - name: Generate API reference markdown files
+        run: uv run --no-sync python scripts/gen_ref_pages.py
+      # `strict = true` in zensical.toml turns broken links and references into failures
+      - name: Build docs
+        run: uv run --no-sync zensical build
+
+  # `!= 'pull_request'` rather than `== 'push'` so workflow_dispatch still deploys
+  deploy-docs:
+    # Ordering gate, not an artifact dependency: `mike deploy` builds before it
+    # pushes, so a broken build already fails safely — but this keeps the
+    # write-privileged job from starting until the read-only one has proven the
+    # build, and reports one unambiguous failure instead of two parallel ones
+    needs: build-docs
+    if: github.repository == 'esa/AnomalyMatch' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # Serialized: two deploys racing would clobber gh-pages or fail non-fast-forward
+    concurrency:
+      group: docs-deploy
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install docs dependencies
+        run: |
+          uv venv
+          uv pip install --group docs
+      - name: Generate API reference markdown files
+        run: uv run --no-sync python scripts/gen_ref_pages.py
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Deploy stable docs
+        run: |
+          uv run --no-sync mike deploy --push --update-aliases stable latest
+          uv run --no-sync mike set-default --push stable

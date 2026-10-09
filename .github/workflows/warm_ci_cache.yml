@@ -1,0 +1,66 @@
+#   Copyright (c) European Space Agency, 2025.
+#
+#   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
+#   is part of this source code package. No part of the package, including
+#   this file, may be copied, modified, propagated, or distributed except according to
+#   the terms contained in the file 'LICENCE.txt'.
+# Populates the micromamba and Playwright caches on develop so pull requests can
+# read them.
+#
+# GitHub scopes a cache entry to the ref that created it: a PR run may restore
+# from its own ref, from its base branch, and from the default branch — nothing
+# else. "Running tests" only triggered on `push: main` and `pull_request`, so
+# every cache was written under `refs/pull/N/merge` and was invisible to every
+# other PR, while develop (the base branch for all PRs) held no cache at all.
+# The default-branch fallback did not help either: main and develop carry
+# different environment_CI.yml files, so their cache keys never match.
+#
+# The result was a guaranteed ~140s environment solve on the first run of every
+# new PR, dropping to ~35s only on later pushes to the same PR. Writing the
+# cache under refs/heads/develop makes that ~35s restore the common case.
+#
+# This job intentionally installs the environment and stops. Cutana and fitsbolt
+# are installed by "Running tests" outside the cached environment (so a moving
+# branch is never baked into a cache entry) and are deliberately not warmed here.
+name: Warm CI cache
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+# One warm-up at a time; a newer develop commit supersedes an in-flight run.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: provision-with-micromamba
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: environment_CI.yml
+          environment-name: am
+          cache-downloads: true
+          cache-environment: true
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('environment_CI.yml') }}
+      - name: Install Playwright browsers
+        # A hit means the browsers are already cached; skipping saves the apt
+        # install but still re-warms after an eviction.
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        shell: bash -l {0}
+        run: |
+          micromamba activate am
+          playwright install chromium --with-deps

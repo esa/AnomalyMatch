@@ -4,13 +4,24 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+"""Consistency regularization loss for semi-supervised learning."""
+
+from __future__ import annotations
+
 import torch
 import torch.nn.functional as F
 
 from ..utils.cross_entropy_loss import cross_entropy_loss
 
 
-def consistency_loss(logits_w, logits_s, name="ce", T=1.0, p_cutoff=0.0, use_hard_labels=True):
+def consistency_loss(
+    logits_w: torch.Tensor,
+    logits_s: torch.Tensor,
+    name: str = "ce",
+    T: float = 1.0,
+    p_cutoff: float = 0.0,
+    use_hard_labels: bool = True,
+) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
     """Calculate consistency loss between weak and strong augmentation predictions.
 
     This function implements different consistency regularization losses for semi-supervised learning.
@@ -26,9 +37,6 @@ def consistency_loss(logits_w, logits_s, name="ce", T=1.0, p_cutoff=0.0, use_har
     Returns:
         For 'L2': scalar consistency loss value
         For 'ce': tuple of (masked loss, mask ratio)
-
-    Raises:
-        AssertionError: If an unsupported loss name is provided
     """
     assert name in ["ce", "L2"], f"Unsupported consistency loss: {name}"
 

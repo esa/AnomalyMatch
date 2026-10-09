@@ -5,6 +5,10 @@
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
 
+"""Metadata file handler for reading and writing dataset metadata."""
+
+from __future__ import annotations
+
 import os
 
 import numpy as np
@@ -19,15 +23,13 @@ class MetadataHandler:
 
     This class handles loading, validating, and accessing metadata information
     from CSV files that contain additional information about image files.
+
+    Args:
+        metadata_file: Path to the metadata CSV file.
+        image_filenames: List of image filenames to validate against.
     """
 
-    def __init__(self, metadata_file=None, image_filenames=None):
-        """Initialize the metadata handler.
-
-        Args:
-            metadata_file (str, optional): Path to the metadata CSV file.
-            image_filenames (list, optional): List of image filenames to validate against.
-        """
+    def __init__(self, metadata_file: str | None = None, image_filenames: list[str] | None = None):
         self.metadata_file = metadata_file
         self.image_filenames = image_filenames
         self.metadata_df = None
@@ -40,17 +42,16 @@ class MetadataHandler:
         """Validate that RA/Dec coordinates are in valid ICRS format.
 
         Args:
-            ra_values (pd.Series): Series of RA values
-            dec_values (pd.Series): Series of Dec values
-            sample_size (int): Number of coordinates to sample for validation if dataset is large
+            ra_values: Series of RA values
+            dec_values: Series of Dec values
+            sample_size: Number of coordinates to sample for validation if dataset is large
 
         Returns:
             bool: True if coordinates are valid ICRS, False otherwise
 
         Raises:
-            ValueError: If coordinates are not valid ICRS format
+            ValueError: If coordinates are not valid ICRS format.
         """
-
         # Check for non-numeric values
         if not pd.api.types.is_numeric_dtype(ra_values) or not pd.api.types.is_numeric_dtype(
             dec_values
@@ -171,11 +172,11 @@ class MetadataHandler:
             logger.error(f"Error loading metadata: {str(e)}")
             self.metadata_df = None
 
-    def get_metadata_for_file(self, filename):
+    def get_metadata_for_file(self, filename: str) -> dict | None:
         """Get metadata for a specific file.
 
         Args:
-            filename (str): The filename to get metadata for.
+            filename: The filename to get metadata for.
 
         Returns:
             dict: Metadata for the file, or None if not found.
@@ -186,7 +187,7 @@ class MetadataHandler:
         # Return as dictionary
         return self.metadata_df.loc[filename].to_dict()
 
-    def get_all_metadata(self):
+    def get_all_metadata(self) -> pd.DataFrame | None:
         """Get all metadata.
 
         Returns:
