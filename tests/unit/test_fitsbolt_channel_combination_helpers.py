@@ -38,7 +38,7 @@ class TestFitsboltAppliesChannelCombination:
     def test_unexpected_type_raises(self, fits_extension):
         """Guessing either way silently breaks band mixing, so fail hard instead.
 
-        ``DotMap()`` is the ``cfg.copy()`` form of None (CLAUDE.md rule 13).
+        ``DotMap()`` is what ``cfg.copy()`` turns None into on some Python versions.
         """
         with pytest.raises(TypeError, match="fits_extension"):
             fitsbolt_applies_channel_combination(_cfg(fits_extension))

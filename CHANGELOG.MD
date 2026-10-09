@@ -12,45 +12,45 @@ training and scoring as isolated subprocesses, and adds Zarr and Cutana
 catalogues as first-class training and prediction sources.
 
 ### Breaking changes
-- **New UI** in the `anomaly_match_ui` package: `start_ui()` opens a screen-based app (main menu → training setup → training / scoring / browsing → prediction) that replaces the v1 single-panel interface (#310, #312, #341, #344, #347)
-- **Subprocess architecture:** training and scoring run in child processes; `Session` holds only configuration and orchestrates the subprocesses. `Session.load_model()` and the in-memory training API are removed — use `BackendInterface.launch_training_subprocess` and `Session.evaluate_all_images` (#348, #602)
-- **Label CSV schema** is `id,label` with labels `anomaly` / `normal` (`nominal` is no longer written) (#370, #378, #607)
-- **Model checkpoints** use safetensors and embed the training normalisation and `labeled_data.csv`; prediction always uses the checkpoint's normalisation (#334, #361, #513)
-- **`predictions.db`** has a slimmer schema with fp32 scores; subprocesses refuse incompatible databases (#420, #597)
+- **New UI** in the `anomaly_match_ui` package: `start_ui()` opens a screen-based app (main menu → training setup → training / scoring / browsing → prediction) that replaces the v1 single-panel interface
+- **Subprocess architecture:** training and scoring run in child processes; `Session` holds only configuration and orchestrates the subprocesses. `Session.load_model()` and the in-memory training API are removed — use `BackendInterface.launch_training_subprocess` and `Session.evaluate_all_images`
+- **Label CSV schema** is `id,label` with labels `anomaly` / `normal` (`nominal` is no longer written)
+- **Model checkpoints** use safetensors and embed the training normalisation and `labeled_data.csv`; prediction always uses the checkpoint's normalisation
+- **`predictions.db`** has a slimmer schema with fp32 scores; subprocesses refuse incompatible databases
 
 ### Added
-- **Training sources:** image folders, Zarr stores and Cutana catalogues, with labelled-data validation and a persistent labelled cache next to the label CSV (#359, #371, #379, #409, #498)
-- **Zarr end to end:** Zarr stores found for preview, counting and scoring; source IDs taken from the parquet metadata sidecar; single-channel and channel-less stores supported (#609, #624)
-- **Training setup screen** with a paginated, labelable preview gallery, found/missing label breakdown, training-iterations slider and remembered normalisation settings (#368, #385, #412, #442, #511, #577)
-- **NormalisationConfigWidget** on setup screens and a live re-decoding image-detail screen at native cutout resolution (#338, #366, #451, #523–#528)
-- **Active-learning loop:** train → score → browse → label → retrain, with three-way label toggles, sort by score and distance, and size histograms (#337, #339, #344, #532, #543)
-- **Cutana integration:** size-stratified unlabelled sampling, single-channel cutouts, cutout zoom-out, live cutout progress and GPU-accelerated streaming prediction (#378, #398, #469, #479, #530–#536, #545, #546)
-- **Prediction resume:** interrupted runs skip already-scored entries; failing chunks are skipped instead of aborting the run; already-labelled sources are excluded (#421, #426, #433, #519)
-- **Blank output channels** with an all-zero `channel_combination` row (#604)
-- **Running version and commit** shown in the UI (#605)
-- **Documentation site** built with Zensical: getting started, training, prediction, configuration and headless-mode guides plus a generated API reference (#297, #580, #602)
+- **Training sources:** image folders, Zarr stores and Cutana catalogues, with labelled-data validation and a persistent labelled cache next to the label CSV
+- **Zarr end to end:** Zarr stores found for preview, counting and scoring; source IDs taken from the parquet metadata sidecar; single-channel and channel-less stores supported
+- **Training setup screen** with a paginated, labelable preview gallery, found/missing label breakdown, training-iterations slider and remembered normalisation settings
+- **NormalisationConfigWidget** on setup screens and a live re-decoding image-detail screen at native cutout resolution
+- **Active-learning loop:** train → score → browse → label → retrain, with three-way label toggles, sort by score and distance, and size histograms
+- **Cutana integration:** size-stratified unlabelled sampling, single-channel cutouts, cutout zoom-out, live cutout progress and GPU-accelerated streaming prediction
+- **Prediction resume:** interrupted runs skip already-scored entries; failing chunks are skipped instead of aborting the run; already-labelled sources are excluded
+- **Blank output channels** with an all-zero `channel_combination` row
+- **Running version and commit** shown in the UI
+- **Documentation site** built with Zensical: getting started, training, prediction, configuration and headless-mode guides plus a generated API reference
 
 ### Changed
-- **Channel combination** unified across training, the labelled cache and prediction; channel-reducing matrices now apply to image folders and Zarr stores, and weights that would clip are rescaled (#392, #470, #587, #624)
-- **Performance:** batched and parallel Cutana preprocessing, parallel labelled-cache decode, sharded/compressed cache, depth-2 prefetch, predictions DB off NFS, 500k prediction chunks (#304, #397, #438, #468, #477, #480, #491, #498, #503)
-- **Resolution** accepts any value in the normalisation panel (#589)
-- **Dependencies:** `cutana>=0.4.0`, `fitsbolt>=0.3.1,<0.4`, `torch>=2.6`; `h5py` and `pyturbojpeg` dropped from `pyproject.toml` (#559, #616)
+- **Channel combination** unified across training, the labelled cache and prediction; channel-reducing matrices now apply to image folders and Zarr stores, and weights that would clip are rescaled
+- **Performance:** batched and parallel Cutana preprocessing, parallel labelled-cache decode, sharded/compressed cache, depth-2 prefetch, predictions DB off NFS, 500k prediction chunks
+- **Resolution** accepts any value in the normalisation panel
+- **Dependencies:** `cutana>=0.4.0`, `fitsbolt>=0.3.1,<0.4`, `torch>=2.6`; `h5py` and `pyturbojpeg` dropped from `pyproject.toml`
 
 ### Fixed
-- **Efficientnet-lite0 fine-tuning regression** from the timm backbone swap (#541)
-- **Scoring failures** surfaced instead of swallowed; Stop / Retrain cancels scoring cleanly (#388, #431, #439)
-- **NFS hangs and deadlocks:** per-chunk buffer files, logger routing around the ipykernel OutStream (#394, #406)
-- **Labelled cache** no longer rebuilds every session on numeric ids or keeps a stale band count; numeric-id labels overwrite instead of appending (#537, #562, #568)
-- **File choosers** no longer show a path that does not exist (#585)
-- **Prediction setup** preview and resume no longer crash on Cutana / SourceID catalogues (#516, #550)
-- **Preview** re-extracts when the zoom-out factor changes and no longer races channel-combination edits (#475, #591)
-- **Datalabs startup:** kernel install, fast env reconcile and resume handling (#465)
-- **Cutana errors** are reported instead of failing silently (#464)
+- **Efficientnet-lite0 fine-tuning regression** from the timm backbone swap (#16)
+- **Scoring failures** surfaced instead of swallowed; Stop / Retrain cancels scoring cleanly
+- **NFS hangs and deadlocks:** per-chunk buffer files, logger routing around the ipykernel OutStream
+- **Labelled cache** no longer rebuilds every session on numeric ids or keeps a stale band count; numeric-id labels overwrite instead of appending
+- **File choosers** no longer show a path that does not exist
+- **Prediction setup** preview and resume no longer crash on Cutana / SourceID catalogues
+- **Preview** re-extracts when the zoom-out factor changes and no longer races channel-combination edits
+- **Cutana errors** are reported instead of failing silently
 
 ### Documentation
-- **Headless mode** guide replacing the stale `Session.load_model()` example (#602)
-- **Cutana catalogue channel stability** requirements (#579)
-- **safetensors checkpoint format** in the README (#471)
+- **Headless mode** guide replacing the stale `Session.load_model()` example
+- **Cutana catalogue channel stability** requirements
+- **safetensors checkpoint format** in the README (#13)
+- **Contribution guidelines** in `CONTRIBUTING.md`, linked from the README (#17)
 
 ## [v1.3.2] – 2026-07-08
 

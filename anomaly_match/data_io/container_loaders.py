@@ -334,7 +334,7 @@ def decode_cutana_raw_images(images: list[np.ndarray], cfg: DotMap) -> list[np.n
     # ``copy.deepcopy`` it explicitly rather than trust ``cfg.copy()``:
     # ``DotMap.copy()``'s isolation is *type-dependent* — it clones nested DotMaps
     # and list leaves but SHARES numpy-array leaves (and has the known
-    # ``None -> DotMap()`` quirk, see CLAUDE.md).  ``channel_combination`` is often
+    # quirk of turning ``None`` values into empty ``DotMap()``).  ``channel_combination`` is often
     # an ndarray, so relying on ``cfg.copy()`` here would only be safe by accident
     # (because today's pins happen to be key reassignments, not in-place leaf
     # mutations).  ``copy.deepcopy`` is type-independent, so the per-band pins below

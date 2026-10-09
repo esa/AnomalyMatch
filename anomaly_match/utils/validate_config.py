@@ -280,8 +280,8 @@ def _validate_channel_combination(
     Raises:
         ValueError: If the matrix is not a non-empty, rectangular 2-D array of finite numbers.
     """
-    # DotMap.copy() turns None into an empty DotMap() (CLAUDE.md rule 13), which
-    # means "no matrix" just as None does.
+    # DotMap.copy() turns None into an empty DotMap() on some Python versions,
+    # which means "no matrix" just as None does.
     if channel_combination is None or (
         isinstance(channel_combination, DotMap) and not channel_combination
     ):
@@ -519,7 +519,8 @@ def validate_config(cfg: DotMap, check_paths: bool = True) -> None:
         # Infer n_output_channels from channel_combination matrix if provided
         # isinstance rather than hasattr(cc, "shape"): probing an attribute on a
         # dynamic DotMap creates it, so the empty-DotMap form of "no matrix"
-        # (CLAUDE.md rule 13) would gain a bogus channel_combination.shape key.
+        # (what DotMap.copy() makes of None) would gain a bogus
+        # channel_combination.shape key.
         if isinstance(cc, np.ndarray) and cc.ndim == 2:
             inferred = cc.shape[0]
             if inferred != cfg.normalisation.n_output_channels:
