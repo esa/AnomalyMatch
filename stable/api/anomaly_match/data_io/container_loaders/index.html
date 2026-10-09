@@ -1,0 +1,5152 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Semi-supervised anomaly detection for astronomical images">
+      
+      
+      
+      
+        <link rel="prev" href="../checkpoint_io/">
+      
+      
+        <link rel="next" href="../find_images_in_folder/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../../assets/esa_logo.svg">
+      <meta name="generator" content="zensical-0.0.69">
+    
+    
+      
+        <title>container_loaders - AnomalyMatch</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../../../assets/stylesheets/modern/main.e15858d4.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../../../assets/stylesheets/modern/palette.b27955a4.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-hidden="true"></label>
+    <div data-md-component="skip">
+      <a href="#__skip" class="md-skip">
+        Skip to content
+      </a>
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../../.." title="AnomalyMatch" class="md-header__button md-logo" aria-label="AnomalyMatch" data-md-component="logo">
+      
+  <img src="../../../../assets/esa_logo.svg" alt="AnomalyMatch">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            AnomalyMatch
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              container_loaders
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="none" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/esa/AnomalyMatch" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    esa/AnomalyMatch
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../../.." title="AnomalyMatch" class="md-nav__button md-logo" aria-label="AnomalyMatch" data-md-component="logo">
+      
+  <img src="../../../../assets/esa_logo.svg" alt="AnomalyMatch">
+
+    </a>
+    AnomalyMatch
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/esa/AnomalyMatch" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    esa/AnomalyMatch
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  AnomalyMatch
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Architecture
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting Started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../method/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Method
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Api
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+            <label class="md-nav__title" for="__nav_5">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Api
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_1" id="__nav_5_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Anomaly match
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_1_label" aria-expanded="true">
+            <label class="md-nav__title" for="__nav_5_1">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Anomaly match
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_1_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5_1_1" id="__nav_5_1_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Data io
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_1_1_label" aria-expanded="true">
+            <label class="md-nav__title" for="__nav_5_1_1">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Data io
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../SessionIOHandler/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  SessionIOHandler
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../checkpoint_io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  checkpoint_io
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  container_loaders
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  container_loaders
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#anomaly_match.data_io.container_loaders" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        container_loaders
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="container_loaders">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#anomaly_match.data_io.container_loaders.decode_zarr_image" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        decode_zarr_image
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#anomaly_match.data_io.container_loaders.decode_zarr_gallery_images" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        decode_zarr_gallery_images
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#anomaly_match.data_io.container_loaders.apply_channel_combination_to_cutana_image" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        apply_channel_combination_to_cutana_image
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#anomaly_match.data_io.container_loaders.apply_channel_combination_to_cutana_batch" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        apply_channel_combination_to_cutana_batch
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#anomaly_match.data_io.container_loaders.decode_cutana_raw_images" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        decode_cutana_raw_images
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../find_images_in_folder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  find_images_in_folder
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../labeled_data_cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  labeled_data_cache
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../load_images/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  load_images
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../metadata_handler/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  metadata_handler
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../save_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  save_config
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../source_scanning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  source_scanning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../source_validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  source_validation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_1_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_1_2" id="__nav_5_1_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Datasets
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_1_2_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5_1_2">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Datasets
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../datasets/AnomalyDetectionDataset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  AnomalyDetectionDataset
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../datasets/BasicDataset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  BasicDataset
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../datasets/Label/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Label
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../datasets/SSL_Dataset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  SSL_Dataset
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../datasets/cutana_source/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  cutana_source
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../datasets/data_utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  data_utils
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../datasets/training_data_source/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  training_data_source
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../datasets/zarr_source/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  zarr_source
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_1_2_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_1_2_9" id="__nav_5_1_2_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Augmentation
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_5_1_2_9_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5_1_2_9">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Augmentation
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../datasets/augmentation/randaugment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  randaugment
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../datasets/augmentation/randaugment_multispectral/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  randaugment_multispectral
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_1_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_1_3" id="__nav_5_1_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Image processing
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_1_3_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5_1_3">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Image processing
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../image_processing/image_utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  image_utils
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../image_processing/transforms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  transforms
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_1_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_1_4" id="__nav_5_1_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Models
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_1_4_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5_1_4">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Models
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../models/FixMatch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  FixMatch
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_1_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_1_5" id="__nav_5_1_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Pipeline
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_1_5_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5_1_5">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Pipeline
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../pipeline/SessionTracker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  SessionTracker
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../pipeline/session/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  session
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_1_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_1_6" id="__nav_5_1_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Prediction
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_1_6_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5_1_6">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Prediction
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../prediction/anomaly_score_db/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  anomaly_score_db
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../prediction/cutana_loader/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  cutana_loader
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../prediction/db_location/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  db_location
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../prediction/image_cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  image_cache
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../prediction/zarr_filenames/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  zarr_filenames
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_1_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_1_7" id="__nav_5_1_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Utils
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_1_7_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5_1_7">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Utils
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/accuracy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  accuracy
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/consistency_loss/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  consistency_loss
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/constants/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  constants
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/create_model_string/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  create_model_string
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/cross_entropy_loss/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  cross_entropy_loss
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/cutana_stream_utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  cutana_stream_utils
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/get_cosine_schedule_with_warmup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  get_cosine_schedule_with_warmup
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/get_default_cfg/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  get_default_cfg
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/get_net_builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  get_net_builder
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/get_optimizer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  get_optimizer
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/normalisation_parameters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  normalisation_parameters
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/prediction_profiler/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  prediction_profiler
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/print_cfg/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  print_cfg
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/set_log_level/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  set_log_level
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/set_seeds/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  set_seeds
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/tqdm_logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  tqdm_logging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../utils/validate_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  validate_config
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_2" id="__nav_5_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Anomaly match ui
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5_2">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Anomaly match ui
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  app
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/styles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  styles
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_2_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_2_3" id="__nav_5_2_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Screens
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_2_3_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5_2_3">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Screens
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/screens/base_screen/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  base_screen
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/screens/gallery_screen_base/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  gallery_screen_base
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/screens/image_detail_screen/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  image_detail_screen
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/screens/main_menu_screen/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  main_menu_screen
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/screens/prediction_screen/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  prediction_screen
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/screens/prediction_setup_screen/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  prediction_setup_screen
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/screens/training_screen/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  training_screen
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/screens/training_setup_screen/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  training_setup_screen
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_2_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_2_4" id="__nav_5_2_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Utils
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_2_4_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5_2_4">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Utils
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/utils/backend_interface/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  backend_interface
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/utils/chooser_paths/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  chooser_paths
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/utils/display_transforms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  display_transforms
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/utils/esasky/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  esasky
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/utils/image_utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  image_utils
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/utils/plot_utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  plot_utils
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/utils/progress_tap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  progress_tap
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/utils/scrolling_log_sink/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  scrolling_log_sink
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/utils/svg_loader/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  svg_loader
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/utils/ui_state/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  ui_state
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_2_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_2_5" id="__nav_5_2_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Widgets
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_2_5_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5_2_5">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Widgets
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/widgets/file_chooser/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  file_chooser
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/widgets/gallery_widget/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  gallery_widget
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/widgets/header_widget/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  header_widget
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/widgets/image_toolbar/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  image_toolbar
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/widgets/labelable_thumbnail_cell/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  labelable_thumbnail_cell
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/widgets/loading_widget/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  loading_widget
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/widgets/normalisation_config_widget/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  normalisation_config_widget
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/widgets/preview_grid/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  preview_grid
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/widgets/preview_widget/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  preview_widget
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/widgets/progress_panel/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  progress_panel
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../anomaly_match_ui/widgets/thumbnail_cell/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  thumbnail_cell
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  User guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_6">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  User guide
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../user-guide/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../user-guide/headless/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Headless Mode
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../user-guide/prediction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Prediction
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../user-guide/training/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Training
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#anomaly_match.data_io.container_loaders" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        container_loaders
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="container_loaders">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#anomaly_match.data_io.container_loaders.decode_zarr_image" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        decode_zarr_image
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#anomaly_match.data_io.container_loaders.decode_zarr_gallery_images" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        decode_zarr_gallery_images
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#anomaly_match.data_io.container_loaders.apply_channel_combination_to_cutana_image" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        apply_channel_combination_to_cutana_image
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#anomaly_match.data_io.container_loaders.apply_channel_combination_to_cutana_batch" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        apply_channel_combination_to_cutana_batch
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#anomaly_match.data_io.container_loaders.decode_cutana_raw_images" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        decode_cutana_raw_images
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="../../../.." class="md-path__link">
+        
+  
+  <span class="md-ellipsis">
+    AnomalyMatch
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+    
+    
+    
+      
+  
+  
+    
+    
+    
+    
+    
+      
+  
+  
+    
+    
+    
+    
+    
+      <li class="md-path__item">
+        <a href="../SessionIOHandler/" class="md-path__link">
+          
+  
+  <span class="md-ellipsis">
+    Api
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+    
+    
+    
+    
+    
+      
+  
+  
+    
+    
+    
+    
+    
+      <li class="md-path__item">
+        <a href="../SessionIOHandler/" class="md-path__link">
+          
+  
+  <span class="md-ellipsis">
+    Anomaly match
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+    
+    
+    
+    
+    
+      <li class="md-path__item">
+        <a href="../SessionIOHandler/" class="md-path__link">
+          
+  
+  <span class="md-ellipsis">
+    Data io
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
+              
+              <article class="md-content__inner md-typeset">
+                <a id="__skip" tabindex="-1"></a>
+                
+                  
+
+  
+  
+
+
+  <h1>container_loaders</h1>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="anomaly_match.data_io.container_loaders" class="doc doc-heading">
+            <code>anomaly_match.data_io.container_loaders</code>
+
+
+<a href="#anomaly_match.data_io.container_loaders" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>Decode functions for reading images from Zarr containers and Cutana caches.</p>
+<p>These are shared between the training data sources and the prediction subprocess
+scripts. Centralising them avoids duplication and ensures consistent behaviour.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="anomaly_match.data_io.container_loaders.decode_zarr_image" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">decode_zarr_image</span><span class="p">(</span><span class="n">image_data</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span></code>
+
+<a href="#anomaly_match.data_io.container_loaders.decode_zarr_image" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Read and preprocess raw pixel data from an upstream Zarr store.</p>
+<p>Runs the full fitsbolt pipeline (normalisation + resize) on the raw
+array values, then applies <code>channel_combination</code> as post-processing.
+The fitsbolt config carries <code>channel_combination=None</code> for non-FITS
+sources (see :func:<code>get_fitsbolt_config</code>), so this post-hoc combine is
+the single application — never a duplicate of a fitsbolt-side one.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>image_data</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Raw pixel array from Zarr (CHW or HWC).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>cfg</code>
+            </td>
+            <td>
+                  <code><span title="dotmap.DotMap">DotMap</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Configuration with <code>fitsbolt_cfg</code> already attached.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Preprocessed image as HWC numpy array with</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>cfg.normalisation.n_output_channels</code> channels.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>anomaly_match/data_io/container_loaders.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-72"> 72</a></span>
+<span class="normal"><a href="#__codelineno-0-73"> 73</a></span>
+<span class="normal"><a href="#__codelineno-0-74"> 74</a></span>
+<span class="normal"><a href="#__codelineno-0-75"> 75</a></span>
+<span class="normal"><a href="#__codelineno-0-76"> 76</a></span>
+<span class="normal"><a href="#__codelineno-0-77"> 77</a></span>
+<span class="normal"><a href="#__codelineno-0-78"> 78</a></span>
+<span class="normal"><a href="#__codelineno-0-79"> 79</a></span>
+<span class="normal"><a href="#__codelineno-0-80"> 80</a></span>
+<span class="normal"><a href="#__codelineno-0-81"> 81</a></span>
+<span class="normal"><a href="#__codelineno-0-82"> 82</a></span>
+<span class="normal"><a href="#__codelineno-0-83"> 83</a></span>
+<span class="normal"><a href="#__codelineno-0-84"> 84</a></span>
+<span class="normal"><a href="#__codelineno-0-85"> 85</a></span>
+<span class="normal"><a href="#__codelineno-0-86"> 86</a></span>
+<span class="normal"><a href="#__codelineno-0-87"> 87</a></span>
+<span class="normal"><a href="#__codelineno-0-88"> 88</a></span>
+<span class="normal"><a href="#__codelineno-0-89"> 89</a></span>
+<span class="normal"><a href="#__codelineno-0-90"> 90</a></span>
+<span class="normal"><a href="#__codelineno-0-91"> 91</a></span>
+<span class="normal"><a href="#__codelineno-0-92"> 92</a></span>
+<span class="normal"><a href="#__codelineno-0-93"> 93</a></span>
+<span class="normal"><a href="#__codelineno-0-94"> 94</a></span>
+<span class="normal"><a href="#__codelineno-0-95"> 95</a></span>
+<span class="normal"><a href="#__codelineno-0-96"> 96</a></span>
+<span class="normal"><a href="#__codelineno-0-97"> 97</a></span>
+<span class="normal"><a href="#__codelineno-0-98"> 98</a></span>
+<span class="normal"><a href="#__codelineno-0-99"> 99</a></span>
+<span class="normal"><a href="#__codelineno-0-100">100</a></span>
+<span class="normal"><a href="#__codelineno-0-101">101</a></span>
+<span class="normal"><a href="#__codelineno-0-102">102</a></span>
+<span class="normal"><a href="#__codelineno-0-103">103</a></span>
+<span class="normal"><a href="#__codelineno-0-104">104</a></span>
+<span class="normal"><a href="#__codelineno-0-105">105</a></span>
+<span class="normal"><a href="#__codelineno-0-106">106</a></span>
+<span class="normal"><a href="#__codelineno-0-107">107</a></span>
+<span class="normal"><a href="#__codelineno-0-108">108</a></span>
+<span class="normal"><a href="#__codelineno-0-109">109</a></span>
+<span class="normal"><a href="#__codelineno-0-110">110</a></span>
+<span class="normal"><a href="#__codelineno-0-111">111</a></span>
+<span class="normal"><a href="#__codelineno-0-112">112</a></span>
+<span class="normal"><a href="#__codelineno-0-113">113</a></span>
+<span class="normal"><a href="#__codelineno-0-114">114</a></span>
+<span class="normal"><a href="#__codelineno-0-115">115</a></span>
+<span class="normal"><a href="#__codelineno-0-116">116</a></span>
+<span class="normal"><a href="#__codelineno-0-117">117</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-72" name="__codelineno-0-72"></a><span class="k">def</span><span class="w"> </span><span class="nf">decode_zarr_image</span><span class="p">(</span><span class="n">image_data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">DotMap</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<a id="__codelineno-0-73" name="__codelineno-0-73"></a><span class="w">    </span><span class="sd">"""Read and preprocess raw pixel data from an upstream Zarr store.</span>
+<a id="__codelineno-0-74" name="__codelineno-0-74"></a>
+<a id="__codelineno-0-75" name="__codelineno-0-75"></a><span class="sd">    Runs the full fitsbolt pipeline (normalisation + resize) on the raw</span>
+<a id="__codelineno-0-76" name="__codelineno-0-76"></a><span class="sd">    array values, then applies ``channel_combination`` as post-processing.</span>
+<a id="__codelineno-0-77" name="__codelineno-0-77"></a><span class="sd">    The fitsbolt config carries ``channel_combination=None`` for non-FITS</span>
+<a id="__codelineno-0-78" name="__codelineno-0-78"></a><span class="sd">    sources (see :func:`get_fitsbolt_config`), so this post-hoc combine is</span>
+<a id="__codelineno-0-79" name="__codelineno-0-79"></a><span class="sd">    the single application — never a duplicate of a fitsbolt-side one.</span>
+<a id="__codelineno-0-80" name="__codelineno-0-80"></a>
+<a id="__codelineno-0-81" name="__codelineno-0-81"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-82" name="__codelineno-0-82"></a><span class="sd">        image_data: Raw pixel array from Zarr (CHW or HWC).</span>
+<a id="__codelineno-0-83" name="__codelineno-0-83"></a><span class="sd">        cfg: Configuration with ``fitsbolt_cfg`` already attached.</span>
+<a id="__codelineno-0-84" name="__codelineno-0-84"></a>
+<a id="__codelineno-0-85" name="__codelineno-0-85"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-86" name="__codelineno-0-86"></a><span class="sd">        Preprocessed image as HWC numpy array with</span>
+<a id="__codelineno-0-87" name="__codelineno-0-87"></a><span class="sd">        ``cfg.normalisation.n_output_channels`` channels.</span>
+<a id="__codelineno-0-88" name="__codelineno-0-88"></a><span class="sd">    """</span>
+<a id="__codelineno-0-89" name="__codelineno-0-89"></a>    <span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-0-90" name="__codelineno-0-90"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">image_data</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<a id="__codelineno-0-91" name="__codelineno-0-91"></a>            <span class="n">image_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">image_data</span><span class="p">)</span>
+<a id="__codelineno-0-92" name="__codelineno-0-92"></a>
+<a id="__codelineno-0-93" name="__codelineno-0-93"></a>        <span class="c1"># CHW → HWC when the leading axis is the short one.  Comparing against</span>
+<a id="__codelineno-0-94" name="__codelineno-0-94"></a>        <span class="c1"># n_output_channels missed channel-first stores whenever a matrix</span>
+<a id="__codelineno-0-95" name="__codelineno-0-95"></a>        <span class="c1"># changes the channel count (a 1x3 matrix on a (3, H, W) store).</span>
+<a id="__codelineno-0-96" name="__codelineno-0-96"></a>        <span class="k">if</span> <span class="n">image_data</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span> <span class="ow">and</span> <span class="n">image_data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">image_data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+<a id="__codelineno-0-97" name="__codelineno-0-97"></a>            <span class="n">image</span> <span class="o">=</span> <span class="n">image_data</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<a id="__codelineno-0-98" name="__codelineno-0-98"></a>        <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-99" name="__codelineno-0-99"></a>            <span class="n">image</span> <span class="o">=</span> <span class="n">image_data</span>
+<a id="__codelineno-0-100" name="__codelineno-0-100"></a>
+<a id="__codelineno-0-101" name="__codelineno-0-101"></a>        <span class="c1"># fitsbolt's single-image pipeline requires an explicit channel axis.</span>
+<a id="__codelineno-0-102" name="__codelineno-0-102"></a>        <span class="k">if</span> <span class="n">image</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+<a id="__codelineno-0-103" name="__codelineno-0-103"></a>            <span class="n">image</span> <span class="o">=</span> <span class="n">image</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">]</span>
+<a id="__codelineno-0-104" name="__codelineno-0-104"></a>
+<a id="__codelineno-0-105" name="__codelineno-0-105"></a>        <span class="c1"># fitsbolt 0.3.x would combine raw arrays too, so it decodes without the</span>
+<a id="__codelineno-0-106" name="__codelineno-0-106"></a>        <span class="c1"># matrix and we apply it below as the single application.</span>
+<a id="__codelineno-0-107" name="__codelineno-0-107"></a>        <span class="n">image</span> <span class="o">=</span> <span class="n">process_single_wrapper</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">"zarr"</span><span class="p">,</span> <span class="n">combine_post_hoc</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-0-108" name="__codelineno-0-108"></a>
+<a id="__codelineno-0-109" name="__codelineno-0-109"></a>        <span class="n">channel_combination</span> <span class="o">=</span> <span class="n">_get_channel_combination_array</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+<a id="__codelineno-0-110" name="__codelineno-0-110"></a>        <span class="k">if</span> <span class="n">channel_combination</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-111" name="__codelineno-0-111"></a>            <span class="n">image</span> <span class="o">=</span> <span class="n">_apply_channel_combination</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">channel_combination</span><span class="p">)</span>
+<a id="__codelineno-0-112" name="__codelineno-0-112"></a>
+<a id="__codelineno-0-113" name="__codelineno-0-113"></a>        <span class="k">return</span> <span class="n">image</span>
+<a id="__codelineno-0-114" name="__codelineno-0-114"></a>
+<a id="__codelineno-0-115" name="__codelineno-0-115"></a>    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+<a id="__codelineno-0-116" name="__codelineno-0-116"></a>        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">"Error processing image from Zarr: </span><span class="si">{}</span><span class="s2">"</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+<a id="__codelineno-0-117" name="__codelineno-0-117"></a>        <span class="k">raise</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="anomaly_match.data_io.container_loaders.decode_zarr_gallery_images" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">decode_zarr_gallery_images</span><span class="p">(</span><span class="n">raw_images</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span></code>
+
+<a href="#anomaly_match.data_io.container_loaders.decode_zarr_gallery_images" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Decode raw Zarr pixels for gallery thumbnails the way the model saw them.</p>
+<p>The gallery reads images straight from the store, so without this its
+thumbnails ignored normalisation and <code>channel_combination</code> — a 1-output
+matrix still showed colour images.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>raw_images</code>
+            </td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="numpy.ndarray">ndarray</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>{filename: raw store pixels}</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>cfg</code>
+            </td>
+            <td>
+                  <code><span title="dotmap.DotMap">DotMap</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Session configuration; its <code>fitsbolt_cfg</code> is rebuilt from
+<code>cfg.normalisation</code> first, as the preview does.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="numpy.ndarray">ndarray</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>{filename: decoded HWC image}</code>; images that fail to decode are logged</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="numpy.ndarray">ndarray</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>and left out, so one bad entry does not blank the whole page.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>anomaly_match/data_io/container_loaders.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-120">120</a></span>
+<span class="normal"><a href="#__codelineno-0-121">121</a></span>
+<span class="normal"><a href="#__codelineno-0-122">122</a></span>
+<span class="normal"><a href="#__codelineno-0-123">123</a></span>
+<span class="normal"><a href="#__codelineno-0-124">124</a></span>
+<span class="normal"><a href="#__codelineno-0-125">125</a></span>
+<span class="normal"><a href="#__codelineno-0-126">126</a></span>
+<span class="normal"><a href="#__codelineno-0-127">127</a></span>
+<span class="normal"><a href="#__codelineno-0-128">128</a></span>
+<span class="normal"><a href="#__codelineno-0-129">129</a></span>
+<span class="normal"><a href="#__codelineno-0-130">130</a></span>
+<span class="normal"><a href="#__codelineno-0-131">131</a></span>
+<span class="normal"><a href="#__codelineno-0-132">132</a></span>
+<span class="normal"><a href="#__codelineno-0-133">133</a></span>
+<span class="normal"><a href="#__codelineno-0-134">134</a></span>
+<span class="normal"><a href="#__codelineno-0-135">135</a></span>
+<span class="normal"><a href="#__codelineno-0-136">136</a></span>
+<span class="normal"><a href="#__codelineno-0-137">137</a></span>
+<span class="normal"><a href="#__codelineno-0-138">138</a></span>
+<span class="normal"><a href="#__codelineno-0-139">139</a></span>
+<span class="normal"><a href="#__codelineno-0-140">140</a></span>
+<span class="normal"><a href="#__codelineno-0-141">141</a></span>
+<span class="normal"><a href="#__codelineno-0-142">142</a></span>
+<span class="normal"><a href="#__codelineno-0-143">143</a></span>
+<span class="normal"><a href="#__codelineno-0-144">144</a></span>
+<span class="normal"><a href="#__codelineno-0-145">145</a></span>
+<span class="normal"><a href="#__codelineno-0-146">146</a></span>
+<span class="normal"><a href="#__codelineno-0-147">147</a></span>
+<span class="normal"><a href="#__codelineno-0-148">148</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-120" name="__codelineno-0-120"></a><span class="k">def</span><span class="w"> </span><span class="nf">decode_zarr_gallery_images</span><span class="p">(</span>
+<a id="__codelineno-0-121" name="__codelineno-0-121"></a>    <span class="n">raw_images</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">DotMap</span>
+<a id="__codelineno-0-122" name="__codelineno-0-122"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<a id="__codelineno-0-123" name="__codelineno-0-123"></a><span class="w">    </span><span class="sd">"""Decode raw Zarr pixels for gallery thumbnails the way the model saw them.</span>
+<a id="__codelineno-0-124" name="__codelineno-0-124"></a>
+<a id="__codelineno-0-125" name="__codelineno-0-125"></a><span class="sd">    The gallery reads images straight from the store, so without this its</span>
+<a id="__codelineno-0-126" name="__codelineno-0-126"></a><span class="sd">    thumbnails ignored normalisation and ``channel_combination`` — a 1-output</span>
+<a id="__codelineno-0-127" name="__codelineno-0-127"></a><span class="sd">    matrix still showed colour images.</span>
+<a id="__codelineno-0-128" name="__codelineno-0-128"></a>
+<a id="__codelineno-0-129" name="__codelineno-0-129"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-130" name="__codelineno-0-130"></a><span class="sd">        raw_images: ``{filename: raw store pixels}``.</span>
+<a id="__codelineno-0-131" name="__codelineno-0-131"></a><span class="sd">        cfg: Session configuration; its ``fitsbolt_cfg`` is rebuilt from</span>
+<a id="__codelineno-0-132" name="__codelineno-0-132"></a><span class="sd">            ``cfg.normalisation`` first, as the preview does.</span>
+<a id="__codelineno-0-133" name="__codelineno-0-133"></a>
+<a id="__codelineno-0-134" name="__codelineno-0-134"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-135" name="__codelineno-0-135"></a><span class="sd">        ``{filename: decoded HWC image}``; images that fail to decode are logged</span>
+<a id="__codelineno-0-136" name="__codelineno-0-136"></a><span class="sd">        and left out, so one bad entry does not blank the whole page.</span>
+<a id="__codelineno-0-137" name="__codelineno-0-137"></a><span class="sd">    """</span>
+<a id="__codelineno-0-138" name="__codelineno-0-138"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">raw_images</span><span class="p">:</span>
+<a id="__codelineno-0-139" name="__codelineno-0-139"></a>        <span class="k">return</span> <span class="p">{}</span>
+<a id="__codelineno-0-140" name="__codelineno-0-140"></a>    <span class="n">cfg</span> <span class="o">=</span> <span class="n">get_fitsbolt_config</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+<a id="__codelineno-0-141" name="__codelineno-0-141"></a>    <span class="n">decoded</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+<a id="__codelineno-0-142" name="__codelineno-0-142"></a>    <span class="k">for</span> <span class="n">filename</span><span class="p">,</span> <span class="n">raw</span> <span class="ow">in</span> <span class="n">raw_images</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+<a id="__codelineno-0-143" name="__codelineno-0-143"></a>        <span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-0-144" name="__codelineno-0-144"></a>            <span class="n">decoded</span><span class="p">[</span><span class="n">filename</span><span class="p">]</span> <span class="o">=</span> <span class="n">decode_zarr_image</span><span class="p">(</span><span class="n">raw</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span>
+<a id="__codelineno-0-145" name="__codelineno-0-145"></a>        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+<a id="__codelineno-0-146" name="__codelineno-0-146"></a>            <span class="c1"># decode_zarr_image has already logged the error.</span>
+<a id="__codelineno-0-147" name="__codelineno-0-147"></a>            <span class="k">continue</span>
+<a id="__codelineno-0-148" name="__codelineno-0-148"></a>    <span class="k">return</span> <span class="n">decoded</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="anomaly_match.data_io.container_loaders.apply_channel_combination_to_cutana_image" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">apply_channel_combination_to_cutana_image</span><span class="p">(</span><span class="n">image_data</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span></code>
+
+<a href="#anomaly_match.data_io.container_loaders.apply_channel_combination_to_cutana_image" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Combine Cutana per-band output to <code>n_output_channels</code> via fitsbolt.</p>
+<p>Used on Cutana orchestrator output in the unlabeled training stream
+and the prediction subprocess, where Cutana is configured with the
+user's normalisation settings and returns per-band <em>already
+normalised</em> data.  The labeled cache read path uses
+:func:<code>decode_cutana_raw_images</code> instead, because that path sees
+unnormalised float32 and needs the full fitsbolt pipeline.</p>
+<p>When no <code>channel_combination</code> is configured and the input has
+exactly one band, the single channel is broadcast to
+<code>n_output_channels</code> (the implicit "replicate VIS to RGB" intent for
+single-extension sources).  Otherwise the image passes through
+unchanged.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>image_data</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>HWC array from Cutana with <code>n_extensions</code> channels.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>cfg</code>
+            </td>
+            <td>
+                  <code><span title="dotmap.DotMap">DotMap</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Configuration holding <code>normalisation.channel_combination</code>
+and <code>normalisation.n_output_channels</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>HWC numpy array with <code>n_output_channels</code> channels, same dtype</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>as the input (which is already <code>cfg.normalisation.output_dtype</code></p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>because the orchestrator is built with matching <code>data_type</code>).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>anomaly_match/data_io/container_loaders.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-191">191</a></span>
+<span class="normal"><a href="#__codelineno-0-192">192</a></span>
+<span class="normal"><a href="#__codelineno-0-193">193</a></span>
+<span class="normal"><a href="#__codelineno-0-194">194</a></span>
+<span class="normal"><a href="#__codelineno-0-195">195</a></span>
+<span class="normal"><a href="#__codelineno-0-196">196</a></span>
+<span class="normal"><a href="#__codelineno-0-197">197</a></span>
+<span class="normal"><a href="#__codelineno-0-198">198</a></span>
+<span class="normal"><a href="#__codelineno-0-199">199</a></span>
+<span class="normal"><a href="#__codelineno-0-200">200</a></span>
+<span class="normal"><a href="#__codelineno-0-201">201</a></span>
+<span class="normal"><a href="#__codelineno-0-202">202</a></span>
+<span class="normal"><a href="#__codelineno-0-203">203</a></span>
+<span class="normal"><a href="#__codelineno-0-204">204</a></span>
+<span class="normal"><a href="#__codelineno-0-205">205</a></span>
+<span class="normal"><a href="#__codelineno-0-206">206</a></span>
+<span class="normal"><a href="#__codelineno-0-207">207</a></span>
+<span class="normal"><a href="#__codelineno-0-208">208</a></span>
+<span class="normal"><a href="#__codelineno-0-209">209</a></span>
+<span class="normal"><a href="#__codelineno-0-210">210</a></span>
+<span class="normal"><a href="#__codelineno-0-211">211</a></span>
+<span class="normal"><a href="#__codelineno-0-212">212</a></span>
+<span class="normal"><a href="#__codelineno-0-213">213</a></span>
+<span class="normal"><a href="#__codelineno-0-214">214</a></span>
+<span class="normal"><a href="#__codelineno-0-215">215</a></span>
+<span class="normal"><a href="#__codelineno-0-216">216</a></span>
+<span class="normal"><a href="#__codelineno-0-217">217</a></span>
+<span class="normal"><a href="#__codelineno-0-218">218</a></span>
+<span class="normal"><a href="#__codelineno-0-219">219</a></span>
+<span class="normal"><a href="#__codelineno-0-220">220</a></span>
+<span class="normal"><a href="#__codelineno-0-221">221</a></span>
+<span class="normal"><a href="#__codelineno-0-222">222</a></span>
+<span class="normal"><a href="#__codelineno-0-223">223</a></span>
+<span class="normal"><a href="#__codelineno-0-224">224</a></span>
+<span class="normal"><a href="#__codelineno-0-225">225</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-191" name="__codelineno-0-191"></a><span class="k">def</span><span class="w"> </span><span class="nf">apply_channel_combination_to_cutana_image</span><span class="p">(</span><span class="n">image_data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">DotMap</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<a id="__codelineno-0-192" name="__codelineno-0-192"></a><span class="w">    </span><span class="sd">"""Combine Cutana per-band output to ``n_output_channels`` via fitsbolt.</span>
+<a id="__codelineno-0-193" name="__codelineno-0-193"></a>
+<a id="__codelineno-0-194" name="__codelineno-0-194"></a><span class="sd">    Used on Cutana orchestrator output in the unlabeled training stream</span>
+<a id="__codelineno-0-195" name="__codelineno-0-195"></a><span class="sd">    and the prediction subprocess, where Cutana is configured with the</span>
+<a id="__codelineno-0-196" name="__codelineno-0-196"></a><span class="sd">    user's normalisation settings and returns per-band *already</span>
+<a id="__codelineno-0-197" name="__codelineno-0-197"></a><span class="sd">    normalised* data.  The labeled cache read path uses</span>
+<a id="__codelineno-0-198" name="__codelineno-0-198"></a><span class="sd">    :func:`decode_cutana_raw_images` instead, because that path sees</span>
+<a id="__codelineno-0-199" name="__codelineno-0-199"></a><span class="sd">    unnormalised float32 and needs the full fitsbolt pipeline.</span>
+<a id="__codelineno-0-200" name="__codelineno-0-200"></a>
+<a id="__codelineno-0-201" name="__codelineno-0-201"></a><span class="sd">    When no ``channel_combination`` is configured and the input has</span>
+<a id="__codelineno-0-202" name="__codelineno-0-202"></a><span class="sd">    exactly one band, the single channel is broadcast to</span>
+<a id="__codelineno-0-203" name="__codelineno-0-203"></a><span class="sd">    ``n_output_channels`` (the implicit "replicate VIS to RGB" intent for</span>
+<a id="__codelineno-0-204" name="__codelineno-0-204"></a><span class="sd">    single-extension sources).  Otherwise the image passes through</span>
+<a id="__codelineno-0-205" name="__codelineno-0-205"></a><span class="sd">    unchanged.</span>
+<a id="__codelineno-0-206" name="__codelineno-0-206"></a>
+<a id="__codelineno-0-207" name="__codelineno-0-207"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-208" name="__codelineno-0-208"></a><span class="sd">        image_data: HWC array from Cutana with ``n_extensions`` channels.</span>
+<a id="__codelineno-0-209" name="__codelineno-0-209"></a><span class="sd">        cfg: Configuration holding ``normalisation.channel_combination``</span>
+<a id="__codelineno-0-210" name="__codelineno-0-210"></a><span class="sd">            and ``normalisation.n_output_channels``.</span>
+<a id="__codelineno-0-211" name="__codelineno-0-211"></a>
+<a id="__codelineno-0-212" name="__codelineno-0-212"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-213" name="__codelineno-0-213"></a><span class="sd">        HWC numpy array with ``n_output_channels`` channels, same dtype</span>
+<a id="__codelineno-0-214" name="__codelineno-0-214"></a><span class="sd">        as the input (which is already ``cfg.normalisation.output_dtype``</span>
+<a id="__codelineno-0-215" name="__codelineno-0-215"></a><span class="sd">        because the orchestrator is built with matching ``data_type``).</span>
+<a id="__codelineno-0-216" name="__codelineno-0-216"></a><span class="sd">    """</span>
+<a id="__codelineno-0-217" name="__codelineno-0-217"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">image_data</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<a id="__codelineno-0-218" name="__codelineno-0-218"></a>        <span class="n">image_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">image_data</span><span class="p">)</span>
+<a id="__codelineno-0-219" name="__codelineno-0-219"></a>    <span class="c1"># A non-3-D image has no channel axis for the matmul and can't be reshaped</span>
+<a id="__codelineno-0-220" name="__codelineno-0-220"></a>    <span class="c1"># into the (N, H, W, C) batch the helper expects, so pass it straight through.</span>
+<a id="__codelineno-0-221" name="__codelineno-0-221"></a>    <span class="c1"># Cutana cutouts are always contiguous HWC arrays, so this guard is defensive.</span>
+<a id="__codelineno-0-222" name="__codelineno-0-222"></a>    <span class="k">if</span> <span class="n">image_data</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
+<a id="__codelineno-0-223" name="__codelineno-0-223"></a>        <span class="k">return</span> <span class="n">image_data</span>
+<a id="__codelineno-0-224" name="__codelineno-0-224"></a>    <span class="c1"># The combination and single-band broadcast live only in the batched helper.</span>
+<a id="__codelineno-0-225" name="__codelineno-0-225"></a>    <span class="k">return</span> <span class="n">apply_channel_combination_to_cutana_batch</span><span class="p">(</span><span class="n">image_data</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="n">cfg</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="anomaly_match.data_io.container_loaders.apply_channel_combination_to_cutana_batch" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">apply_channel_combination_to_cutana_batch</span><span class="p">(</span><span class="n">batch_data</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span></code>
+
+<a href="#anomaly_match.data_io.container_loaders.apply_channel_combination_to_cutana_batch" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Batched form of :func:<code>apply_channel_combination_to_cutana_image</code>.</p>
+<p>Applies <code>channel_combination</code> to a whole <code>(N, H, W, n_extensions)</code>
+stack in a single :func:<code>batch_channel_combination</code> matmul instead of a
+per-image Python loop.  On the prediction hot path this collapses the
+dominant cost: a per-image loop over the channel combination was ~89% of
+end-to-end wall time for multi-band (VIS+NIR) scoring (issue #458).</p>
+<p>Output is identical to stacking the per-image results — the loop variant
+just paid Python-call and batch-axis-juggling overhead per cutout.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>batch_data</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>(N, H, W, n_extensions)</code> array from Cutana, already
+per-band normalised (Cutana runs with identity channel weights).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>cfg</code>
+            </td>
+            <td>
+                  <code><span title="dotmap.DotMap">DotMap</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Configuration holding <code>normalisation.channel_combination</code> and
+<code>normalisation.n_output_channels</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>(N, H, W, n_output_channels)</code> array, same dtype as the input.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Contiguity is established by the consumer at the point it is needed</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>(<code>cutana_batch_to_model_tensor</code> re-contiguifies after its NHWC→NCHW</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>transpose, just before <code>torch.from_numpy</code>), not here.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>anomaly_match/data_io/container_loaders.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-228">228</a></span>
+<span class="normal"><a href="#__codelineno-0-229">229</a></span>
+<span class="normal"><a href="#__codelineno-0-230">230</a></span>
+<span class="normal"><a href="#__codelineno-0-231">231</a></span>
+<span class="normal"><a href="#__codelineno-0-232">232</a></span>
+<span class="normal"><a href="#__codelineno-0-233">233</a></span>
+<span class="normal"><a href="#__codelineno-0-234">234</a></span>
+<span class="normal"><a href="#__codelineno-0-235">235</a></span>
+<span class="normal"><a href="#__codelineno-0-236">236</a></span>
+<span class="normal"><a href="#__codelineno-0-237">237</a></span>
+<span class="normal"><a href="#__codelineno-0-238">238</a></span>
+<span class="normal"><a href="#__codelineno-0-239">239</a></span>
+<span class="normal"><a href="#__codelineno-0-240">240</a></span>
+<span class="normal"><a href="#__codelineno-0-241">241</a></span>
+<span class="normal"><a href="#__codelineno-0-242">242</a></span>
+<span class="normal"><a href="#__codelineno-0-243">243</a></span>
+<span class="normal"><a href="#__codelineno-0-244">244</a></span>
+<span class="normal"><a href="#__codelineno-0-245">245</a></span>
+<span class="normal"><a href="#__codelineno-0-246">246</a></span>
+<span class="normal"><a href="#__codelineno-0-247">247</a></span>
+<span class="normal"><a href="#__codelineno-0-248">248</a></span>
+<span class="normal"><a href="#__codelineno-0-249">249</a></span>
+<span class="normal"><a href="#__codelineno-0-250">250</a></span>
+<span class="normal"><a href="#__codelineno-0-251">251</a></span>
+<span class="normal"><a href="#__codelineno-0-252">252</a></span>
+<span class="normal"><a href="#__codelineno-0-253">253</a></span>
+<span class="normal"><a href="#__codelineno-0-254">254</a></span>
+<span class="normal"><a href="#__codelineno-0-255">255</a></span>
+<span class="normal"><a href="#__codelineno-0-256">256</a></span>
+<span class="normal"><a href="#__codelineno-0-257">257</a></span>
+<span class="normal"><a href="#__codelineno-0-258">258</a></span>
+<span class="normal"><a href="#__codelineno-0-259">259</a></span>
+<span class="normal"><a href="#__codelineno-0-260">260</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-228" name="__codelineno-0-228"></a><span class="k">def</span><span class="w"> </span><span class="nf">apply_channel_combination_to_cutana_batch</span><span class="p">(</span><span class="n">batch_data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">DotMap</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<a id="__codelineno-0-229" name="__codelineno-0-229"></a><span class="w">    </span><span class="sd">"""Batched form of :func:`apply_channel_combination_to_cutana_image`.</span>
+<a id="__codelineno-0-230" name="__codelineno-0-230"></a>
+<a id="__codelineno-0-231" name="__codelineno-0-231"></a><span class="sd">    Applies ``channel_combination`` to a whole ``(N, H, W, n_extensions)``</span>
+<a id="__codelineno-0-232" name="__codelineno-0-232"></a><span class="sd">    stack in a single :func:`batch_channel_combination` matmul instead of a</span>
+<a id="__codelineno-0-233" name="__codelineno-0-233"></a><span class="sd">    per-image Python loop.  On the prediction hot path this collapses the</span>
+<a id="__codelineno-0-234" name="__codelineno-0-234"></a><span class="sd">    dominant cost: a per-image loop over the channel combination was ~89% of</span>
+<a id="__codelineno-0-235" name="__codelineno-0-235"></a><span class="sd">    end-to-end wall time for multi-band (VIS+NIR) scoring (issue #458).</span>
+<a id="__codelineno-0-236" name="__codelineno-0-236"></a>
+<a id="__codelineno-0-237" name="__codelineno-0-237"></a><span class="sd">    Output is identical to stacking the per-image results — the loop variant</span>
+<a id="__codelineno-0-238" name="__codelineno-0-238"></a><span class="sd">    just paid Python-call and batch-axis-juggling overhead per cutout.</span>
+<a id="__codelineno-0-239" name="__codelineno-0-239"></a>
+<a id="__codelineno-0-240" name="__codelineno-0-240"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-241" name="__codelineno-0-241"></a><span class="sd">        batch_data: ``(N, H, W, n_extensions)`` array from Cutana, already</span>
+<a id="__codelineno-0-242" name="__codelineno-0-242"></a><span class="sd">            per-band normalised (Cutana runs with identity channel weights).</span>
+<a id="__codelineno-0-243" name="__codelineno-0-243"></a><span class="sd">        cfg: Configuration holding ``normalisation.channel_combination`` and</span>
+<a id="__codelineno-0-244" name="__codelineno-0-244"></a><span class="sd">            ``normalisation.n_output_channels``.</span>
+<a id="__codelineno-0-245" name="__codelineno-0-245"></a>
+<a id="__codelineno-0-246" name="__codelineno-0-246"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-247" name="__codelineno-0-247"></a><span class="sd">        ``(N, H, W, n_output_channels)`` array, same dtype as the input.</span>
+<a id="__codelineno-0-248" name="__codelineno-0-248"></a><span class="sd">        Contiguity is established by the consumer at the point it is needed</span>
+<a id="__codelineno-0-249" name="__codelineno-0-249"></a><span class="sd">        (``cutana_batch_to_model_tensor`` re-contiguifies after its NHWC→NCHW</span>
+<a id="__codelineno-0-250" name="__codelineno-0-250"></a><span class="sd">        transpose, just before ``torch.from_numpy``), not here.</span>
+<a id="__codelineno-0-251" name="__codelineno-0-251"></a><span class="sd">    """</span>
+<a id="__codelineno-0-252" name="__codelineno-0-252"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">batch_data</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<a id="__codelineno-0-253" name="__codelineno-0-253"></a>        <span class="n">batch_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">batch_data</span><span class="p">)</span>
+<a id="__codelineno-0-254" name="__codelineno-0-254"></a>
+<a id="__codelineno-0-255" name="__codelineno-0-255"></a>    <span class="n">channel_combination</span> <span class="o">=</span> <span class="n">_resolve_channel_combination</span><span class="p">(</span>
+<a id="__codelineno-0-256" name="__codelineno-0-256"></a>        <span class="n">batch_data</span><span class="p">,</span> <span class="n">_get_channel_combination_array</span><span class="p">(</span><span class="n">cfg</span><span class="p">),</span> <span class="n">cfg</span><span class="o">.</span><span class="n">normalisation</span><span class="o">.</span><span class="n">n_output_channels</span>
+<a id="__codelineno-0-257" name="__codelineno-0-257"></a>    <span class="p">)</span>
+<a id="__codelineno-0-258" name="__codelineno-0-258"></a>    <span class="k">if</span> <span class="n">channel_combination</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-259" name="__codelineno-0-259"></a>        <span class="k">return</span> <span class="n">batch_data</span>
+<a id="__codelineno-0-260" name="__codelineno-0-260"></a>    <span class="k">return</span> <span class="n">batch_channel_combination</span><span class="p">(</span><span class="n">batch_data</span><span class="p">,</span> <span class="n">channel_combination</span><span class="p">,</span> <span class="n">output_dtype</span><span class="o">=</span><span class="n">batch_data</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="anomaly_match.data_io.container_loaders.decode_cutana_raw_images" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">decode_cutana_raw_images</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span></code>
+
+<a href="#anomaly_match.data_io.container_loaders.decode_cutana_raw_images" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Decode a batch of raw Cutana cache images in one fitsbolt pass.</p>
+<p>Each image is expected to be an HWC ndarray with <code>n_extensions</code>
+bands on the last axis — the layout the labeled cache stores after
+Cutana extraction, so 3-band RGB, 4-band Euclid (VIS + NISP Y/J/H)
+and any other per-band count work identically.</p>
+<p>The labeled cache stores unnormalised float32 cutouts at a fixed
+resolution (see
+:data:<code>anomaly_match.data_io.labeled_data_cache.LABELED_CACHE_RESOLUTION</code>).
+This function applies the user's current
+<code>normalisation_method</code>/<code>output_dtype</code>/<code>image_size</code>/
+<code>channel_combination</code> on the fly, so the cache stays valid across
+all of those changes.</p>
+<p>Versus decoding each item in its own call, three things are shared
+across the batch: the <code>fitsbolt_cfg</code> save/restore dance happens once
+(instead of N times), the per-cutout resize+normalise is fanned out
+across the pod's cores (the resize anti-aliasing releases the GIL —
+issue #500), and the final <code>channel_combination</code> matmul runs once on
+a stacked <code>(N,H,W,C)</code> array via :func:<code>batch_channel_combination</code> —
+a measurable win on 100+ preview thumbnails and a thousand-plus
+labeled cutouts.</p>
+<p>fitsbolt 0.3.x combines raw arrays too, so we pin
+<code>n_output_channels</code>/<code>n_expected_channels</code> to the per-band count and
+clear <code>channel_combination</code> on the fitsbolt config, then apply the
+user's combination matrix post-hoc — mirroring :func:<code>decode_zarr_image</code>.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>images</code>
+            </td>
+            <td>
+                  <code><span title="list">list</span>[<span title="numpy.ndarray">ndarray</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Raw HWC float arrays from the cache with <code>n_extensions</code>
+channels at the cached resolution.  May be empty.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>cfg</code>
+            </td>
+            <td>
+                  <code><span title="dotmap.DotMap">DotMap</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Configuration with <code>fitsbolt_cfg</code> already attached.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="list">list</span>[<span title="numpy.ndarray">ndarray</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>List of HWC numpy arrays at <code>cfg.normalisation.image_size</code> with</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="list">list</span>[<span title="numpy.ndarray">ndarray</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>cfg.normalisation.n_output_channels</code> channels and the</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="list">list</span>[<span title="numpy.ndarray">ndarray</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>configured output dtype, one per input.  Empty list if <em>images</em></p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="list">list</span>[<span title="numpy.ndarray">ndarray</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>is empty.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <em>images</em> mix band counts (the batch must be
+homogeneous — see the single-pass channel-combination resolve).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>anomaly_match/data_io/container_loaders.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-263">263</a></span>
+<span class="normal"><a href="#__codelineno-0-264">264</a></span>
+<span class="normal"><a href="#__codelineno-0-265">265</a></span>
+<span class="normal"><a href="#__codelineno-0-266">266</a></span>
+<span class="normal"><a href="#__codelineno-0-267">267</a></span>
+<span class="normal"><a href="#__codelineno-0-268">268</a></span>
+<span class="normal"><a href="#__codelineno-0-269">269</a></span>
+<span class="normal"><a href="#__codelineno-0-270">270</a></span>
+<span class="normal"><a href="#__codelineno-0-271">271</a></span>
+<span class="normal"><a href="#__codelineno-0-272">272</a></span>
+<span class="normal"><a href="#__codelineno-0-273">273</a></span>
+<span class="normal"><a href="#__codelineno-0-274">274</a></span>
+<span class="normal"><a href="#__codelineno-0-275">275</a></span>
+<span class="normal"><a href="#__codelineno-0-276">276</a></span>
+<span class="normal"><a href="#__codelineno-0-277">277</a></span>
+<span class="normal"><a href="#__codelineno-0-278">278</a></span>
+<span class="normal"><a href="#__codelineno-0-279">279</a></span>
+<span class="normal"><a href="#__codelineno-0-280">280</a></span>
+<span class="normal"><a href="#__codelineno-0-281">281</a></span>
+<span class="normal"><a href="#__codelineno-0-282">282</a></span>
+<span class="normal"><a href="#__codelineno-0-283">283</a></span>
+<span class="normal"><a href="#__codelineno-0-284">284</a></span>
+<span class="normal"><a href="#__codelineno-0-285">285</a></span>
+<span class="normal"><a href="#__codelineno-0-286">286</a></span>
+<span class="normal"><a href="#__codelineno-0-287">287</a></span>
+<span class="normal"><a href="#__codelineno-0-288">288</a></span>
+<span class="normal"><a href="#__codelineno-0-289">289</a></span>
+<span class="normal"><a href="#__codelineno-0-290">290</a></span>
+<span class="normal"><a href="#__codelineno-0-291">291</a></span>
+<span class="normal"><a href="#__codelineno-0-292">292</a></span>
+<span class="normal"><a href="#__codelineno-0-293">293</a></span>
+<span class="normal"><a href="#__codelineno-0-294">294</a></span>
+<span class="normal"><a href="#__codelineno-0-295">295</a></span>
+<span class="normal"><a href="#__codelineno-0-296">296</a></span>
+<span class="normal"><a href="#__codelineno-0-297">297</a></span>
+<span class="normal"><a href="#__codelineno-0-298">298</a></span>
+<span class="normal"><a href="#__codelineno-0-299">299</a></span>
+<span class="normal"><a href="#__codelineno-0-300">300</a></span>
+<span class="normal"><a href="#__codelineno-0-301">301</a></span>
+<span class="normal"><a href="#__codelineno-0-302">302</a></span>
+<span class="normal"><a href="#__codelineno-0-303">303</a></span>
+<span class="normal"><a href="#__codelineno-0-304">304</a></span>
+<span class="normal"><a href="#__codelineno-0-305">305</a></span>
+<span class="normal"><a href="#__codelineno-0-306">306</a></span>
+<span class="normal"><a href="#__codelineno-0-307">307</a></span>
+<span class="normal"><a href="#__codelineno-0-308">308</a></span>
+<span class="normal"><a href="#__codelineno-0-309">309</a></span>
+<span class="normal"><a href="#__codelineno-0-310">310</a></span>
+<span class="normal"><a href="#__codelineno-0-311">311</a></span>
+<span class="normal"><a href="#__codelineno-0-312">312</a></span>
+<span class="normal"><a href="#__codelineno-0-313">313</a></span>
+<span class="normal"><a href="#__codelineno-0-314">314</a></span>
+<span class="normal"><a href="#__codelineno-0-315">315</a></span>
+<span class="normal"><a href="#__codelineno-0-316">316</a></span>
+<span class="normal"><a href="#__codelineno-0-317">317</a></span>
+<span class="normal"><a href="#__codelineno-0-318">318</a></span>
+<span class="normal"><a href="#__codelineno-0-319">319</a></span>
+<span class="normal"><a href="#__codelineno-0-320">320</a></span>
+<span class="normal"><a href="#__codelineno-0-321">321</a></span>
+<span class="normal"><a href="#__codelineno-0-322">322</a></span>
+<span class="normal"><a href="#__codelineno-0-323">323</a></span>
+<span class="normal"><a href="#__codelineno-0-324">324</a></span>
+<span class="normal"><a href="#__codelineno-0-325">325</a></span>
+<span class="normal"><a href="#__codelineno-0-326">326</a></span>
+<span class="normal"><a href="#__codelineno-0-327">327</a></span>
+<span class="normal"><a href="#__codelineno-0-328">328</a></span>
+<span class="normal"><a href="#__codelineno-0-329">329</a></span>
+<span class="normal"><a href="#__codelineno-0-330">330</a></span>
+<span class="normal"><a href="#__codelineno-0-331">331</a></span>
+<span class="normal"><a href="#__codelineno-0-332">332</a></span>
+<span class="normal"><a href="#__codelineno-0-333">333</a></span>
+<span class="normal"><a href="#__codelineno-0-334">334</a></span>
+<span class="normal"><a href="#__codelineno-0-335">335</a></span>
+<span class="normal"><a href="#__codelineno-0-336">336</a></span>
+<span class="normal"><a href="#__codelineno-0-337">337</a></span>
+<span class="normal"><a href="#__codelineno-0-338">338</a></span>
+<span class="normal"><a href="#__codelineno-0-339">339</a></span>
+<span class="normal"><a href="#__codelineno-0-340">340</a></span>
+<span class="normal"><a href="#__codelineno-0-341">341</a></span>
+<span class="normal"><a href="#__codelineno-0-342">342</a></span>
+<span class="normal"><a href="#__codelineno-0-343">343</a></span>
+<span class="normal"><a href="#__codelineno-0-344">344</a></span>
+<span class="normal"><a href="#__codelineno-0-345">345</a></span>
+<span class="normal"><a href="#__codelineno-0-346">346</a></span>
+<span class="normal"><a href="#__codelineno-0-347">347</a></span>
+<span class="normal"><a href="#__codelineno-0-348">348</a></span>
+<span class="normal"><a href="#__codelineno-0-349">349</a></span>
+<span class="normal"><a href="#__codelineno-0-350">350</a></span>
+<span class="normal"><a href="#__codelineno-0-351">351</a></span>
+<span class="normal"><a href="#__codelineno-0-352">352</a></span>
+<span class="normal"><a href="#__codelineno-0-353">353</a></span>
+<span class="normal"><a href="#__codelineno-0-354">354</a></span>
+<span class="normal"><a href="#__codelineno-0-355">355</a></span>
+<span class="normal"><a href="#__codelineno-0-356">356</a></span>
+<span class="normal"><a href="#__codelineno-0-357">357</a></span>
+<span class="normal"><a href="#__codelineno-0-358">358</a></span>
+<span class="normal"><a href="#__codelineno-0-359">359</a></span>
+<span class="normal"><a href="#__codelineno-0-360">360</a></span>
+<span class="normal"><a href="#__codelineno-0-361">361</a></span>
+<span class="normal"><a href="#__codelineno-0-362">362</a></span>
+<span class="normal"><a href="#__codelineno-0-363">363</a></span>
+<span class="normal"><a href="#__codelineno-0-364">364</a></span>
+<span class="normal"><a href="#__codelineno-0-365">365</a></span>
+<span class="normal"><a href="#__codelineno-0-366">366</a></span>
+<span class="normal"><a href="#__codelineno-0-367">367</a></span>
+<span class="normal"><a href="#__codelineno-0-368">368</a></span>
+<span class="normal"><a href="#__codelineno-0-369">369</a></span>
+<span class="normal"><a href="#__codelineno-0-370">370</a></span>
+<span class="normal"><a href="#__codelineno-0-371">371</a></span>
+<span class="normal"><a href="#__codelineno-0-372">372</a></span>
+<span class="normal"><a href="#__codelineno-0-373">373</a></span>
+<span class="normal"><a href="#__codelineno-0-374">374</a></span>
+<span class="normal"><a href="#__codelineno-0-375">375</a></span>
+<span class="normal"><a href="#__codelineno-0-376">376</a></span>
+<span class="normal"><a href="#__codelineno-0-377">377</a></span>
+<span class="normal"><a href="#__codelineno-0-378">378</a></span>
+<span class="normal"><a href="#__codelineno-0-379">379</a></span>
+<span class="normal"><a href="#__codelineno-0-380">380</a></span>
+<span class="normal"><a href="#__codelineno-0-381">381</a></span>
+<span class="normal"><a href="#__codelineno-0-382">382</a></span>
+<span class="normal"><a href="#__codelineno-0-383">383</a></span>
+<span class="normal"><a href="#__codelineno-0-384">384</a></span>
+<span class="normal"><a href="#__codelineno-0-385">385</a></span>
+<span class="normal"><a href="#__codelineno-0-386">386</a></span>
+<span class="normal"><a href="#__codelineno-0-387">387</a></span>
+<span class="normal"><a href="#__codelineno-0-388">388</a></span>
+<span class="normal"><a href="#__codelineno-0-389">389</a></span>
+<span class="normal"><a href="#__codelineno-0-390">390</a></span>
+<span class="normal"><a href="#__codelineno-0-391">391</a></span>
+<span class="normal"><a href="#__codelineno-0-392">392</a></span>
+<span class="normal"><a href="#__codelineno-0-393">393</a></span>
+<span class="normal"><a href="#__codelineno-0-394">394</a></span>
+<span class="normal"><a href="#__codelineno-0-395">395</a></span>
+<span class="normal"><a href="#__codelineno-0-396">396</a></span>
+<span class="normal"><a href="#__codelineno-0-397">397</a></span>
+<span class="normal"><a href="#__codelineno-0-398">398</a></span>
+<span class="normal"><a href="#__codelineno-0-399">399</a></span>
+<span class="normal"><a href="#__codelineno-0-400">400</a></span>
+<span class="normal"><a href="#__codelineno-0-401">401</a></span>
+<span class="normal"><a href="#__codelineno-0-402">402</a></span>
+<span class="normal"><a href="#__codelineno-0-403">403</a></span>
+<span class="normal"><a href="#__codelineno-0-404">404</a></span>
+<span class="normal"><a href="#__codelineno-0-405">405</a></span>
+<span class="normal"><a href="#__codelineno-0-406">406</a></span>
+<span class="normal"><a href="#__codelineno-0-407">407</a></span>
+<span class="normal"><a href="#__codelineno-0-408">408</a></span>
+<span class="normal"><a href="#__codelineno-0-409">409</a></span>
+<span class="normal"><a href="#__codelineno-0-410">410</a></span>
+<span class="normal"><a href="#__codelineno-0-411">411</a></span>
+<span class="normal"><a href="#__codelineno-0-412">412</a></span>
+<span class="normal"><a href="#__codelineno-0-413">413</a></span>
+<span class="normal"><a href="#__codelineno-0-414">414</a></span>
+<span class="normal"><a href="#__codelineno-0-415">415</a></span>
+<span class="normal"><a href="#__codelineno-0-416">416</a></span>
+<span class="normal"><a href="#__codelineno-0-417">417</a></span>
+<span class="normal"><a href="#__codelineno-0-418">418</a></span>
+<span class="normal"><a href="#__codelineno-0-419">419</a></span>
+<span class="normal"><a href="#__codelineno-0-420">420</a></span>
+<span class="normal"><a href="#__codelineno-0-421">421</a></span>
+<span class="normal"><a href="#__codelineno-0-422">422</a></span>
+<span class="normal"><a href="#__codelineno-0-423">423</a></span>
+<span class="normal"><a href="#__codelineno-0-424">424</a></span>
+<span class="normal"><a href="#__codelineno-0-425">425</a></span>
+<span class="normal"><a href="#__codelineno-0-426">426</a></span>
+<span class="normal"><a href="#__codelineno-0-427">427</a></span>
+<span class="normal"><a href="#__codelineno-0-428">428</a></span>
+<span class="normal"><a href="#__codelineno-0-429">429</a></span>
+<span class="normal"><a href="#__codelineno-0-430">430</a></span>
+<span class="normal"><a href="#__codelineno-0-431">431</a></span>
+<span class="normal"><a href="#__codelineno-0-432">432</a></span>
+<span class="normal"><a href="#__codelineno-0-433">433</a></span>
+<span class="normal"><a href="#__codelineno-0-434">434</a></span>
+<span class="normal"><a href="#__codelineno-0-435">435</a></span>
+<span class="normal"><a href="#__codelineno-0-436">436</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-263" name="__codelineno-0-263"></a><span class="k">def</span><span class="w"> </span><span class="nf">decode_cutana_raw_images</span><span class="p">(</span><span class="n">images</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">DotMap</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<a id="__codelineno-0-264" name="__codelineno-0-264"></a><span class="w">    </span><span class="sd">"""Decode a batch of raw Cutana cache images in one fitsbolt pass.</span>
+<a id="__codelineno-0-265" name="__codelineno-0-265"></a>
+<a id="__codelineno-0-266" name="__codelineno-0-266"></a><span class="sd">    Each image is expected to be an HWC ndarray with ``n_extensions``</span>
+<a id="__codelineno-0-267" name="__codelineno-0-267"></a><span class="sd">    bands on the last axis — the layout the labeled cache stores after</span>
+<a id="__codelineno-0-268" name="__codelineno-0-268"></a><span class="sd">    Cutana extraction, so 3-band RGB, 4-band Euclid (VIS + NISP Y/J/H)</span>
+<a id="__codelineno-0-269" name="__codelineno-0-269"></a><span class="sd">    and any other per-band count work identically.</span>
+<a id="__codelineno-0-270" name="__codelineno-0-270"></a>
+<a id="__codelineno-0-271" name="__codelineno-0-271"></a><span class="sd">    The labeled cache stores unnormalised float32 cutouts at a fixed</span>
+<a id="__codelineno-0-272" name="__codelineno-0-272"></a><span class="sd">    resolution (see</span>
+<a id="__codelineno-0-273" name="__codelineno-0-273"></a><span class="sd">    :data:`anomaly_match.data_io.labeled_data_cache.LABELED_CACHE_RESOLUTION`).</span>
+<a id="__codelineno-0-274" name="__codelineno-0-274"></a><span class="sd">    This function applies the user's current</span>
+<a id="__codelineno-0-275" name="__codelineno-0-275"></a><span class="sd">    ``normalisation_method``/``output_dtype``/``image_size``/</span>
+<a id="__codelineno-0-276" name="__codelineno-0-276"></a><span class="sd">    ``channel_combination`` on the fly, so the cache stays valid across</span>
+<a id="__codelineno-0-277" name="__codelineno-0-277"></a><span class="sd">    all of those changes.</span>
+<a id="__codelineno-0-278" name="__codelineno-0-278"></a>
+<a id="__codelineno-0-279" name="__codelineno-0-279"></a><span class="sd">    Versus decoding each item in its own call, three things are shared</span>
+<a id="__codelineno-0-280" name="__codelineno-0-280"></a><span class="sd">    across the batch: the ``fitsbolt_cfg`` save/restore dance happens once</span>
+<a id="__codelineno-0-281" name="__codelineno-0-281"></a><span class="sd">    (instead of N times), the per-cutout resize+normalise is fanned out</span>
+<a id="__codelineno-0-282" name="__codelineno-0-282"></a><span class="sd">    across the pod's cores (the resize anti-aliasing releases the GIL —</span>
+<a id="__codelineno-0-283" name="__codelineno-0-283"></a><span class="sd">    issue #500), and the final ``channel_combination`` matmul runs once on</span>
+<a id="__codelineno-0-284" name="__codelineno-0-284"></a><span class="sd">    a stacked ``(N,H,W,C)`` array via :func:`batch_channel_combination` —</span>
+<a id="__codelineno-0-285" name="__codelineno-0-285"></a><span class="sd">    a measurable win on 100+ preview thumbnails and a thousand-plus</span>
+<a id="__codelineno-0-286" name="__codelineno-0-286"></a><span class="sd">    labeled cutouts.</span>
+<a id="__codelineno-0-287" name="__codelineno-0-287"></a>
+<a id="__codelineno-0-288" name="__codelineno-0-288"></a><span class="sd">    fitsbolt 0.3.x combines raw arrays too, so we pin</span>
+<a id="__codelineno-0-289" name="__codelineno-0-289"></a><span class="sd">    ``n_output_channels``/``n_expected_channels`` to the per-band count and</span>
+<a id="__codelineno-0-290" name="__codelineno-0-290"></a><span class="sd">    clear ``channel_combination`` on the fitsbolt config, then apply the</span>
+<a id="__codelineno-0-291" name="__codelineno-0-291"></a><span class="sd">    user's combination matrix post-hoc — mirroring :func:`decode_zarr_image`.</span>
+<a id="__codelineno-0-292" name="__codelineno-0-292"></a>
+<a id="__codelineno-0-293" name="__codelineno-0-293"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-294" name="__codelineno-0-294"></a><span class="sd">        images: Raw HWC float arrays from the cache with ``n_extensions``</span>
+<a id="__codelineno-0-295" name="__codelineno-0-295"></a><span class="sd">            channels at the cached resolution.  May be empty.</span>
+<a id="__codelineno-0-296" name="__codelineno-0-296"></a><span class="sd">        cfg: Configuration with ``fitsbolt_cfg`` already attached.</span>
+<a id="__codelineno-0-297" name="__codelineno-0-297"></a>
+<a id="__codelineno-0-298" name="__codelineno-0-298"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-299" name="__codelineno-0-299"></a><span class="sd">        List of HWC numpy arrays at ``cfg.normalisation.image_size`` with</span>
+<a id="__codelineno-0-300" name="__codelineno-0-300"></a><span class="sd">        ``cfg.normalisation.n_output_channels`` channels and the</span>
+<a id="__codelineno-0-301" name="__codelineno-0-301"></a><span class="sd">        configured output dtype, one per input.  Empty list if *images*</span>
+<a id="__codelineno-0-302" name="__codelineno-0-302"></a><span class="sd">        is empty.</span>
+<a id="__codelineno-0-303" name="__codelineno-0-303"></a>
+<a id="__codelineno-0-304" name="__codelineno-0-304"></a><span class="sd">    Raises:</span>
+<a id="__codelineno-0-305" name="__codelineno-0-305"></a><span class="sd">        ValueError: If *images* mix band counts (the batch must be</span>
+<a id="__codelineno-0-306" name="__codelineno-0-306"></a><span class="sd">            homogeneous — see the single-pass channel-combination resolve).</span>
+<a id="__codelineno-0-307" name="__codelineno-0-307"></a><span class="sd">    """</span>
+<a id="__codelineno-0-308" name="__codelineno-0-308"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">images</span><span class="p">:</span>
+<a id="__codelineno-0-309" name="__codelineno-0-309"></a>        <span class="k">return</span> <span class="p">[]</span>
+<a id="__codelineno-0-310" name="__codelineno-0-310"></a>
+<a id="__codelineno-0-311" name="__codelineno-0-311"></a>    <span class="n">first</span> <span class="o">=</span> <span class="n">images</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<a id="__codelineno-0-312" name="__codelineno-0-312"></a>    <span class="n">n_extensions</span> <span class="o">=</span> <span class="n">first</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">first</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span> <span class="k">else</span> <span class="mi">1</span>
+<a id="__codelineno-0-313" name="__codelineno-0-313"></a>
+<a id="__codelineno-0-314" name="__codelineno-0-314"></a>    <span class="c1"># The single-pass channel-combination resolve rests on every cutout having</span>
+<a id="__codelineno-0-315" name="__codelineno-0-315"></a>    <span class="c1"># the same band count (derived from ``images[0]`` alone).  Assert it once so</span>
+<a id="__codelineno-0-316" name="__codelineno-0-316"></a>    <span class="c1"># a mis-wired caller fails loudly here rather than silently combining with</span>
+<a id="__codelineno-0-317" name="__codelineno-0-317"></a>    <span class="c1"># the wrong matrix (fail-hard, per the repo's no-fallback stance).</span>
+<a id="__codelineno-0-318" name="__codelineno-0-318"></a>    <span class="k">for</span> <span class="n">img</span> <span class="ow">in</span> <span class="n">images</span><span class="p">:</span>
+<a id="__codelineno-0-319" name="__codelineno-0-319"></a>        <span class="n">bands</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">img</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span> <span class="k">else</span> <span class="mi">1</span>
+<a id="__codelineno-0-320" name="__codelineno-0-320"></a>        <span class="k">if</span> <span class="n">bands</span> <span class="o">!=</span> <span class="n">n_extensions</span><span class="p">:</span>
+<a id="__codelineno-0-321" name="__codelineno-0-321"></a>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<a id="__codelineno-0-322" name="__codelineno-0-322"></a>                <span class="sa">f</span><span class="s2">"decode_cutana_raw_images requires a homogeneous batch; got mixed "</span>
+<a id="__codelineno-0-323" name="__codelineno-0-323"></a>                <span class="sa">f</span><span class="s2">"band counts (</span><span class="si">{</span><span class="n">n_extensions</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">bands</span><span class="si">}</span><span class="s2">)"</span>
+<a id="__codelineno-0-324" name="__codelineno-0-324"></a>            <span class="p">)</span>
+<a id="__codelineno-0-325" name="__codelineno-0-325"></a>
+<a id="__codelineno-0-326" name="__codelineno-0-326"></a>    <span class="c1"># Snapshot a *private* config for the whole batch.  Preview decode runs in a</span>
+<a id="__codelineno-0-327" name="__codelineno-0-327"></a>    <span class="c1"># background thread; if the user edits the normalisation widget mid-decode,</span>
+<a id="__codelineno-0-328" name="__codelineno-0-328"></a>    <span class="c1"># the UI thread replaces ``cfg.fitsbolt_cfg``, and ``process_single_wrapper``</span>
+<a id="__codelineno-0-329" name="__codelineno-0-329"></a>    <span class="c1"># re-reads it for every cutout — so later cutouts would be processed with a</span>
+<a id="__codelineno-0-330" name="__codelineno-0-330"></a>    <span class="c1"># different ``n_output_channels``, yielding a mix of e.g. 4- and 3-channel</span>
+<a id="__codelineno-0-331" name="__codelineno-0-331"></a>    <span class="c1"># arrays that ``np.stack`` rejects.</span>
+<a id="__codelineno-0-332" name="__codelineno-0-332"></a>    <span class="c1">#</span>
+<a id="__codelineno-0-333" name="__codelineno-0-333"></a>    <span class="c1"># ``fitsbolt_cfg`` must therefore be a fully independent copy.  We</span>
+<a id="__codelineno-0-334" name="__codelineno-0-334"></a>    <span class="c1"># ``copy.deepcopy`` it explicitly rather than trust ``cfg.copy()``:</span>
+<a id="__codelineno-0-335" name="__codelineno-0-335"></a>    <span class="c1"># ``DotMap.copy()``'s isolation is *type-dependent* — it clones nested DotMaps</span>
+<a id="__codelineno-0-336" name="__codelineno-0-336"></a>    <span class="c1"># and list leaves but SHARES numpy-array leaves (and has the known</span>
+<a id="__codelineno-0-337" name="__codelineno-0-337"></a>    <span class="c1"># quirk of turning ``None`` values into empty ``DotMap()``).  ``channel_combination`` is often</span>
+<a id="__codelineno-0-338" name="__codelineno-0-338"></a>    <span class="c1"># an ndarray, so relying on ``cfg.copy()`` here would only be safe by accident</span>
+<a id="__codelineno-0-339" name="__codelineno-0-339"></a>    <span class="c1"># (because today's pins happen to be key reassignments, not in-place leaf</span>
+<a id="__codelineno-0-340" name="__codelineno-0-340"></a>    <span class="c1"># mutations).  ``copy.deepcopy`` is type-independent, so the per-band pins below</span>
+<a id="__codelineno-0-341" name="__codelineno-0-341"></a>    <span class="c1"># can never leak into the caller's cfg and a concurrent UI swap of</span>
+<a id="__codelineno-0-342" name="__codelineno-0-342"></a>    <span class="c1"># ``cfg.fitsbolt_cfg`` can't change what this batch decodes with.  A newer edit</span>
+<a id="__codelineno-0-343" name="__codelineno-0-343"></a>    <span class="c1"># simply spawns a fresh, superseding preview job.</span>
+<a id="__codelineno-0-344" name="__codelineno-0-344"></a>    <span class="n">batch_cfg</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<a id="__codelineno-0-345" name="__codelineno-0-345"></a>    <span class="n">batch_cfg</span><span class="o">.</span><span class="n">fitsbolt_cfg</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">fitsbolt_cfg</span><span class="p">)</span>
+<a id="__codelineno-0-346" name="__codelineno-0-346"></a>    <span class="n">fb_cfg</span> <span class="o">=</span> <span class="n">batch_cfg</span><span class="o">.</span><span class="n">fitsbolt_cfg</span>
+<a id="__codelineno-0-347" name="__codelineno-0-347"></a>
+<a id="__codelineno-0-348" name="__codelineno-0-348"></a>    <span class="c1"># Read the user's requested combine target once, up front, before pinning the</span>
+<a id="__codelineno-0-349" name="__codelineno-0-349"></a>    <span class="c1"># per-band decode layout below.  These are the post-hoc combine target (the</span>
+<a id="__codelineno-0-350" name="__codelineno-0-350"></a>    <span class="c1"># user's ``normalisation`` settings) — distinct from the per-band layout pinned</span>
+<a id="__codelineno-0-351" name="__codelineno-0-351"></a>    <span class="c1"># onto ``fb_cfg`` — and reading them once into locals snapshots the values so</span>
+<a id="__codelineno-0-352" name="__codelineno-0-352"></a>    <span class="c1"># the two reads can't be split by a concurrent widget edit.</span>
+<a id="__codelineno-0-353" name="__codelineno-0-353"></a>    <span class="n">user_channel_combination</span> <span class="o">=</span> <span class="n">_get_channel_combination_array</span><span class="p">(</span><span class="n">batch_cfg</span><span class="p">)</span>
+<a id="__codelineno-0-354" name="__codelineno-0-354"></a>    <span class="n">user_n_output</span> <span class="o">=</span> <span class="n">batch_cfg</span><span class="o">.</span><span class="n">normalisation</span><span class="o">.</span><span class="n">n_output_channels</span>
+<a id="__codelineno-0-355" name="__codelineno-0-355"></a>
+<a id="__codelineno-0-356" name="__codelineno-0-356"></a>    <span class="c1"># Pin the per-band layout for the shared decode pass; channel combination is</span>
+<a id="__codelineno-0-357" name="__codelineno-0-357"></a>    <span class="c1"># applied post-hoc below (fitsbolt only wires it through for FITS inputs).</span>
+<a id="__codelineno-0-358" name="__codelineno-0-358"></a>    <span class="c1"># Resizing the per-channel asinh params to the cached band count keeps</span>
+<a id="__codelineno-0-359" name="__codelineno-0-359"></a>    <span class="c1"># fitsbolt's "length N, expected M. Will use first element" warning quiet.</span>
+<a id="__codelineno-0-360" name="__codelineno-0-360"></a>    <span class="n">fb_cfg</span><span class="o">.</span><span class="n">channel_combination</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-361" name="__codelineno-0-361"></a>    <span class="n">fb_cfg</span><span class="o">.</span><span class="n">n_output_channels</span> <span class="o">=</span> <span class="n">n_extensions</span>
+<a id="__codelineno-0-362" name="__codelineno-0-362"></a>    <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"asinh_scale"</span><span class="p">,</span> <span class="s2">"asinh_clip"</span><span class="p">):</span>
+<a id="__codelineno-0-363" name="__codelineno-0-363"></a>        <span class="n">saved</span> <span class="o">=</span> <span class="n">fb_cfg</span><span class="o">.</span><span class="n">normalisation</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">attr</span><span class="p">)</span>
+<a id="__codelineno-0-364" name="__codelineno-0-364"></a>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">saved</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">saved</span><span class="p">)</span> <span class="o">!=</span> <span class="n">n_extensions</span><span class="p">:</span>
+<a id="__codelineno-0-365" name="__codelineno-0-365"></a>            <span class="n">fb_cfg</span><span class="o">.</span><span class="n">normalisation</span><span class="p">[</span><span class="n">attr</span><span class="p">]</span> <span class="o">=</span> <span class="n">_resize_param_list</span><span class="p">(</span><span class="n">saved</span><span class="p">,</span> <span class="n">n_extensions</span><span class="p">)</span>
+<a id="__codelineno-0-366" name="__codelineno-0-366"></a>
+<a id="__codelineno-0-367" name="__codelineno-0-367"></a>    <span class="c1"># Resolve the channel-combination matrix once.  It depends only on the band</span>
+<a id="__codelineno-0-368" name="__codelineno-0-368"></a>    <span class="c1"># count (uniform across this homogeneous batch) and the user's snapshotted</span>
+<a id="__codelineno-0-369" name="__codelineno-0-369"></a>    <span class="c1"># settings — never on pixel data — so every slice applies the *same* matrix.</span>
+<a id="__codelineno-0-370" name="__codelineno-0-370"></a>    <span class="c1"># That lets each worker stack+combine its own slice in parallel rather than</span>
+<a id="__codelineno-0-371" name="__codelineno-0-371"></a>    <span class="c1"># leaving one big serial ``np.stack`` + matmul tail on the main thread.  We</span>
+<a id="__codelineno-0-372" name="__codelineno-0-372"></a>    <span class="c1"># resolve from a band-count placeholder (not the real stack, which doesn't</span>
+<a id="__codelineno-0-373" name="__codelineno-0-373"></a>    <span class="c1"># exist yet) and from the values snapshotted before the per-band pins above,</span>
+<a id="__codelineno-0-374" name="__codelineno-0-374"></a>    <span class="c1"># so a concurrent widget edit can't desync the combine from the decode pass.</span>
+<a id="__codelineno-0-375" name="__codelineno-0-375"></a>    <span class="n">channel_combination</span> <span class="o">=</span> <span class="n">_resolve_channel_combination</span><span class="p">(</span>
+<a id="__codelineno-0-376" name="__codelineno-0-376"></a>        <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n_extensions</span><span class="p">)),</span> <span class="n">user_channel_combination</span><span class="p">,</span> <span class="n">user_n_output</span>
+<a id="__codelineno-0-377" name="__codelineno-0-377"></a>    <span class="p">)</span>
+<a id="__codelineno-0-378" name="__codelineno-0-378"></a>
+<a id="__codelineno-0-379" name="__codelineno-0-379"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_decode_slice</span><span class="p">(</span><span class="n">slice_images</span><span class="p">):</span>
+<a id="__codelineno-0-380" name="__codelineno-0-380"></a><span class="w">        </span><span class="sd">"""Decode one contiguous slice end-to-end (resize + normalise + combine).</span>
+<a id="__codelineno-0-381" name="__codelineno-0-381"></a>
+<a id="__codelineno-0-382" name="__codelineno-0-382"></a><span class="sd">        Runs entirely inside a worker thread so the GIL-releasing resize and the</span>
+<a id="__codelineno-0-383" name="__codelineno-0-383"></a><span class="sd">        numpy channel-combine matmul of different slices overlap.</span>
+<a id="__codelineno-0-384" name="__codelineno-0-384"></a>
+<a id="__codelineno-0-385" name="__codelineno-0-385"></a><span class="sd">        Args:</span>
+<a id="__codelineno-0-386" name="__codelineno-0-386"></a><span class="sd">            slice_images: Contiguous sub-list of the batch's raw HWC cutouts.</span>
+<a id="__codelineno-0-387" name="__codelineno-0-387"></a>
+<a id="__codelineno-0-388" name="__codelineno-0-388"></a><span class="sd">        Returns:</span>
+<a id="__codelineno-0-389" name="__codelineno-0-389"></a><span class="sd">            List of decoded HWC arrays for this slice, in input order.</span>
+<a id="__codelineno-0-390" name="__codelineno-0-390"></a><span class="sd">        """</span>
+<a id="__codelineno-0-391" name="__codelineno-0-391"></a>        <span class="n">processed</span> <span class="o">=</span> <span class="p">[</span>
+<a id="__codelineno-0-392" name="__codelineno-0-392"></a>            <span class="n">process_single_wrapper</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">batch_cfg</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">"cutana_cache"</span><span class="p">)</span> <span class="k">for</span> <span class="n">img</span> <span class="ow">in</span> <span class="n">slice_images</span>
+<a id="__codelineno-0-393" name="__codelineno-0-393"></a>        <span class="p">]</span>
+<a id="__codelineno-0-394" name="__codelineno-0-394"></a>        <span class="n">stack</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">processed</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<a id="__codelineno-0-395" name="__codelineno-0-395"></a>        <span class="k">if</span> <span class="n">channel_combination</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-396" name="__codelineno-0-396"></a>            <span class="c1"># Pin output dtype to the input's: fitsbolt defaults to float32,</span>
+<a id="__codelineno-0-397" name="__codelineno-0-397"></a>            <span class="c1"># which silently promoted the uint8 labeled cache to float32 and</span>
+<a id="__codelineno-0-398" name="__codelineno-0-398"></a>            <span class="c1"># crashed training on ``Image.fromarray`` (PIL has no 3-channel</span>
+<a id="__codelineno-0-399" name="__codelineno-0-399"></a>            <span class="c1"># float32 mode).  Bug was introduced alongside the batched</span>
+<a id="__codelineno-0-400" name="__codelineno-0-400"></a>            <span class="c1"># decoder (#407 review) because the previous per-image call</span>
+<a id="__codelineno-0-401" name="__codelineno-0-401"></a>            <span class="c1"># already passed ``output_dtype=image.dtype``.</span>
+<a id="__codelineno-0-402" name="__codelineno-0-402"></a>            <span class="n">stack</span> <span class="o">=</span> <span class="n">batch_channel_combination</span><span class="p">(</span><span class="n">stack</span><span class="p">,</span> <span class="n">channel_combination</span><span class="p">,</span> <span class="n">output_dtype</span><span class="o">=</span><span class="n">stack</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+<a id="__codelineno-0-403" name="__codelineno-0-403"></a>        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">stack</span><span class="p">)</span>
+<a id="__codelineno-0-404" name="__codelineno-0-404"></a>
+<a id="__codelineno-0-405" name="__codelineno-0-405"></a>    <span class="c1"># The per-cutout decode is independent across images and dominated by the</span>
+<a id="__codelineno-0-406" name="__codelineno-0-406"></a>    <span class="c1"># GIL-releasing resize, so fan it out across the pod's cores.</span>
+<a id="__codelineno-0-407" name="__codelineno-0-407"></a>    <span class="c1"># ``process_single_wrapper`` decodes with its own copy of ``fb_cfg``, so the</span>
+<a id="__codelineno-0-408" name="__codelineno-0-408"></a>    <span class="c1"># threads share it read-only.  Output is bit-identical to the serial path</span>
+<a id="__codelineno-0-409" name="__codelineno-0-409"></a>    <span class="c1"># (verified across 1/2/4/8 workers, issue #500).</span>
+<a id="__codelineno-0-410" name="__codelineno-0-410"></a>    <span class="n">workers</span> <span class="o">=</span> <span class="n">_decode_thread_count</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">images</span><span class="p">))</span>
+<a id="__codelineno-0-411" name="__codelineno-0-411"></a>    <span class="k">if</span> <span class="n">workers</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+<a id="__codelineno-0-412" name="__codelineno-0-412"></a>        <span class="k">return</span> <span class="n">_decode_slice</span><span class="p">(</span><span class="n">images</span><span class="p">)</span>
+<a id="__codelineno-0-413" name="__codelineno-0-413"></a>
+<a id="__codelineno-0-414" name="__codelineno-0-414"></a>    <span class="c1"># Split into ``workers`` *contiguous* slices so each thread runs a tight</span>
+<a id="__codelineno-0-415" name="__codelineno-0-415"></a>    <span class="c1"># decode loop.  Coarse slicing beats a per-image ``pool.map`` here: it keeps</span>
+<a id="__codelineno-0-416" name="__codelineno-0-416"></a>    <span class="c1"># the GIL-releasing resize overlapping across threads instead of paying</span>
+<a id="__codelineno-0-417" name="__codelineno-0-417"></a>    <span class="c1"># Python dispatch + GIL-handoff overhead on every one of the (thousand-plus)</span>
+<a id="__codelineno-0-418" name="__codelineno-0-418"></a>    <span class="c1"># cutouts.  ``pool.map`` preserves slice order and each slice preserves item</span>
+<a id="__codelineno-0-419" name="__codelineno-0-419"></a>    <span class="c1"># order, so the flattened result matches the input order.</span>
+<a id="__codelineno-0-420" name="__codelineno-0-420"></a>    <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">images</span><span class="p">)</span> <span class="o">+</span> <span class="n">workers</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="n">workers</span>
+<a id="__codelineno-0-421" name="__codelineno-0-421"></a>    <span class="n">slices</span> <span class="o">=</span> <span class="p">[</span><span class="n">images</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="n">size</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">images</span><span class="p">),</span> <span class="n">size</span><span class="p">)]</span>
+<a id="__codelineno-0-422" name="__codelineno-0-422"></a>    <span class="c1"># Pin numpy's native pools to one thread for the fan-out so the ``workers``</span>
+<a id="__codelineno-0-423" name="__codelineno-0-423"></a>    <span class="c1"># decode threads don't each spawn a full MKL pool and oversubscribe the pod's</span>
+<a id="__codelineno-0-424" name="__codelineno-0-424"></a>    <span class="c1"># cores — which made an 8-worker decode *slower* than a 4-worker one under</span>
+<a id="__codelineno-0-425" name="__codelineno-0-425"></a>    <span class="c1"># node load (issue #500).  ``threadpool_limits`` is entered once here, on the</span>
+<a id="__codelineno-0-426" name="__codelineno-0-426"></a>    <span class="c1"># main thread, *not* per worker: it mutates global native-library state and</span>
+<a id="__codelineno-0-427" name="__codelineno-0-427"></a>    <span class="c1"># is not safe to enter concurrently from many threads (doing so deadlocks —</span>
+<a id="__codelineno-0-428" name="__codelineno-0-428"></a>    <span class="c1"># an 8-worker / 400-cutout decode hung indefinitely; #503 review follow-up).</span>
+<a id="__codelineno-0-429" name="__codelineno-0-429"></a>    <span class="c1"># A main-thread entry pins MKL globally, which covers what this path actually</span>
+<a id="__codelineno-0-430" name="__codelineno-0-430"></a>    <span class="c1"># uses — the channel-combine matmul (BLAS) and the GIL-releasing scipy</span>
+<a id="__codelineno-0-431" name="__codelineno-0-431"></a>    <span class="c1"># ``ndimage`` resize, which is single-threaded and spawns no OpenMP pool. It</span>
+<a id="__codelineno-0-432" name="__codelineno-0-432"></a>    <span class="c1"># does *not* set each worker's per-thread OpenMP ICV (that is the calling</span>
+<a id="__codelineno-0-433" name="__codelineno-0-433"></a>    <span class="c1"># thread's), but no OpenMP-parallel routine runs in the decode, so nothing</span>
+<a id="__codelineno-0-434" name="__codelineno-0-434"></a>    <span class="c1"># oversubscribes in practice.</span>
+<a id="__codelineno-0-435" name="__codelineno-0-435"></a>    <span class="k">with</span> <span class="n">threadpool_limits</span><span class="p">(</span><span class="n">limits</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="n">workers</span><span class="p">)</span> <span class="k">as</span> <span class="n">pool</span><span class="p">:</span>
+<a id="__codelineno-0-436" name="__codelineno-0-436"></a>        <span class="k">return</span> <span class="p">[</span><span class="n">img</span> <span class="k">for</span> <span class="n">sub</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">_decode_slice</span><span class="p">,</span> <span class="n">slices</span><span class="p">)</span> <span class="k">for</span> <span class="n">img</span> <span class="ow">in</span> <span class="n">sub</span><span class="p">]</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog" role="status" aria-atomic="true">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../../..","features":["navigation.sections","navigation.path","content.code.copy","search.highlight"],"redirect":null,"search":"../../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":{"provider":"mike"}}</script>
+    
+    
+      <script src="../../../../assets/javascripts/bundle.8b1c90bd.min.js"></script>
+      
+    
+  </body>
+</html>
