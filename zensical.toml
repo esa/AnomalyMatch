@@ -1,0 +1,63 @@
+#   Copyright (c) European Space Agency, 2025.
+#
+#   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
+#   is part of this source code package. No part of the package, including
+#   this file, may be copied, modified, propagated, or distributed except according to
+#   the terms contained in the file 'LICENCE.txt'.
+
+[project]
+site_name = "AnomalyMatch"
+site_description = "Semi-supervised anomaly detection for astronomical images"
+repo_url = "https://github.com/esa/AnomalyMatch"
+repo_name = "esa/AnomalyMatch"
+extra_css = ["stylesheets/extra.css"]
+# Replaces the `mike deploy --strict` flag, which squidfunk's mike fork dropped:
+# broken links and references fail the build instead of shipping to the site
+strict = true
+
+# Navigation is derived from the docs directory. An explicit `nav` is not usable
+# here: Zensical builds but does not link pages a `nav` omits, and there is no
+# literate-nav equivalent to fold in the ~80 generated API reference pages.
+
+[project.theme]
+name = "material"
+logo = "assets/esa_logo.svg"
+favicon = "assets/esa_logo.svg"
+features = [
+    "navigation.sections",
+    "navigation.path",
+    "content.code.copy",
+    "search.highlight",
+]
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "custom"
+accent = "custom"
+
+[project.extra]
+version = { provider = "mike" }
+
+[project.plugins]
+search = {}
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["."]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+# Static analysis only — griffe must not import the package to document it
+allow_inspection = false
+docstring_style = "google"
+show_source = true
+show_root_heading = true
+members_order = "source"
+merge_init_into_class = true
+show_if_no_docstring = false
+
+[project.markdown_extensions]
+admonition = {}
+"pymdownx.details" = {}
+"pymdownx.superfences" = {}
+"pymdownx.highlight" = { anchor_linenums = true }
+"pymdownx.inlinehilite" = {}
+toc = { permalink = true }

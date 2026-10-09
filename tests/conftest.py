@@ -10,6 +10,22 @@ import os
 
 import pytest
 
+from tests.test_data.generate_test_model import ensure_test_model
+
+
+@pytest.fixture(scope="session")
+def test_model_path():
+    """Provide the shared efficientnet-lite0 checkpoint, generating it if absent.
+
+    The checkpoint is git-ignored rather than committed — see
+    tests/test_data/generate_test_model.py for why. Session-scoped so the
+    ~26 MB file is built at most once per test run.
+
+    Returns:
+        Path: Path to the checkpoint.
+    """
+    return ensure_test_model()
+
 
 @pytest.fixture(scope="function")
 def multispectral_test_data():

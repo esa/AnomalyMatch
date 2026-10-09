@@ -37,5 +37,12 @@ dependencies:
       - albumentations
       - safetensors
       - timm
-      - fitsbolt==0.2.0
-      - cutana>=0.3.0
+      # fitsbolt and Cutana are both installed in .github/workflows/run_tests.yml,
+      # not here, so micromamba can't pull a stale PyPI release that would shadow
+      # them. fitsbolt is pinned to >=0.3.1,<0.4 there, after Cutana, so a Cutana
+      # release with a narrower pin cannot downgrade it. Cutana is installed by the
+      # ./.github/actions/install-cutana composite action, which picks the source
+      # from the PR target branch (PyPI for main; the Cutana develop branch via
+      # the CUTANA_REPO_READ_TOKEN secret otherwise).
+      - voila>=0.5
+      - playwright>=1.40

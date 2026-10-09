@@ -4,6 +4,7 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+"""Session tracking and state persistence."""
 
 import datetime
 from dataclasses import dataclass
@@ -11,6 +12,8 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 from loguru import logger
+
+from anomaly_match.datasets.Label import LABEL_ANOMALY, LABEL_NORMAL, LABEL_REMOVED
 
 
 @dataclass
@@ -29,7 +32,11 @@ class IterationInfo:
     test_scores_file: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert IterationInfo to dictionary."""
+        """Convert IterationInfo to dictionary.
+
+        Returns:
+            Dict containing all iteration fields.
+        """
         return {
             "iteration_number": self.iteration_number,
             "timestamp": self.timestamp,
@@ -44,24 +51,21 @@ class IterationInfo:
 
 
 class SessionTracker:
-    """
-    Tracks important session metrics during AnomalyMatch training and evaluation.
+    """Tracks important session metrics during AnomalyMatch training and evaluation.
 
     This class maintains a record of:
     - Session iterations and their timestamps
     - Model training iterations and losses
-    - Labeled samples (anomalous/nominal) per session iteration
+    - Labeled samples (anomalous/normal) per session iteration
     - Test performance metrics
     - Model states and configurations
+
+    Args:
+        session_name: Optional name for the session. If None, uses
+            timestamp.
     """
 
     def __init__(self, session_name: str = None):
-        """
-        Initialize the SessionTracker.
-
-        Args:
-            session_name: Optional name for the session. If None, uses timestamp.
-        """
         self.session_start_time = datetime.datetime.now()
         self.session_name = (
             session_name or f"session_{self.session_start_time.strftime('%Y%m%d_%H%M%S')}"
@@ -75,15 +79,12 @@ class SessionTracker:
         self.total_model_iterations = 0
 
         # Configuration and data tracking
-        self.labeled_data_df: pd.DataFrame = pd.DataFrame(
-            columns=["filename", "label", "iteration"]
-        )
+        self.labeled_data_df: pd.DataFrame = pd.DataFrame(columns=["id", "label", "iteration"])
 
         logger.debug(f"Initialized SessionTracker for session: {self.session_name}")
 
     def start_new_session_iteration(self) -> int:
-        """
-        Start a new session iteration.
+        """Start a new session iteration.
 
         Returns:
             int: The session iteration number that was started.
@@ -100,8 +101,7 @@ class SessionTracker:
         return result
 
     def update_model_iteration(self, loss: float = None, num_iterations: int = 1) -> None:
-        """
-        Update model iteration count and optionally record loss.
+        """Update model iteration count and optionally record loss.
 
         Args:
             loss: Optional loss value for this iteration.
@@ -114,8 +114,7 @@ class SessionTracker:
             self.session_iterations[-1].model_loss = loss
 
     def add_labeled_sample(self, filename: str, label: str, iteration_number: int = None) -> None:
-        """
-        Add a labeled sample to the current session iteration.
+        """Add a labeled sample to the current session iteration.
 
         Args:
             filename: Name of the labeled file.
@@ -134,7 +133,11 @@ class SessionTracker:
 
         # Add to overall labeled data with iteration info
         new_row = pd.DataFrame(
-            {"filename": [filename], "label": [label], "iteration": [current_iter_num]}
+            {
+                "id": [filename],
+                "label": [label],
+                "iteration": [current_iter_num],
+            }
         )
         self.labeled_data_df = pd.concat([self.labeled_data_df, new_row], ignore_index=True)
 
@@ -143,17 +146,16 @@ class SessionTracker:
             # Find the correct iteration to update
             for iteration in self.session_iterations:
                 if iteration.iteration_number == current_iter_num:
-                    if label == "anomaly":
+                    if label == LABEL_ANOMALY:
                         iteration.num_newly_labeled_anomalous += 1
-                    elif label == "normal":
+                    elif label == LABEL_NORMAL:
                         iteration.num_newly_labeled_nominal += 1
                     break
 
         logger.debug(f"Added labeled sample: {filename} -> {label} (iteration {current_iter_num})")
 
     def update_test_performance(self, performance_metrics: Dict[str, float]) -> None:
-        """
-        Update test performance for the current session iteration.
+        """Update test performance for the current session iteration.
 
         Args:
             performance_metrics: Dictionary of performance metrics (e.g., accuracy, AUC).
@@ -163,8 +165,7 @@ class SessionTracker:
             logger.debug(f"Updated test performance: {performance_metrics}")
 
     def update_model_state_path(self, model_path: str) -> None:
-        """
-        Update the model state path for the current session iteration.
+        """Update the model state path for the current session iteration.
 
         Args:
             model_path: Path to the saved model state.
@@ -173,40 +174,17 @@ class SessionTracker:
             self.session_iterations[-1].model_state_path = model_path
             logger.debug(f"Updated model state path: {model_path}")
 
-    def update_unlabelled_scores_path(self, scores_path: str) -> None:
-        """
-        Update the unlabelled scores file path for the current session iteration.
-
-        Args:
-            scores_path: Path to the saved unlabelled scores CSV file.
-        """
-        if self.session_iterations:
-            self.session_iterations[-1].unlabelled_scores_file = scores_path
-            logger.debug(f"Updated unlabelled scores path: {scores_path}")
-
-    def update_test_scores_path(self, scores_path: str) -> None:
-        """
-        Update the test scores file path for the current session iteration.
-
-        Args:
-            scores_path: Path to the saved test scores CSV file.
-        """
-        if self.session_iterations:
-            self.session_iterations[-1].test_scores_file = scores_path
-            logger.debug(f"Updated test scores path: {scores_path}")
-
     def get_session_info(self) -> Dict[str, Any]:
-        """
-        Get comprehensive session information.
+        """Get comprehensive session information.
 
         Returns:
             Dict containing session-level information.
         """
         # Count all labeled samples including initial data (iteration = -1)
-        total_anomalous = len(self.labeled_data_df[self.labeled_data_df["label"] == "anomaly"])
-        total_nominal = len(self.labeled_data_df[self.labeled_data_df["label"] == "normal"])
-        total_labeled = len(self.labeled_data_df[self.labeled_data_df["label"] != "removed"])
-        total_removed = len(self.labeled_data_df[self.labeled_data_df["label"] == "removed"])
+        total_anomalous = len(self.labeled_data_df[self.labeled_data_df["label"] == LABEL_ANOMALY])
+        total_nominal = len(self.labeled_data_df[self.labeled_data_df["label"] == LABEL_NORMAL])
+        total_labeled = len(self.labeled_data_df[self.labeled_data_df["label"] != LABEL_REMOVED])
+        total_removed = len(self.labeled_data_df[self.labeled_data_df["label"] == LABEL_REMOVED])
 
         # Handle case where iteration column might not exist (legacy data)
         if "iteration" in self.labeled_data_df.columns:
@@ -237,8 +215,7 @@ class SessionTracker:
         }
 
     def get_iteration_info(self, iteration_number: int = None) -> Dict[str, Any]:
-        """
-        Get information about a specific iteration or the latest one.
+        """Get information about a specific iteration or the latest one.
 
         Args:
             iteration_number: Specific iteration to get info for. If None, returns latest.
@@ -263,8 +240,7 @@ class SessionTracker:
         return iteration.to_dict()
 
     def get_all_iterations_info(self) -> List[Dict[str, Any]]:
-        """
-        Get information about all session iterations.
+        """Get information about all session iterations.
 
         Returns:
             List of dictionaries containing iteration information, ordered by iteration number (newest first).
@@ -273,8 +249,7 @@ class SessionTracker:
         return [iteration.to_dict() for iteration in reversed(self.session_iterations)]
 
     def get_labeled_data_df(self) -> pd.DataFrame:
-        """
-        Get the current labeled data DataFrame.
+        """Get the current labeled data DataFrame.
 
         Returns:
             DataFrame with labeled samples.
@@ -282,8 +257,8 @@ class SessionTracker:
         return self.labeled_data_df.copy()
 
     def update_labeled_data(self, labeled_data_df: pd.DataFrame) -> None:
-        """
-        Update the complete labeled dataset, preserving existing iteration information.
+        """Update the complete labeled dataset, preserving existing iteration information.
+
         This method merges new labeled data with existing tracked samples.
 
         Args:
@@ -306,22 +281,20 @@ class SessionTracker:
 
         # For each sample in the new data, check if it already exists
         for idx, new_row in labeled_df_copy.iterrows():
-            filename = new_row["filename"]
+            sample_id = new_row["id"]
 
-            # Check if this filename exists in our current data
-            existing_mask = existing_df["filename"] == filename
+            existing_mask = existing_df["id"] == sample_id
 
             if existing_mask.any():
-                # File exists, preserve the existing iteration number
+                # Entry exists, preserve the existing iteration number
                 existing_iteration = existing_df.loc[existing_mask, "iteration"].iloc[0]
                 labeled_df_copy.loc[idx, "iteration"] = existing_iteration
                 logger.debug(
-                    f"Preserved iteration {existing_iteration} for existing file: {filename}"
+                    f"Preserved iteration {existing_iteration} for existing id: {sample_id}"
                 )
             else:
-                # New file, keep the iteration from new data (or -1 if not specified)
                 logger.debug(
-                    f"Added new file {filename} with iteration {labeled_df_copy.loc[idx, 'iteration']}"
+                    f"Added new id {sample_id} with iteration {labeled_df_copy.loc[idx, 'iteration']}"
                 )
 
         # Now merge the dataframes, using the new data to update existing entries
@@ -329,7 +302,7 @@ class SessionTracker:
         combined_df = pd.concat([existing_df, labeled_df_copy], ignore_index=True)
 
         # Remove duplicates, keeping the last occurrence (which prioritizes new data for updates)
-        combined_df = combined_df.drop_duplicates(subset="filename", keep="last")
+        combined_df = combined_df.drop_duplicates(subset="id", keep="last")
 
         # Replace the labeled data
         self.labeled_data_df = combined_df

@@ -126,7 +126,7 @@ class TestSessionTracker:
         # Add anomalous sample
         tracker.add_labeled_sample("img1.jpg", "anomaly")
         assert len(tracker.labeled_data_df) == 1
-        assert tracker.labeled_data_df.iloc[0]["filename"] == "img1.jpg"
+        assert tracker.labeled_data_df.iloc[0]["id"] == "img1.jpg"
         assert tracker.labeled_data_df.iloc[0]["label"] == "anomaly"
 
         # Add normal sample
@@ -243,9 +243,9 @@ class TestSessionTracker:
         df = tracker_with_data.get_labeled_data_df()
 
         assert len(df) == 2
-        assert df.iloc[0]["filename"] == "img1.jpg"
+        assert df.iloc[0]["id"] == "img1.jpg"
         assert df.iloc[0]["label"] == "anomaly"
-        assert df.iloc[1]["filename"] == "img2.jpg"
+        assert df.iloc[1]["id"] == "img2.jpg"
         assert df.iloc[1]["label"] == "normal"
 
         # Should return a copy, not the original

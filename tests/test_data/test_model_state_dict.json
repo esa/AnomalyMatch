@@ -1,0 +1,1882 @@
+{
+ "train_model": {
+  "blocks.0.0.bn1.bias": [
+   32
+  ],
+  "blocks.0.0.bn1.num_batches_tracked": [],
+  "blocks.0.0.bn1.running_mean": [
+   32
+  ],
+  "blocks.0.0.bn1.running_var": [
+   32
+  ],
+  "blocks.0.0.bn1.weight": [
+   32
+  ],
+  "blocks.0.0.bn2.bias": [
+   16
+  ],
+  "blocks.0.0.bn2.num_batches_tracked": [],
+  "blocks.0.0.bn2.running_mean": [
+   16
+  ],
+  "blocks.0.0.bn2.running_var": [
+   16
+  ],
+  "blocks.0.0.bn2.weight": [
+   16
+  ],
+  "blocks.0.0.conv_dw.weight": [
+   32,
+   1,
+   3,
+   3
+  ],
+  "blocks.0.0.conv_pw.weight": [
+   16,
+   32,
+   1,
+   1
+  ],
+  "blocks.1.0.bn1.bias": [
+   96
+  ],
+  "blocks.1.0.bn1.num_batches_tracked": [],
+  "blocks.1.0.bn1.running_mean": [
+   96
+  ],
+  "blocks.1.0.bn1.running_var": [
+   96
+  ],
+  "blocks.1.0.bn1.weight": [
+   96
+  ],
+  "blocks.1.0.bn2.bias": [
+   96
+  ],
+  "blocks.1.0.bn2.num_batches_tracked": [],
+  "blocks.1.0.bn2.running_mean": [
+   96
+  ],
+  "blocks.1.0.bn2.running_var": [
+   96
+  ],
+  "blocks.1.0.bn2.weight": [
+   96
+  ],
+  "blocks.1.0.bn3.bias": [
+   24
+  ],
+  "blocks.1.0.bn3.num_batches_tracked": [],
+  "blocks.1.0.bn3.running_mean": [
+   24
+  ],
+  "blocks.1.0.bn3.running_var": [
+   24
+  ],
+  "blocks.1.0.bn3.weight": [
+   24
+  ],
+  "blocks.1.0.conv_dw.weight": [
+   96,
+   1,
+   3,
+   3
+  ],
+  "blocks.1.0.conv_pw.weight": [
+   96,
+   16,
+   1,
+   1
+  ],
+  "blocks.1.0.conv_pwl.weight": [
+   24,
+   96,
+   1,
+   1
+  ],
+  "blocks.1.1.bn1.bias": [
+   144
+  ],
+  "blocks.1.1.bn1.num_batches_tracked": [],
+  "blocks.1.1.bn1.running_mean": [
+   144
+  ],
+  "blocks.1.1.bn1.running_var": [
+   144
+  ],
+  "blocks.1.1.bn1.weight": [
+   144
+  ],
+  "blocks.1.1.bn2.bias": [
+   144
+  ],
+  "blocks.1.1.bn2.num_batches_tracked": [],
+  "blocks.1.1.bn2.running_mean": [
+   144
+  ],
+  "blocks.1.1.bn2.running_var": [
+   144
+  ],
+  "blocks.1.1.bn2.weight": [
+   144
+  ],
+  "blocks.1.1.bn3.bias": [
+   24
+  ],
+  "blocks.1.1.bn3.num_batches_tracked": [],
+  "blocks.1.1.bn3.running_mean": [
+   24
+  ],
+  "blocks.1.1.bn3.running_var": [
+   24
+  ],
+  "blocks.1.1.bn3.weight": [
+   24
+  ],
+  "blocks.1.1.conv_dw.weight": [
+   144,
+   1,
+   3,
+   3
+  ],
+  "blocks.1.1.conv_pw.weight": [
+   144,
+   24,
+   1,
+   1
+  ],
+  "blocks.1.1.conv_pwl.weight": [
+   24,
+   144,
+   1,
+   1
+  ],
+  "blocks.2.0.bn1.bias": [
+   144
+  ],
+  "blocks.2.0.bn1.num_batches_tracked": [],
+  "blocks.2.0.bn1.running_mean": [
+   144
+  ],
+  "blocks.2.0.bn1.running_var": [
+   144
+  ],
+  "blocks.2.0.bn1.weight": [
+   144
+  ],
+  "blocks.2.0.bn2.bias": [
+   144
+  ],
+  "blocks.2.0.bn2.num_batches_tracked": [],
+  "blocks.2.0.bn2.running_mean": [
+   144
+  ],
+  "blocks.2.0.bn2.running_var": [
+   144
+  ],
+  "blocks.2.0.bn2.weight": [
+   144
+  ],
+  "blocks.2.0.bn3.bias": [
+   40
+  ],
+  "blocks.2.0.bn3.num_batches_tracked": [],
+  "blocks.2.0.bn3.running_mean": [
+   40
+  ],
+  "blocks.2.0.bn3.running_var": [
+   40
+  ],
+  "blocks.2.0.bn3.weight": [
+   40
+  ],
+  "blocks.2.0.conv_dw.weight": [
+   144,
+   1,
+   5,
+   5
+  ],
+  "blocks.2.0.conv_pw.weight": [
+   144,
+   24,
+   1,
+   1
+  ],
+  "blocks.2.0.conv_pwl.weight": [
+   40,
+   144,
+   1,
+   1
+  ],
+  "blocks.2.1.bn1.bias": [
+   240
+  ],
+  "blocks.2.1.bn1.num_batches_tracked": [],
+  "blocks.2.1.bn1.running_mean": [
+   240
+  ],
+  "blocks.2.1.bn1.running_var": [
+   240
+  ],
+  "blocks.2.1.bn1.weight": [
+   240
+  ],
+  "blocks.2.1.bn2.bias": [
+   240
+  ],
+  "blocks.2.1.bn2.num_batches_tracked": [],
+  "blocks.2.1.bn2.running_mean": [
+   240
+  ],
+  "blocks.2.1.bn2.running_var": [
+   240
+  ],
+  "blocks.2.1.bn2.weight": [
+   240
+  ],
+  "blocks.2.1.bn3.bias": [
+   40
+  ],
+  "blocks.2.1.bn3.num_batches_tracked": [],
+  "blocks.2.1.bn3.running_mean": [
+   40
+  ],
+  "blocks.2.1.bn3.running_var": [
+   40
+  ],
+  "blocks.2.1.bn3.weight": [
+   40
+  ],
+  "blocks.2.1.conv_dw.weight": [
+   240,
+   1,
+   5,
+   5
+  ],
+  "blocks.2.1.conv_pw.weight": [
+   240,
+   40,
+   1,
+   1
+  ],
+  "blocks.2.1.conv_pwl.weight": [
+   40,
+   240,
+   1,
+   1
+  ],
+  "blocks.3.0.bn1.bias": [
+   240
+  ],
+  "blocks.3.0.bn1.num_batches_tracked": [],
+  "blocks.3.0.bn1.running_mean": [
+   240
+  ],
+  "blocks.3.0.bn1.running_var": [
+   240
+  ],
+  "blocks.3.0.bn1.weight": [
+   240
+  ],
+  "blocks.3.0.bn2.bias": [
+   240
+  ],
+  "blocks.3.0.bn2.num_batches_tracked": [],
+  "blocks.3.0.bn2.running_mean": [
+   240
+  ],
+  "blocks.3.0.bn2.running_var": [
+   240
+  ],
+  "blocks.3.0.bn2.weight": [
+   240
+  ],
+  "blocks.3.0.bn3.bias": [
+   80
+  ],
+  "blocks.3.0.bn3.num_batches_tracked": [],
+  "blocks.3.0.bn3.running_mean": [
+   80
+  ],
+  "blocks.3.0.bn3.running_var": [
+   80
+  ],
+  "blocks.3.0.bn3.weight": [
+   80
+  ],
+  "blocks.3.0.conv_dw.weight": [
+   240,
+   1,
+   3,
+   3
+  ],
+  "blocks.3.0.conv_pw.weight": [
+   240,
+   40,
+   1,
+   1
+  ],
+  "blocks.3.0.conv_pwl.weight": [
+   80,
+   240,
+   1,
+   1
+  ],
+  "blocks.3.1.bn1.bias": [
+   480
+  ],
+  "blocks.3.1.bn1.num_batches_tracked": [],
+  "blocks.3.1.bn1.running_mean": [
+   480
+  ],
+  "blocks.3.1.bn1.running_var": [
+   480
+  ],
+  "blocks.3.1.bn1.weight": [
+   480
+  ],
+  "blocks.3.1.bn2.bias": [
+   480
+  ],
+  "blocks.3.1.bn2.num_batches_tracked": [],
+  "blocks.3.1.bn2.running_mean": [
+   480
+  ],
+  "blocks.3.1.bn2.running_var": [
+   480
+  ],
+  "blocks.3.1.bn2.weight": [
+   480
+  ],
+  "blocks.3.1.bn3.bias": [
+   80
+  ],
+  "blocks.3.1.bn3.num_batches_tracked": [],
+  "blocks.3.1.bn3.running_mean": [
+   80
+  ],
+  "blocks.3.1.bn3.running_var": [
+   80
+  ],
+  "blocks.3.1.bn3.weight": [
+   80
+  ],
+  "blocks.3.1.conv_dw.weight": [
+   480,
+   1,
+   3,
+   3
+  ],
+  "blocks.3.1.conv_pw.weight": [
+   480,
+   80,
+   1,
+   1
+  ],
+  "blocks.3.1.conv_pwl.weight": [
+   80,
+   480,
+   1,
+   1
+  ],
+  "blocks.3.2.bn1.bias": [
+   480
+  ],
+  "blocks.3.2.bn1.num_batches_tracked": [],
+  "blocks.3.2.bn1.running_mean": [
+   480
+  ],
+  "blocks.3.2.bn1.running_var": [
+   480
+  ],
+  "blocks.3.2.bn1.weight": [
+   480
+  ],
+  "blocks.3.2.bn2.bias": [
+   480
+  ],
+  "blocks.3.2.bn2.num_batches_tracked": [],
+  "blocks.3.2.bn2.running_mean": [
+   480
+  ],
+  "blocks.3.2.bn2.running_var": [
+   480
+  ],
+  "blocks.3.2.bn2.weight": [
+   480
+  ],
+  "blocks.3.2.bn3.bias": [
+   80
+  ],
+  "blocks.3.2.bn3.num_batches_tracked": [],
+  "blocks.3.2.bn3.running_mean": [
+   80
+  ],
+  "blocks.3.2.bn3.running_var": [
+   80
+  ],
+  "blocks.3.2.bn3.weight": [
+   80
+  ],
+  "blocks.3.2.conv_dw.weight": [
+   480,
+   1,
+   3,
+   3
+  ],
+  "blocks.3.2.conv_pw.weight": [
+   480,
+   80,
+   1,
+   1
+  ],
+  "blocks.3.2.conv_pwl.weight": [
+   80,
+   480,
+   1,
+   1
+  ],
+  "blocks.4.0.bn1.bias": [
+   480
+  ],
+  "blocks.4.0.bn1.num_batches_tracked": [],
+  "blocks.4.0.bn1.running_mean": [
+   480
+  ],
+  "blocks.4.0.bn1.running_var": [
+   480
+  ],
+  "blocks.4.0.bn1.weight": [
+   480
+  ],
+  "blocks.4.0.bn2.bias": [
+   480
+  ],
+  "blocks.4.0.bn2.num_batches_tracked": [],
+  "blocks.4.0.bn2.running_mean": [
+   480
+  ],
+  "blocks.4.0.bn2.running_var": [
+   480
+  ],
+  "blocks.4.0.bn2.weight": [
+   480
+  ],
+  "blocks.4.0.bn3.bias": [
+   112
+  ],
+  "blocks.4.0.bn3.num_batches_tracked": [],
+  "blocks.4.0.bn3.running_mean": [
+   112
+  ],
+  "blocks.4.0.bn3.running_var": [
+   112
+  ],
+  "blocks.4.0.bn3.weight": [
+   112
+  ],
+  "blocks.4.0.conv_dw.weight": [
+   480,
+   1,
+   5,
+   5
+  ],
+  "blocks.4.0.conv_pw.weight": [
+   480,
+   80,
+   1,
+   1
+  ],
+  "blocks.4.0.conv_pwl.weight": [
+   112,
+   480,
+   1,
+   1
+  ],
+  "blocks.4.1.bn1.bias": [
+   672
+  ],
+  "blocks.4.1.bn1.num_batches_tracked": [],
+  "blocks.4.1.bn1.running_mean": [
+   672
+  ],
+  "blocks.4.1.bn1.running_var": [
+   672
+  ],
+  "blocks.4.1.bn1.weight": [
+   672
+  ],
+  "blocks.4.1.bn2.bias": [
+   672
+  ],
+  "blocks.4.1.bn2.num_batches_tracked": [],
+  "blocks.4.1.bn2.running_mean": [
+   672
+  ],
+  "blocks.4.1.bn2.running_var": [
+   672
+  ],
+  "blocks.4.1.bn2.weight": [
+   672
+  ],
+  "blocks.4.1.bn3.bias": [
+   112
+  ],
+  "blocks.4.1.bn3.num_batches_tracked": [],
+  "blocks.4.1.bn3.running_mean": [
+   112
+  ],
+  "blocks.4.1.bn3.running_var": [
+   112
+  ],
+  "blocks.4.1.bn3.weight": [
+   112
+  ],
+  "blocks.4.1.conv_dw.weight": [
+   672,
+   1,
+   5,
+   5
+  ],
+  "blocks.4.1.conv_pw.weight": [
+   672,
+   112,
+   1,
+   1
+  ],
+  "blocks.4.1.conv_pwl.weight": [
+   112,
+   672,
+   1,
+   1
+  ],
+  "blocks.4.2.bn1.bias": [
+   672
+  ],
+  "blocks.4.2.bn1.num_batches_tracked": [],
+  "blocks.4.2.bn1.running_mean": [
+   672
+  ],
+  "blocks.4.2.bn1.running_var": [
+   672
+  ],
+  "blocks.4.2.bn1.weight": [
+   672
+  ],
+  "blocks.4.2.bn2.bias": [
+   672
+  ],
+  "blocks.4.2.bn2.num_batches_tracked": [],
+  "blocks.4.2.bn2.running_mean": [
+   672
+  ],
+  "blocks.4.2.bn2.running_var": [
+   672
+  ],
+  "blocks.4.2.bn2.weight": [
+   672
+  ],
+  "blocks.4.2.bn3.bias": [
+   112
+  ],
+  "blocks.4.2.bn3.num_batches_tracked": [],
+  "blocks.4.2.bn3.running_mean": [
+   112
+  ],
+  "blocks.4.2.bn3.running_var": [
+   112
+  ],
+  "blocks.4.2.bn3.weight": [
+   112
+  ],
+  "blocks.4.2.conv_dw.weight": [
+   672,
+   1,
+   5,
+   5
+  ],
+  "blocks.4.2.conv_pw.weight": [
+   672,
+   112,
+   1,
+   1
+  ],
+  "blocks.4.2.conv_pwl.weight": [
+   112,
+   672,
+   1,
+   1
+  ],
+  "blocks.5.0.bn1.bias": [
+   672
+  ],
+  "blocks.5.0.bn1.num_batches_tracked": [],
+  "blocks.5.0.bn1.running_mean": [
+   672
+  ],
+  "blocks.5.0.bn1.running_var": [
+   672
+  ],
+  "blocks.5.0.bn1.weight": [
+   672
+  ],
+  "blocks.5.0.bn2.bias": [
+   672
+  ],
+  "blocks.5.0.bn2.num_batches_tracked": [],
+  "blocks.5.0.bn2.running_mean": [
+   672
+  ],
+  "blocks.5.0.bn2.running_var": [
+   672
+  ],
+  "blocks.5.0.bn2.weight": [
+   672
+  ],
+  "blocks.5.0.bn3.bias": [
+   192
+  ],
+  "blocks.5.0.bn3.num_batches_tracked": [],
+  "blocks.5.0.bn3.running_mean": [
+   192
+  ],
+  "blocks.5.0.bn3.running_var": [
+   192
+  ],
+  "blocks.5.0.bn3.weight": [
+   192
+  ],
+  "blocks.5.0.conv_dw.weight": [
+   672,
+   1,
+   5,
+   5
+  ],
+  "blocks.5.0.conv_pw.weight": [
+   672,
+   112,
+   1,
+   1
+  ],
+  "blocks.5.0.conv_pwl.weight": [
+   192,
+   672,
+   1,
+   1
+  ],
+  "blocks.5.1.bn1.bias": [
+   1152
+  ],
+  "blocks.5.1.bn1.num_batches_tracked": [],
+  "blocks.5.1.bn1.running_mean": [
+   1152
+  ],
+  "blocks.5.1.bn1.running_var": [
+   1152
+  ],
+  "blocks.5.1.bn1.weight": [
+   1152
+  ],
+  "blocks.5.1.bn2.bias": [
+   1152
+  ],
+  "blocks.5.1.bn2.num_batches_tracked": [],
+  "blocks.5.1.bn2.running_mean": [
+   1152
+  ],
+  "blocks.5.1.bn2.running_var": [
+   1152
+  ],
+  "blocks.5.1.bn2.weight": [
+   1152
+  ],
+  "blocks.5.1.bn3.bias": [
+   192
+  ],
+  "blocks.5.1.bn3.num_batches_tracked": [],
+  "blocks.5.1.bn3.running_mean": [
+   192
+  ],
+  "blocks.5.1.bn3.running_var": [
+   192
+  ],
+  "blocks.5.1.bn3.weight": [
+   192
+  ],
+  "blocks.5.1.conv_dw.weight": [
+   1152,
+   1,
+   5,
+   5
+  ],
+  "blocks.5.1.conv_pw.weight": [
+   1152,
+   192,
+   1,
+   1
+  ],
+  "blocks.5.1.conv_pwl.weight": [
+   192,
+   1152,
+   1,
+   1
+  ],
+  "blocks.5.2.bn1.bias": [
+   1152
+  ],
+  "blocks.5.2.bn1.num_batches_tracked": [],
+  "blocks.5.2.bn1.running_mean": [
+   1152
+  ],
+  "blocks.5.2.bn1.running_var": [
+   1152
+  ],
+  "blocks.5.2.bn1.weight": [
+   1152
+  ],
+  "blocks.5.2.bn2.bias": [
+   1152
+  ],
+  "blocks.5.2.bn2.num_batches_tracked": [],
+  "blocks.5.2.bn2.running_mean": [
+   1152
+  ],
+  "blocks.5.2.bn2.running_var": [
+   1152
+  ],
+  "blocks.5.2.bn2.weight": [
+   1152
+  ],
+  "blocks.5.2.bn3.bias": [
+   192
+  ],
+  "blocks.5.2.bn3.num_batches_tracked": [],
+  "blocks.5.2.bn3.running_mean": [
+   192
+  ],
+  "blocks.5.2.bn3.running_var": [
+   192
+  ],
+  "blocks.5.2.bn3.weight": [
+   192
+  ],
+  "blocks.5.2.conv_dw.weight": [
+   1152,
+   1,
+   5,
+   5
+  ],
+  "blocks.5.2.conv_pw.weight": [
+   1152,
+   192,
+   1,
+   1
+  ],
+  "blocks.5.2.conv_pwl.weight": [
+   192,
+   1152,
+   1,
+   1
+  ],
+  "blocks.5.3.bn1.bias": [
+   1152
+  ],
+  "blocks.5.3.bn1.num_batches_tracked": [],
+  "blocks.5.3.bn1.running_mean": [
+   1152
+  ],
+  "blocks.5.3.bn1.running_var": [
+   1152
+  ],
+  "blocks.5.3.bn1.weight": [
+   1152
+  ],
+  "blocks.5.3.bn2.bias": [
+   1152
+  ],
+  "blocks.5.3.bn2.num_batches_tracked": [],
+  "blocks.5.3.bn2.running_mean": [
+   1152
+  ],
+  "blocks.5.3.bn2.running_var": [
+   1152
+  ],
+  "blocks.5.3.bn2.weight": [
+   1152
+  ],
+  "blocks.5.3.bn3.bias": [
+   192
+  ],
+  "blocks.5.3.bn3.num_batches_tracked": [],
+  "blocks.5.3.bn3.running_mean": [
+   192
+  ],
+  "blocks.5.3.bn3.running_var": [
+   192
+  ],
+  "blocks.5.3.bn3.weight": [
+   192
+  ],
+  "blocks.5.3.conv_dw.weight": [
+   1152,
+   1,
+   5,
+   5
+  ],
+  "blocks.5.3.conv_pw.weight": [
+   1152,
+   192,
+   1,
+   1
+  ],
+  "blocks.5.3.conv_pwl.weight": [
+   192,
+   1152,
+   1,
+   1
+  ],
+  "blocks.6.0.bn1.bias": [
+   1152
+  ],
+  "blocks.6.0.bn1.num_batches_tracked": [],
+  "blocks.6.0.bn1.running_mean": [
+   1152
+  ],
+  "blocks.6.0.bn1.running_var": [
+   1152
+  ],
+  "blocks.6.0.bn1.weight": [
+   1152
+  ],
+  "blocks.6.0.bn2.bias": [
+   1152
+  ],
+  "blocks.6.0.bn2.num_batches_tracked": [],
+  "blocks.6.0.bn2.running_mean": [
+   1152
+  ],
+  "blocks.6.0.bn2.running_var": [
+   1152
+  ],
+  "blocks.6.0.bn2.weight": [
+   1152
+  ],
+  "blocks.6.0.bn3.bias": [
+   320
+  ],
+  "blocks.6.0.bn3.num_batches_tracked": [],
+  "blocks.6.0.bn3.running_mean": [
+   320
+  ],
+  "blocks.6.0.bn3.running_var": [
+   320
+  ],
+  "blocks.6.0.bn3.weight": [
+   320
+  ],
+  "blocks.6.0.conv_dw.weight": [
+   1152,
+   1,
+   3,
+   3
+  ],
+  "blocks.6.0.conv_pw.weight": [
+   1152,
+   192,
+   1,
+   1
+  ],
+  "blocks.6.0.conv_pwl.weight": [
+   320,
+   1152,
+   1,
+   1
+  ],
+  "bn1.bias": [
+   32
+  ],
+  "bn1.num_batches_tracked": [],
+  "bn1.running_mean": [
+   32
+  ],
+  "bn1.running_var": [
+   32
+  ],
+  "bn1.weight": [
+   32
+  ],
+  "bn2.bias": [
+   1280
+  ],
+  "bn2.num_batches_tracked": [],
+  "bn2.running_mean": [
+   1280
+  ],
+  "bn2.running_var": [
+   1280
+  ],
+  "bn2.weight": [
+   1280
+  ],
+  "classifier.bias": [
+   2
+  ],
+  "classifier.weight": [
+   2,
+   1280
+  ],
+  "conv_head.weight": [
+   1280,
+   320,
+   1,
+   1
+  ],
+  "conv_stem.weight": [
+   32,
+   3,
+   3,
+   3
+  ]
+ },
+ "eval_model": {
+  "blocks.0.0.bn1.bias": [
+   32
+  ],
+  "blocks.0.0.bn1.num_batches_tracked": [],
+  "blocks.0.0.bn1.running_mean": [
+   32
+  ],
+  "blocks.0.0.bn1.running_var": [
+   32
+  ],
+  "blocks.0.0.bn1.weight": [
+   32
+  ],
+  "blocks.0.0.bn2.bias": [
+   16
+  ],
+  "blocks.0.0.bn2.num_batches_tracked": [],
+  "blocks.0.0.bn2.running_mean": [
+   16
+  ],
+  "blocks.0.0.bn2.running_var": [
+   16
+  ],
+  "blocks.0.0.bn2.weight": [
+   16
+  ],
+  "blocks.0.0.conv_dw.weight": [
+   32,
+   1,
+   3,
+   3
+  ],
+  "blocks.0.0.conv_pw.weight": [
+   16,
+   32,
+   1,
+   1
+  ],
+  "blocks.1.0.bn1.bias": [
+   96
+  ],
+  "blocks.1.0.bn1.num_batches_tracked": [],
+  "blocks.1.0.bn1.running_mean": [
+   96
+  ],
+  "blocks.1.0.bn1.running_var": [
+   96
+  ],
+  "blocks.1.0.bn1.weight": [
+   96
+  ],
+  "blocks.1.0.bn2.bias": [
+   96
+  ],
+  "blocks.1.0.bn2.num_batches_tracked": [],
+  "blocks.1.0.bn2.running_mean": [
+   96
+  ],
+  "blocks.1.0.bn2.running_var": [
+   96
+  ],
+  "blocks.1.0.bn2.weight": [
+   96
+  ],
+  "blocks.1.0.bn3.bias": [
+   24
+  ],
+  "blocks.1.0.bn3.num_batches_tracked": [],
+  "blocks.1.0.bn3.running_mean": [
+   24
+  ],
+  "blocks.1.0.bn3.running_var": [
+   24
+  ],
+  "blocks.1.0.bn3.weight": [
+   24
+  ],
+  "blocks.1.0.conv_dw.weight": [
+   96,
+   1,
+   3,
+   3
+  ],
+  "blocks.1.0.conv_pw.weight": [
+   96,
+   16,
+   1,
+   1
+  ],
+  "blocks.1.0.conv_pwl.weight": [
+   24,
+   96,
+   1,
+   1
+  ],
+  "blocks.1.1.bn1.bias": [
+   144
+  ],
+  "blocks.1.1.bn1.num_batches_tracked": [],
+  "blocks.1.1.bn1.running_mean": [
+   144
+  ],
+  "blocks.1.1.bn1.running_var": [
+   144
+  ],
+  "blocks.1.1.bn1.weight": [
+   144
+  ],
+  "blocks.1.1.bn2.bias": [
+   144
+  ],
+  "blocks.1.1.bn2.num_batches_tracked": [],
+  "blocks.1.1.bn2.running_mean": [
+   144
+  ],
+  "blocks.1.1.bn2.running_var": [
+   144
+  ],
+  "blocks.1.1.bn2.weight": [
+   144
+  ],
+  "blocks.1.1.bn3.bias": [
+   24
+  ],
+  "blocks.1.1.bn3.num_batches_tracked": [],
+  "blocks.1.1.bn3.running_mean": [
+   24
+  ],
+  "blocks.1.1.bn3.running_var": [
+   24
+  ],
+  "blocks.1.1.bn3.weight": [
+   24
+  ],
+  "blocks.1.1.conv_dw.weight": [
+   144,
+   1,
+   3,
+   3
+  ],
+  "blocks.1.1.conv_pw.weight": [
+   144,
+   24,
+   1,
+   1
+  ],
+  "blocks.1.1.conv_pwl.weight": [
+   24,
+   144,
+   1,
+   1
+  ],
+  "blocks.2.0.bn1.bias": [
+   144
+  ],
+  "blocks.2.0.bn1.num_batches_tracked": [],
+  "blocks.2.0.bn1.running_mean": [
+   144
+  ],
+  "blocks.2.0.bn1.running_var": [
+   144
+  ],
+  "blocks.2.0.bn1.weight": [
+   144
+  ],
+  "blocks.2.0.bn2.bias": [
+   144
+  ],
+  "blocks.2.0.bn2.num_batches_tracked": [],
+  "blocks.2.0.bn2.running_mean": [
+   144
+  ],
+  "blocks.2.0.bn2.running_var": [
+   144
+  ],
+  "blocks.2.0.bn2.weight": [
+   144
+  ],
+  "blocks.2.0.bn3.bias": [
+   40
+  ],
+  "blocks.2.0.bn3.num_batches_tracked": [],
+  "blocks.2.0.bn3.running_mean": [
+   40
+  ],
+  "blocks.2.0.bn3.running_var": [
+   40
+  ],
+  "blocks.2.0.bn3.weight": [
+   40
+  ],
+  "blocks.2.0.conv_dw.weight": [
+   144,
+   1,
+   5,
+   5
+  ],
+  "blocks.2.0.conv_pw.weight": [
+   144,
+   24,
+   1,
+   1
+  ],
+  "blocks.2.0.conv_pwl.weight": [
+   40,
+   144,
+   1,
+   1
+  ],
+  "blocks.2.1.bn1.bias": [
+   240
+  ],
+  "blocks.2.1.bn1.num_batches_tracked": [],
+  "blocks.2.1.bn1.running_mean": [
+   240
+  ],
+  "blocks.2.1.bn1.running_var": [
+   240
+  ],
+  "blocks.2.1.bn1.weight": [
+   240
+  ],
+  "blocks.2.1.bn2.bias": [
+   240
+  ],
+  "blocks.2.1.bn2.num_batches_tracked": [],
+  "blocks.2.1.bn2.running_mean": [
+   240
+  ],
+  "blocks.2.1.bn2.running_var": [
+   240
+  ],
+  "blocks.2.1.bn2.weight": [
+   240
+  ],
+  "blocks.2.1.bn3.bias": [
+   40
+  ],
+  "blocks.2.1.bn3.num_batches_tracked": [],
+  "blocks.2.1.bn3.running_mean": [
+   40
+  ],
+  "blocks.2.1.bn3.running_var": [
+   40
+  ],
+  "blocks.2.1.bn3.weight": [
+   40
+  ],
+  "blocks.2.1.conv_dw.weight": [
+   240,
+   1,
+   5,
+   5
+  ],
+  "blocks.2.1.conv_pw.weight": [
+   240,
+   40,
+   1,
+   1
+  ],
+  "blocks.2.1.conv_pwl.weight": [
+   40,
+   240,
+   1,
+   1
+  ],
+  "blocks.3.0.bn1.bias": [
+   240
+  ],
+  "blocks.3.0.bn1.num_batches_tracked": [],
+  "blocks.3.0.bn1.running_mean": [
+   240
+  ],
+  "blocks.3.0.bn1.running_var": [
+   240
+  ],
+  "blocks.3.0.bn1.weight": [
+   240
+  ],
+  "blocks.3.0.bn2.bias": [
+   240
+  ],
+  "blocks.3.0.bn2.num_batches_tracked": [],
+  "blocks.3.0.bn2.running_mean": [
+   240
+  ],
+  "blocks.3.0.bn2.running_var": [
+   240
+  ],
+  "blocks.3.0.bn2.weight": [
+   240
+  ],
+  "blocks.3.0.bn3.bias": [
+   80
+  ],
+  "blocks.3.0.bn3.num_batches_tracked": [],
+  "blocks.3.0.bn3.running_mean": [
+   80
+  ],
+  "blocks.3.0.bn3.running_var": [
+   80
+  ],
+  "blocks.3.0.bn3.weight": [
+   80
+  ],
+  "blocks.3.0.conv_dw.weight": [
+   240,
+   1,
+   3,
+   3
+  ],
+  "blocks.3.0.conv_pw.weight": [
+   240,
+   40,
+   1,
+   1
+  ],
+  "blocks.3.0.conv_pwl.weight": [
+   80,
+   240,
+   1,
+   1
+  ],
+  "blocks.3.1.bn1.bias": [
+   480
+  ],
+  "blocks.3.1.bn1.num_batches_tracked": [],
+  "blocks.3.1.bn1.running_mean": [
+   480
+  ],
+  "blocks.3.1.bn1.running_var": [
+   480
+  ],
+  "blocks.3.1.bn1.weight": [
+   480
+  ],
+  "blocks.3.1.bn2.bias": [
+   480
+  ],
+  "blocks.3.1.bn2.num_batches_tracked": [],
+  "blocks.3.1.bn2.running_mean": [
+   480
+  ],
+  "blocks.3.1.bn2.running_var": [
+   480
+  ],
+  "blocks.3.1.bn2.weight": [
+   480
+  ],
+  "blocks.3.1.bn3.bias": [
+   80
+  ],
+  "blocks.3.1.bn3.num_batches_tracked": [],
+  "blocks.3.1.bn3.running_mean": [
+   80
+  ],
+  "blocks.3.1.bn3.running_var": [
+   80
+  ],
+  "blocks.3.1.bn3.weight": [
+   80
+  ],
+  "blocks.3.1.conv_dw.weight": [
+   480,
+   1,
+   3,
+   3
+  ],
+  "blocks.3.1.conv_pw.weight": [
+   480,
+   80,
+   1,
+   1
+  ],
+  "blocks.3.1.conv_pwl.weight": [
+   80,
+   480,
+   1,
+   1
+  ],
+  "blocks.3.2.bn1.bias": [
+   480
+  ],
+  "blocks.3.2.bn1.num_batches_tracked": [],
+  "blocks.3.2.bn1.running_mean": [
+   480
+  ],
+  "blocks.3.2.bn1.running_var": [
+   480
+  ],
+  "blocks.3.2.bn1.weight": [
+   480
+  ],
+  "blocks.3.2.bn2.bias": [
+   480
+  ],
+  "blocks.3.2.bn2.num_batches_tracked": [],
+  "blocks.3.2.bn2.running_mean": [
+   480
+  ],
+  "blocks.3.2.bn2.running_var": [
+   480
+  ],
+  "blocks.3.2.bn2.weight": [
+   480
+  ],
+  "blocks.3.2.bn3.bias": [
+   80
+  ],
+  "blocks.3.2.bn3.num_batches_tracked": [],
+  "blocks.3.2.bn3.running_mean": [
+   80
+  ],
+  "blocks.3.2.bn3.running_var": [
+   80
+  ],
+  "blocks.3.2.bn3.weight": [
+   80
+  ],
+  "blocks.3.2.conv_dw.weight": [
+   480,
+   1,
+   3,
+   3
+  ],
+  "blocks.3.2.conv_pw.weight": [
+   480,
+   80,
+   1,
+   1
+  ],
+  "blocks.3.2.conv_pwl.weight": [
+   80,
+   480,
+   1,
+   1
+  ],
+  "blocks.4.0.bn1.bias": [
+   480
+  ],
+  "blocks.4.0.bn1.num_batches_tracked": [],
+  "blocks.4.0.bn1.running_mean": [
+   480
+  ],
+  "blocks.4.0.bn1.running_var": [
+   480
+  ],
+  "blocks.4.0.bn1.weight": [
+   480
+  ],
+  "blocks.4.0.bn2.bias": [
+   480
+  ],
+  "blocks.4.0.bn2.num_batches_tracked": [],
+  "blocks.4.0.bn2.running_mean": [
+   480
+  ],
+  "blocks.4.0.bn2.running_var": [
+   480
+  ],
+  "blocks.4.0.bn2.weight": [
+   480
+  ],
+  "blocks.4.0.bn3.bias": [
+   112
+  ],
+  "blocks.4.0.bn3.num_batches_tracked": [],
+  "blocks.4.0.bn3.running_mean": [
+   112
+  ],
+  "blocks.4.0.bn3.running_var": [
+   112
+  ],
+  "blocks.4.0.bn3.weight": [
+   112
+  ],
+  "blocks.4.0.conv_dw.weight": [
+   480,
+   1,
+   5,
+   5
+  ],
+  "blocks.4.0.conv_pw.weight": [
+   480,
+   80,
+   1,
+   1
+  ],
+  "blocks.4.0.conv_pwl.weight": [
+   112,
+   480,
+   1,
+   1
+  ],
+  "blocks.4.1.bn1.bias": [
+   672
+  ],
+  "blocks.4.1.bn1.num_batches_tracked": [],
+  "blocks.4.1.bn1.running_mean": [
+   672
+  ],
+  "blocks.4.1.bn1.running_var": [
+   672
+  ],
+  "blocks.4.1.bn1.weight": [
+   672
+  ],
+  "blocks.4.1.bn2.bias": [
+   672
+  ],
+  "blocks.4.1.bn2.num_batches_tracked": [],
+  "blocks.4.1.bn2.running_mean": [
+   672
+  ],
+  "blocks.4.1.bn2.running_var": [
+   672
+  ],
+  "blocks.4.1.bn2.weight": [
+   672
+  ],
+  "blocks.4.1.bn3.bias": [
+   112
+  ],
+  "blocks.4.1.bn3.num_batches_tracked": [],
+  "blocks.4.1.bn3.running_mean": [
+   112
+  ],
+  "blocks.4.1.bn3.running_var": [
+   112
+  ],
+  "blocks.4.1.bn3.weight": [
+   112
+  ],
+  "blocks.4.1.conv_dw.weight": [
+   672,
+   1,
+   5,
+   5
+  ],
+  "blocks.4.1.conv_pw.weight": [
+   672,
+   112,
+   1,
+   1
+  ],
+  "blocks.4.1.conv_pwl.weight": [
+   112,
+   672,
+   1,
+   1
+  ],
+  "blocks.4.2.bn1.bias": [
+   672
+  ],
+  "blocks.4.2.bn1.num_batches_tracked": [],
+  "blocks.4.2.bn1.running_mean": [
+   672
+  ],
+  "blocks.4.2.bn1.running_var": [
+   672
+  ],
+  "blocks.4.2.bn1.weight": [
+   672
+  ],
+  "blocks.4.2.bn2.bias": [
+   672
+  ],
+  "blocks.4.2.bn2.num_batches_tracked": [],
+  "blocks.4.2.bn2.running_mean": [
+   672
+  ],
+  "blocks.4.2.bn2.running_var": [
+   672
+  ],
+  "blocks.4.2.bn2.weight": [
+   672
+  ],
+  "blocks.4.2.bn3.bias": [
+   112
+  ],
+  "blocks.4.2.bn3.num_batches_tracked": [],
+  "blocks.4.2.bn3.running_mean": [
+   112
+  ],
+  "blocks.4.2.bn3.running_var": [
+   112
+  ],
+  "blocks.4.2.bn3.weight": [
+   112
+  ],
+  "blocks.4.2.conv_dw.weight": [
+   672,
+   1,
+   5,
+   5
+  ],
+  "blocks.4.2.conv_pw.weight": [
+   672,
+   112,
+   1,
+   1
+  ],
+  "blocks.4.2.conv_pwl.weight": [
+   112,
+   672,
+   1,
+   1
+  ],
+  "blocks.5.0.bn1.bias": [
+   672
+  ],
+  "blocks.5.0.bn1.num_batches_tracked": [],
+  "blocks.5.0.bn1.running_mean": [
+   672
+  ],
+  "blocks.5.0.bn1.running_var": [
+   672
+  ],
+  "blocks.5.0.bn1.weight": [
+   672
+  ],
+  "blocks.5.0.bn2.bias": [
+   672
+  ],
+  "blocks.5.0.bn2.num_batches_tracked": [],
+  "blocks.5.0.bn2.running_mean": [
+   672
+  ],
+  "blocks.5.0.bn2.running_var": [
+   672
+  ],
+  "blocks.5.0.bn2.weight": [
+   672
+  ],
+  "blocks.5.0.bn3.bias": [
+   192
+  ],
+  "blocks.5.0.bn3.num_batches_tracked": [],
+  "blocks.5.0.bn3.running_mean": [
+   192
+  ],
+  "blocks.5.0.bn3.running_var": [
+   192
+  ],
+  "blocks.5.0.bn3.weight": [
+   192
+  ],
+  "blocks.5.0.conv_dw.weight": [
+   672,
+   1,
+   5,
+   5
+  ],
+  "blocks.5.0.conv_pw.weight": [
+   672,
+   112,
+   1,
+   1
+  ],
+  "blocks.5.0.conv_pwl.weight": [
+   192,
+   672,
+   1,
+   1
+  ],
+  "blocks.5.1.bn1.bias": [
+   1152
+  ],
+  "blocks.5.1.bn1.num_batches_tracked": [],
+  "blocks.5.1.bn1.running_mean": [
+   1152
+  ],
+  "blocks.5.1.bn1.running_var": [
+   1152
+  ],
+  "blocks.5.1.bn1.weight": [
+   1152
+  ],
+  "blocks.5.1.bn2.bias": [
+   1152
+  ],
+  "blocks.5.1.bn2.num_batches_tracked": [],
+  "blocks.5.1.bn2.running_mean": [
+   1152
+  ],
+  "blocks.5.1.bn2.running_var": [
+   1152
+  ],
+  "blocks.5.1.bn2.weight": [
+   1152
+  ],
+  "blocks.5.1.bn3.bias": [
+   192
+  ],
+  "blocks.5.1.bn3.num_batches_tracked": [],
+  "blocks.5.1.bn3.running_mean": [
+   192
+  ],
+  "blocks.5.1.bn3.running_var": [
+   192
+  ],
+  "blocks.5.1.bn3.weight": [
+   192
+  ],
+  "blocks.5.1.conv_dw.weight": [
+   1152,
+   1,
+   5,
+   5
+  ],
+  "blocks.5.1.conv_pw.weight": [
+   1152,
+   192,
+   1,
+   1
+  ],
+  "blocks.5.1.conv_pwl.weight": [
+   192,
+   1152,
+   1,
+   1
+  ],
+  "blocks.5.2.bn1.bias": [
+   1152
+  ],
+  "blocks.5.2.bn1.num_batches_tracked": [],
+  "blocks.5.2.bn1.running_mean": [
+   1152
+  ],
+  "blocks.5.2.bn1.running_var": [
+   1152
+  ],
+  "blocks.5.2.bn1.weight": [
+   1152
+  ],
+  "blocks.5.2.bn2.bias": [
+   1152
+  ],
+  "blocks.5.2.bn2.num_batches_tracked": [],
+  "blocks.5.2.bn2.running_mean": [
+   1152
+  ],
+  "blocks.5.2.bn2.running_var": [
+   1152
+  ],
+  "blocks.5.2.bn2.weight": [
+   1152
+  ],
+  "blocks.5.2.bn3.bias": [
+   192
+  ],
+  "blocks.5.2.bn3.num_batches_tracked": [],
+  "blocks.5.2.bn3.running_mean": [
+   192
+  ],
+  "blocks.5.2.bn3.running_var": [
+   192
+  ],
+  "blocks.5.2.bn3.weight": [
+   192
+  ],
+  "blocks.5.2.conv_dw.weight": [
+   1152,
+   1,
+   5,
+   5
+  ],
+  "blocks.5.2.conv_pw.weight": [
+   1152,
+   192,
+   1,
+   1
+  ],
+  "blocks.5.2.conv_pwl.weight": [
+   192,
+   1152,
+   1,
+   1
+  ],
+  "blocks.5.3.bn1.bias": [
+   1152
+  ],
+  "blocks.5.3.bn1.num_batches_tracked": [],
+  "blocks.5.3.bn1.running_mean": [
+   1152
+  ],
+  "blocks.5.3.bn1.running_var": [
+   1152
+  ],
+  "blocks.5.3.bn1.weight": [
+   1152
+  ],
+  "blocks.5.3.bn2.bias": [
+   1152
+  ],
+  "blocks.5.3.bn2.num_batches_tracked": [],
+  "blocks.5.3.bn2.running_mean": [
+   1152
+  ],
+  "blocks.5.3.bn2.running_var": [
+   1152
+  ],
+  "blocks.5.3.bn2.weight": [
+   1152
+  ],
+  "blocks.5.3.bn3.bias": [
+   192
+  ],
+  "blocks.5.3.bn3.num_batches_tracked": [],
+  "blocks.5.3.bn3.running_mean": [
+   192
+  ],
+  "blocks.5.3.bn3.running_var": [
+   192
+  ],
+  "blocks.5.3.bn3.weight": [
+   192
+  ],
+  "blocks.5.3.conv_dw.weight": [
+   1152,
+   1,
+   5,
+   5
+  ],
+  "blocks.5.3.conv_pw.weight": [
+   1152,
+   192,
+   1,
+   1
+  ],
+  "blocks.5.3.conv_pwl.weight": [
+   192,
+   1152,
+   1,
+   1
+  ],
+  "blocks.6.0.bn1.bias": [
+   1152
+  ],
+  "blocks.6.0.bn1.num_batches_tracked": [],
+  "blocks.6.0.bn1.running_mean": [
+   1152
+  ],
+  "blocks.6.0.bn1.running_var": [
+   1152
+  ],
+  "blocks.6.0.bn1.weight": [
+   1152
+  ],
+  "blocks.6.0.bn2.bias": [
+   1152
+  ],
+  "blocks.6.0.bn2.num_batches_tracked": [],
+  "blocks.6.0.bn2.running_mean": [
+   1152
+  ],
+  "blocks.6.0.bn2.running_var": [
+   1152
+  ],
+  "blocks.6.0.bn2.weight": [
+   1152
+  ],
+  "blocks.6.0.bn3.bias": [
+   320
+  ],
+  "blocks.6.0.bn3.num_batches_tracked": [],
+  "blocks.6.0.bn3.running_mean": [
+   320
+  ],
+  "blocks.6.0.bn3.running_var": [
+   320
+  ],
+  "blocks.6.0.bn3.weight": [
+   320
+  ],
+  "blocks.6.0.conv_dw.weight": [
+   1152,
+   1,
+   3,
+   3
+  ],
+  "blocks.6.0.conv_pw.weight": [
+   1152,
+   192,
+   1,
+   1
+  ],
+  "blocks.6.0.conv_pwl.weight": [
+   320,
+   1152,
+   1,
+   1
+  ],
+  "bn1.bias": [
+   32
+  ],
+  "bn1.num_batches_tracked": [],
+  "bn1.running_mean": [
+   32
+  ],
+  "bn1.running_var": [
+   32
+  ],
+  "bn1.weight": [
+   32
+  ],
+  "bn2.bias": [
+   1280
+  ],
+  "bn2.num_batches_tracked": [],
+  "bn2.running_mean": [
+   1280
+  ],
+  "bn2.running_var": [
+   1280
+  ],
+  "bn2.weight": [
+   1280
+  ],
+  "classifier.bias": [
+   2
+  ],
+  "classifier.weight": [
+   2,
+   1280
+  ],
+  "conv_head.weight": [
+   1280,
+   320,
+   1,
+   1
+  ],
+  "conv_stem.weight": [
+   32,
+   3,
+   3,
+   3
+  ]
+ }
+}

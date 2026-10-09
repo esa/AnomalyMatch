@@ -1,0 +1,35 @@
+anomaly_match/data_io/metadata_handler.py
+    DOC106: Method `MetadataHandler._validate_icrs_coordinates`: The option `--arg-type-hints-in-signature` is `True` but there are no argument type hints in the signature
+    DOC107: Method `MetadataHandler._validate_icrs_coordinates`: The option `--arg-type-hints-in-signature` is `True` but not all args in the signature have type hints
+    DOC503: Method `MetadataHandler._validate_icrs_coordinates` exceptions in the "Raises" section in the docstring do not match those in the function body. Raised exceptions in the docstring: ['ValueError']. Raised exceptions in the body: ['Exception', 'ValueError'].
+--------------------
+anomaly_match/datasets/AnomalyDetectionDataset.py
+    DOC106: Method `AnomalyDetectionDataset._read_and_resize_image`: The option `--arg-type-hints-in-signature` is `True` but there are no argument type hints in the signature
+    DOC107: Method `AnomalyDetectionDataset._read_and_resize_image`: The option `--arg-type-hints-in-signature` is `True` but not all args in the signature have type hints
+--------------------
+anomaly_match/datasets/augmentation/randaugment.py
+    DOC602: Class `RandAugment`: Class docstring contains more class attributes than in actual class attributes.  (Please read https://jsh9.github.io/pydoclint/checking_class_attributes.html on how to correctly document class attributes.)
+    DOC603: Class `RandAugment`: Class docstring attributes are different from actual class attributes. (Or could be other formatting issues: https://jsh9.github.io/pydoclint/violation_codes.html#notes-on-doc103 ). Arguments in the docstring but not in the actual class attributes: [augment_list: , m: , n: ]. (Please read https://jsh9.github.io/pydoclint/checking_class_attributes.html on how to correctly document class attributes.)
+--------------------
+anomaly_match/datasets/augmentation/randaugment_multispectral.py
+    DOC602: Class `MultispectralRandAugment`: Class docstring contains more class attributes than in actual class attributes.  (Please read https://jsh9.github.io/pydoclint/checking_class_attributes.html on how to correctly document class attributes.)
+    DOC603: Class `MultispectralRandAugment`: Class docstring attributes are different from actual class attributes. (Or could be other formatting issues: https://jsh9.github.io/pydoclint/violation_codes.html#notes-on-doc103 ). Arguments in the docstring but not in the actual class attributes: [augment_list: , m: , n: , num_channels: ]. (Please read https://jsh9.github.io/pydoclint/checking_class_attributes.html on how to correctly document class attributes.)
+--------------------
+anomaly_match/image_processing/transforms.py
+    DOC101: Method `NumpyToTensor.__call__`: Docstring contains fewer arguments than in function signature.
+    DOC106: Method `NumpyToTensor.__call__`: The option `--arg-type-hints-in-signature` is `True` but there are no argument type hints in the signature
+    DOC107: Method `NumpyToTensor.__call__`: The option `--arg-type-hints-in-signature` is `True` but not all args in the signature have type hints
+    DOC103: Method `NumpyToTensor.__call__`: Docstring arguments are different from function arguments. (Or could be other formatting issues: https://jsh9.github.io/pydoclint/violation_codes.html#notes-on-doc103 ). Arguments in the function signature but not in the docstring: [img: ].
+    DOC101: Method `NumpyRandomHorizontalFlip.__call__`: Docstring contains fewer arguments than in function signature.
+    DOC106: Method `NumpyRandomHorizontalFlip.__call__`: The option `--arg-type-hints-in-signature` is `True` but there are no argument type hints in the signature
+    DOC107: Method `NumpyRandomHorizontalFlip.__call__`: The option `--arg-type-hints-in-signature` is `True` but not all args in the signature have type hints
+    DOC103: Method `NumpyRandomHorizontalFlip.__call__`: Docstring arguments are different from function arguments. (Or could be other formatting issues: https://jsh9.github.io/pydoclint/violation_codes.html#notes-on-doc103 ). Arguments in the function signature but not in the docstring: [img: ].
+    DOC101: Method `NumpyRandomTranslate.__call__`: Docstring contains fewer arguments than in function signature.
+    DOC106: Method `NumpyRandomTranslate.__call__`: The option `--arg-type-hints-in-signature` is `True` but there are no argument type hints in the signature
+    DOC107: Method `NumpyRandomTranslate.__call__`: The option `--arg-type-hints-in-signature` is `True` but not all args in the signature have type hints
+    DOC103: Method `NumpyRandomTranslate.__call__`: Docstring arguments are different from function arguments. (Or could be other formatting issues: https://jsh9.github.io/pydoclint/violation_codes.html#notes-on-doc103 ). Arguments in the function signature but not in the docstring: [img: ].
+--------------------
+anomaly_match/pipeline/session.py
+    DOC601: Class `Session`: Class docstring contains fewer class attributes than actual class attributes.  (Please read https://jsh9.github.io/pydoclint/checking_class_attributes.html on how to correctly document class attributes.)
+    DOC603: Class `Session`: Class docstring attributes are different from actual class attributes. (Or could be other formatting issues: https://jsh9.github.io/pydoclint/violation_codes.html#notes-on-doc103 ). Attributes in the class definition but not in the docstring: [active_learning_df: , cached_image_normalisation_enum: , filenames: , img_catalog: , labeled_train_dataset: , model: FixMatch, scores: , test_dataset: , unlabeled_train_dataset: ]. (Please read https://jsh9.github.io/pydoclint/checking_class_attributes.html on how to correctly document class attributes.)
+--------------------

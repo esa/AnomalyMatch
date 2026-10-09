@@ -4,23 +4,32 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+"""Display transform functions for image visualization."""
+
+from __future__ import annotations
+
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from skimage.util import img_as_ubyte
 
 
-def prepare_for_display(img, rgb_mapping=None):
+def prepare_for_display(img: np.ndarray, rgb_mapping: list[int] | None = None) -> np.ndarray:
     """Prepare N-channel image for RGB display.
 
     Converts images with arbitrary channel counts to 3-channel RGB for display.
 
     Args:
-        img (np.ndarray): Input image array with shape (H, W, C)
-        rgb_mapping (list, optional): List of 3 channel indices to use as RGB.
+        img: Input image array with shape (H, W, C).
+        rgb_mapping: List of 3 channel indices to use as RGB.
             Defaults to [0, 1, 2] (first 3 channels).
 
     Returns:
-        np.ndarray: 3-channel RGB image with shape (H, W, 3) and dtype uint8
+        np.ndarray: 3-channel RGB image with shape (H, W, 3) and dtype uint8.
+
+    Raises:
+        ValueError: If input is not a numpy array or PIL Image, or if
+            ``rgb_mapping`` does not have exactly 3 elements or contains
+            indices that exceed the channel count.
     """
     # Handle different input formats
     if isinstance(img, Image.Image):
@@ -63,19 +72,21 @@ def prepare_for_display(img, rgb_mapping=None):
     # Ensure uint8 output
     if result.dtype != np.uint8:
         if result.max() <= 1.0:
-            result = (result * 255).astype(np.uint8)
+            result = (result * 255).clip(0, 255).astype(np.uint8)
         else:
             result = np.clip(result, 0, 255).astype(np.uint8)
 
     return result
 
 
-def display_image_normalisation(img, rgb_mapping=None):
+def display_image_normalisation(
+    img: np.ndarray, rgb_mapping: list[int] | None = None
+) -> Image.Image:
     """Normalises the image for display.
 
     Args:
-        img (np.ndarray): The input image array.
-        rgb_mapping (list, optional): For N-channel images, which channels to display as RGB.
+        img: The input image array.
+        rgb_mapping: For N-channel images, which channels to display as RGB.
 
     Returns:
         PIL.Image.Image: The normalised image.
@@ -103,30 +114,30 @@ def display_image_normalisation(img, rgb_mapping=None):
 
 # from utility_functions
 def apply_transforms_ui(
-    img,
-    invert,
-    brightness,
-    contrast,
-    unsharp_mask_applied,
-    show_r=True,
-    show_g=True,
-    show_b=True,
-    channel_visibility=None,
-):
-    """
-    Applies the requested transformations to the given PIL Image.
+    img: Image.Image,
+    invert: bool,
+    brightness: float,
+    contrast: float,
+    unsharp_mask_applied: bool,
+    show_r: bool = True,
+    show_g: bool = True,
+    show_b: bool = True,
+) -> Image.Image:
+    """Applies the requested transformations to the given PIL Image.
+
+    The image is always 3-channel RGB by the time it reaches here
+    (:func:`display_image_normalisation` collapses any band count to RGB), so
+    channel toggling is expressed purely as the three ``show_*`` flags.
 
     Args:
-        img (PIL.Image.Image): The original image.
-        invert (bool): Whether to invert colors.
-        brightness (float): Brightness factor.
-        contrast (float): Contrast factor.
-        unsharp_mask_applied (bool): Whether to apply an unsharp mask.
-        show_r (bool): Whether to show the red channel (for RGB mode).
-        show_g (bool): Whether to show the green channel (for RGB mode).
-        show_b (bool): Whether to show the blue channel (for RGB mode).
-        channel_visibility (list, optional): For N-channel mode, list of booleans
-            indicating which channels to show. If provided, overrides show_r/g/b.
+        img: The original image.
+        invert: Whether to invert colors.
+        brightness: Brightness factor.
+        contrast: Contrast factor.
+        unsharp_mask_applied: Whether to apply an unsharp mask.
+        show_r: Whether to show the red channel.
+        show_g: Whether to show the green channel.
+        show_b: Whether to show the blue channel.
 
     Returns:
         PIL.Image.Image: The transformed image.
@@ -149,20 +160,8 @@ def apply_transforms_ui(
     if unsharp_mask_applied:
         img = img.filter(ImageFilter.UnsharpMask())
 
-    # Apply channel toggling
-    # Determine which channels to show
-    if channel_visibility is not None:
-        # N-channel mode: use first 3 values for RGB display
-        channels_mask = (
-            channel_visibility[:3] if len(channel_visibility) >= 3 else channel_visibility
-        )
-        # Pad with True if less than 3 values
-        while len(channels_mask) < 3:
-            channels_mask.append(True)
-    else:
-        # RGB mode: use individual channel flags
-        channels_mask = [show_r, show_g, show_b]
-
+    # Apply channel toggling on the displayed RGB channels.
+    channels_mask = [show_r, show_g, show_b]
     if not all(channels_mask):
         # Convert PIL image to numpy array
         img_array = np.array(img)

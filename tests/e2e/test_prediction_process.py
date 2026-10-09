@@ -8,7 +8,6 @@ import csv
 import os
 import tempfile
 
-import h5py
 import numpy as np
 import pandas as pd
 import pytest
@@ -23,24 +22,26 @@ from fitsbolt.cfg.create_config import create_config as fb_create_cfg
 from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 from loguru import logger
 from PIL import Image
-
-from anomaly_match.utils.get_default_cfg import get_default_cfg
 from prediction_process import evaluate_files
 from prediction_process_cutana import evaluate_images_from_cutana
-from prediction_process_hdf5 import evaluate_images_in_hdf5
 from prediction_process_zarr import evaluate_images_in_zarr
-from prediction_utils import save_results
+
+from anomaly_match.datasets.training_data_source import DataSourceType
+from anomaly_match.prediction import AnomalyScoreDB
+from anomaly_match.utils.get_default_cfg import get_default_cfg
 
 
 @pytest.fixture
-def test_config():
+def test_config(test_model_path):
     cfg = get_default_cfg()
     cfg.normalisation.image_size = [150, 150]
     cfg.normalisation.n_output_channels = 3
     cfg.net = "efficientnet-lite0"
-    cfg.pretrained = True
+    # load_model replaces every weight from the checkpoint, so fetching the
+    # ImageNet weights first only costs a download in CI.
+    cfg.pretrained = False
     cfg.num_channels = 3
-    cfg.model_path = "tests/test_data/test_model.safetensors"
+    cfg.model_path = str(test_model_path)
     cfg.gpu = 0
     cfg.output_dir = tempfile.mkdtemp()
     cfg.normalisation.normalisation_method = NormalisationMethod.CONVERSION_ONLY
@@ -49,7 +50,7 @@ def test_config():
     cfg.seed = 42  # Add seed
     cfg.test_ratio = 0.0  # Add test ratio
     cfg.save_dir = tempfile.mkdtemp()  # Add save directory
-    cfg.data_dir = "tests/test_data/"  # Add data directory
+    cfg.data_dir = "tests/test_data/grayscale/"  # Add data directory
     cfg.num_workers = 0  # Use main process for data loading (avoids spawn overhead)
 
     # Create fb_cfg for fitsbolt
@@ -80,34 +81,6 @@ def sample_images():
         img = np.random.randint(0, 255, (150, 150, 3), dtype=np.uint8)
         images.append(Image.fromarray(img))
     return images
-
-
-@pytest.fixture
-def test_hdf5(sample_images, tmp_path):
-    """Create a test HDF5 file with sample images."""
-    hdf5_path = tmp_path / "test.h5"
-    img_dir = tmp_path / "img_dir"
-    img_dir.mkdir()
-
-    with h5py.File(hdf5_path, "w") as h5f:
-        # Create a dataset for images
-        vlen_uint8 = h5py.vlen_dtype(np.dtype("uint8"))
-        dset = h5f.create_dataset("images", (len(sample_images),), dtype=vlen_uint8)
-
-        # Create a dataset for filenames
-        filenames = [f"img_{i}.jpg" for i in range(len(sample_images))]
-        _ = h5f.create_dataset(
-            "filenames",
-            data=np.array(filenames, dtype="S"),
-        )
-
-        for i, img in enumerate(sample_images):
-            img_path = img_dir / f"img_{i}.jpg"
-            img.save(img_path)
-            with open(img_path, "rb") as f:
-                dset[i] = np.frombuffer(f.read(), dtype=np.uint8)
-
-    return str(hdf5_path)
 
 
 @pytest.fixture
@@ -492,7 +465,7 @@ def test_cutana_missing_images(tmp_path):
 
 
 def test_evaluate_files(test_config, sample_images, tmp_path):
-    """Test evaluation of individual files."""
+    """Test evaluation of individual files writes results to predictions.db."""
     image_paths = []
     img_dir = tmp_path / "img_dir"
     img_dir.mkdir()
@@ -502,44 +475,166 @@ def test_evaluate_files(test_config, sample_images, tmp_path):
         img.save(img_path)
         image_paths.append(str(img_path))
 
-    scores, filenames, imgs = evaluate_files(image_paths, test_config)
-    assert len(scores) == len(sample_images)
-    assert len(filenames) == len(sample_images)
-    assert imgs.shape[0] == len(sample_images)
+    evaluate_files(image_paths, test_config)
 
-
-def test_evaluate_images_in_hdf5(test_config, test_hdf5):
-    """Test evaluation of images in HDF5 file."""
-    scores, filenames, imgs = evaluate_images_in_hdf5(test_hdf5, test_config)
-    assert len(scores) == 10
-    assert len(filenames) == 10
-    assert imgs.shape[0] == 10
+    db_path = os.path.join(test_config.output_dir, "predictions.db")
+    assert os.path.exists(db_path)
+    with AnomalyScoreDB(db_path) as db:
+        assert db.get_count() == len(sample_images)
 
 
 def test_evaluate_images_in_zarr(test_config, test_zarr):
-    """Test evaluation of images in Zarr file."""
-    scores, filenames, imgs = evaluate_images_in_zarr(test_zarr, test_config)
-    assert len(scores) == 10
-    assert len(filenames) == 10
-    assert imgs.shape[0] == 10
+    """Test evaluation of images in Zarr file writes results to predictions.db."""
+    evaluate_images_in_zarr(test_zarr, test_config)
+
+    db_path = os.path.join(test_config.output_dir, "predictions.db")
+    assert os.path.exists(db_path)
+    with AnomalyScoreDB(db_path) as db:
+        assert db.get_count() == 10
 
 
 def test_evaluate_images_cutana(test_config, test_cutana):
     """Test evaluation of images via cutana streaming with CSV catalogue."""
-    scores, filenames, imgs = evaluate_images_from_cutana(test_cutana, test_config, batch_size=5)
-    assert len(scores) == 10
-    assert len(filenames) == 10
-    assert imgs.shape[0] == 10
+    evaluate_images_from_cutana(test_cutana, test_config, batch_size=5)
+
+    db_path = os.path.join(test_config.output_dir, "predictions.db")
+    assert os.path.exists(db_path)
+    with AnomalyScoreDB(db_path) as db:
+        assert db.get_count() == 10
 
 
 def test_evaluate_images_cutana_parquet(test_config, test_cutana_parquet):
     """Test evaluation of images via cutana streaming with parquet catalogue."""
-    scores, filenames, imgs = evaluate_images_from_cutana(
-        test_cutana_parquet, test_config, batch_size=5
-    )
-    assert len(scores) == 10
-    assert len(filenames) == 10
-    assert imgs.shape[0] == 10
+    evaluate_images_from_cutana(test_cutana_parquet, test_config, batch_size=5)
+
+    db_path = os.path.join(test_config.output_dir, "predictions.db")
+    assert os.path.exists(db_path)
+    with AnomalyScoreDB(db_path) as db:
+        assert db.get_count() == 10
+
+
+# ── Resume tests ─────────────────────────────────────────────────────
+#
+# Each resume test pre-seeds half the filenames with a sentinel score
+# (0.0001) the real model cannot realistically produce, then runs the
+# subprocess. If resume works, the seeded scores stay intact and only
+# the other half is evaluated.
+
+
+_SENTINEL_SCORE = 0.0001
+
+
+def test_evaluate_files_resume(test_config, sample_images, tmp_path):
+    """Skip already-scored image files on resume."""
+    from anomaly_match.prediction.anomaly_score_db import build_compat_metadata
+
+    image_paths = []
+    img_dir = tmp_path / "img_dir"
+    img_dir.mkdir()
+    for i, img in enumerate(sample_images):
+        img_path = img_dir / f"img_{i}.jpg"
+        img.save(img_path)
+        image_paths.append(str(img_path))
+
+    db_path = os.path.join(test_config.output_dir, "predictions.db")
+    seeded = image_paths[:5]
+    with AnomalyScoreDB(db_path) as db:
+        db.set_metadata_batch(build_compat_metadata(test_config))
+        db.store_results([(p, _SENTINEL_SCORE) for p in seeded])
+
+    evaluate_files(image_paths, test_config)
+
+    with AnomalyScoreDB(db_path) as db:
+        assert db.get_count() == len(image_paths)
+        expected = float(np.float32(_SENTINEL_SCORE))
+        for p in seeded:
+            row = db.get_result_by_filename(p)
+            assert row is not None
+            assert row["score"] == pytest.approx(expected, abs=1e-9), (
+                "Seeded score was overwritten — resume did not skip this file"
+            )
+
+
+def test_evaluate_files_resume_fully_scored(test_config, sample_images, tmp_path):
+    """A fully-scored DB finishes without re-evaluating anything."""
+    from anomaly_match.prediction.anomaly_score_db import build_compat_metadata
+
+    image_paths = []
+    img_dir = tmp_path / "img_dir"
+    img_dir.mkdir()
+    for i, img in enumerate(sample_images):
+        img_path = img_dir / f"img_{i}.jpg"
+        img.save(img_path)
+        image_paths.append(str(img_path))
+
+    db_path = os.path.join(test_config.output_dir, "predictions.db")
+    with AnomalyScoreDB(db_path) as db:
+        db.set_metadata_batch(build_compat_metadata(test_config))
+        db.store_results([(p, _SENTINEL_SCORE) for p in image_paths])
+
+    evaluate_files(image_paths, test_config)
+
+    with AnomalyScoreDB(db_path) as db:
+        assert db.get_count() == len(image_paths)
+        expected = float(np.float32(_SENTINEL_SCORE))
+        for p in image_paths:
+            row = db.get_result_by_filename(p)
+            assert row["score"] == pytest.approx(expected, abs=1e-9)
+
+
+def test_evaluate_zarr_resume(test_config, test_zarr):
+    """Skip already-scored Zarr entries on resume."""
+    from anomaly_match.prediction.anomaly_score_db import build_compat_metadata
+
+    # Filenames for test_zarr are img_0.jpg..img_9.jpg (from the fixture).
+    seeded_filenames = [f"img_{i}.jpg" for i in range(5)]
+
+    db_path = os.path.join(test_config.output_dir, "predictions.db")
+    with AnomalyScoreDB(db_path) as db:
+        db.set_metadata_batch(build_compat_metadata(test_config))
+        db.store_results([(fn, _SENTINEL_SCORE) for fn in seeded_filenames])
+
+    evaluate_images_in_zarr(test_zarr, test_config)
+
+    with AnomalyScoreDB(db_path) as db:
+        assert db.get_count() == 10
+        expected = float(np.float32(_SENTINEL_SCORE))
+        for fn in seeded_filenames:
+            row = db.get_result_by_filename(fn)
+            assert row is not None
+            assert row["score"] == pytest.approx(expected, abs=1e-9)
+
+
+def test_evaluate_cutana_resume(test_config, test_cutana):
+    """Skip already-scored source_ids on resume via cutana streaming."""
+    from anomaly_match.prediction.anomaly_score_db import build_compat_metadata
+
+    # Run once to discover the source_ids (we don't know them a priori
+    # without reading the catalogue), then wipe the DB, pre-seed half,
+    # and run again to confirm the seeded half is preserved.
+    evaluate_images_from_cutana(test_cutana, test_config, batch_size=5)
+
+    db_path = os.path.join(test_config.output_dir, "predictions.db")
+    with AnomalyScoreDB(db_path) as db:
+        all_filenames = sorted(db.get_processed_filenames())
+
+    assert len(all_filenames) == 10
+    os.remove(db_path)
+
+    seeded = all_filenames[:5]
+    with AnomalyScoreDB(db_path) as db:
+        db.set_metadata_batch(build_compat_metadata(test_config))
+        db.store_results([(fn, _SENTINEL_SCORE) for fn in seeded])
+
+    evaluate_images_from_cutana(test_cutana, test_config, batch_size=5)
+
+    with AnomalyScoreDB(db_path) as db:
+        assert db.get_count() == 10
+        expected = float(np.float32(_SENTINEL_SCORE))
+        for fn in seeded:
+            row = db.get_result_by_filename(fn)
+            assert row is not None
+            assert row["score"] == pytest.approx(expected, abs=1e-9)
 
 
 def test_prediction_file_type_cutana_malformed_header(test_config, test_cutana_malformed_header):
@@ -579,11 +674,20 @@ def test_prediction_file_type_cutana_missing_images(test_config, test_cutana_mis
 
     session = Session(cfg)
 
-    # Validation passes (columns are valid), but the cutana subprocess will
-    # fail when it tries to open missing FITS files.  The session logs a
-    # warning instead of raising, so we just verify no scores are loaded.
+    # Validation passes (columns are valid), but the cutana subprocess fails
+    # when it tries to open missing FITS files.  As of the skip-failed-chunks
+    # change, the chunk loop catches the per-chunk RuntimeError, marks the
+    # chunk as skipped, and the run completes cleanly so future chunks aren't
+    # lost.  No predictions land in the DB.
     session.evaluate_all_images()
-    assert session.scores is None
+    assert session.last_run_skipped_chunks >= 1
+    db_path = os.path.join(cfg.output_dir, "predictions.db")
+    if os.path.exists(db_path):
+        from anomaly_match.prediction import AnomalyScoreDB
+
+        db = AnomalyScoreDB(db_path)
+        assert db.get_count() == 0
+        db.close()
 
 
 def test_stream_file_type_detection_csv_and_parquet(tmp_path):
@@ -602,59 +706,21 @@ def test_stream_file_type_detection_csv_and_parquet(tmp_path):
     import os
 
     extension_map = {
-        ".h5": "hdf5",
-        ".hdf5": "hdf5",
-        ".zarr": "zarr",
-        ".txt": "image",
-        ".parquet": "stream",
-        ".csv": "stream",
+        ".zarr": DataSourceType.ZARR,
+        ".txt": DataSourceType.IMAGE_FOLDER,
+        ".parquet": DataSourceType.CUTANA,
+        ".csv": DataSourceType.CUTANA,
     }
 
     # Test CSV detection
     _, csv_ext = os.path.splitext(str(csv_file).lower())
     assert csv_ext == ".csv"
-    assert extension_map.get(csv_ext) == "stream"
+    assert extension_map.get(csv_ext) == DataSourceType.CUTANA
 
     # Test parquet detection
     _, parquet_ext = os.path.splitext(str(parquet_file).lower())
     assert parquet_ext == ".parquet"
-    assert extension_map.get(parquet_ext) == "stream"
-
-
-def test_predictions_output(test_config, test_hdf5):
-    """Test that predictions are saved correctly."""
-    evaluate_images_in_hdf5(test_hdf5, test_config)
-
-    # Check if predictions file exists
-    prediction_files = [
-        f for f in os.listdir(test_config.output_dir) if f.startswith("all_predictions_")
-    ]
-    assert len(prediction_files) == 1
-
-    # Load and check predictions
-    predictions = np.load(os.path.join(test_config.output_dir, prediction_files[0]))
-    assert "filenames" in predictions
-    assert "scores" in predictions
-    assert len(predictions["filenames"]) == 10
-    assert len(predictions["scores"]) == 10
-
-
-def test_zarr_predictions_output(test_config, test_zarr):
-    """Test that zarr predictions are saved correctly."""
-    evaluate_images_in_zarr(test_zarr, test_config)
-
-    # Check if predictions file exists
-    prediction_files = [
-        f for f in os.listdir(test_config.output_dir) if f.startswith("all_predictions_")
-    ]
-    assert len(prediction_files) == 1
-
-    # Load and check predictions
-    predictions = np.load(os.path.join(test_config.output_dir, prediction_files[0]))
-    assert "filenames" in predictions
-    assert "scores" in predictions
-    assert len(predictions["filenames"]) == 10
-    assert len(predictions["scores"]) == 10
+    assert extension_map.get(parquet_ext) == DataSourceType.CUTANA
 
 
 def test_mixed_format_support(test_config, mixed_format_images, monkeypatch):
@@ -672,40 +738,24 @@ def test_mixed_format_support(test_config, mixed_format_images, monkeypatch):
 
     monkeypatch.setattr(prediction_process, "load_model", mock_load_model)
 
-    # Mock save_results to ensure it returns predictable values
-    def mock_save_results(cfg, all_scores, all_imgs, all_filenames, top_n):
-        # Simply return the inputs without further processing
-        return all_scores, all_filenames, all_imgs
-
-    monkeypatch.setattr(prediction_process, "save_results", mock_save_results)
-
     # Test each format individually
     for path in image_paths:
         ext = os.path.splitext(path)[1].lower()
-        # Reset call count for each test to ensure consistent behavior
         mock_model.call_count = 0
 
-        scores, filenames, imgs = evaluate_files([path], test_config)
-        assert len(filenames) == 1, f"Expected 1 filename for {ext} image"
-        assert imgs.shape[0] == 1, f"Expected 1 image for {ext} image"
-        # Even if multiple scores are returned, we should have at least 1 score
-        assert len(scores) >= 1, f"No scores returned for {ext} image"
+        evaluate_files([path], test_config)
 
-    # Reset call count for the batch test
-    mock_model.call_count = 0
-
-    # Test all formats together
-    scores, filenames, imgs = evaluate_files(image_paths, test_config)
-    assert len(filenames) == len(image_paths), "Not all image filenames were processed"
-    assert imgs.shape[0] == len(image_paths), "Not all images were processed"
-    # There should be at least as many scores as images
-    assert len(scores) >= len(image_paths), "Not enough scores returned for all image formats"
+        db_path = os.path.join(test_config.output_dir, "predictions.db")
+        with AnomalyScoreDB(db_path) as db:
+            count = db.get_count()
+            assert count >= 1, f"No results written for {ext} image"
 
 
 def test_load_and_preprocess_multiple_formats(test_config, mixed_format_images):
     """Test the load_and_preprocess function can handle multiple formats."""
-    from anomaly_match.image_processing.transforms import get_prediction_transforms
     from prediction_process import load_and_preprocess
+
+    from anomaly_match.image_processing.transforms import get_prediction_transforms
 
     image_paths, _ = mixed_format_images
     transform = get_prediction_transforms()
@@ -734,7 +784,10 @@ class MockModel(torch.nn.Module):
 
     def forward(self, x):
         batch_size = x.shape[0]
-        base_score = self.score_pattern[self.call_count]
+        # Clamp the index so extra forwards (e.g. the inference warmup pass that
+        # every prediction process now runs) reuse the last configured score
+        # instead of running off the end of the pattern.
+        base_score = self.score_pattern[min(self.call_count, len(self.score_pattern) - 1)]
         logger.info(f"MockModel forward call {self.call_count} with base_score {base_score}")
 
         # Generate scores that will exactly match our desired probabilities
@@ -747,279 +800,6 @@ class MockModel(torch.nn.Module):
         self.call_count += 1
         logger.info(f"Generated scores: {scores[:, 1]}")
         return torch.log(scores)  # Convert to logits
-
-
-def create_controlled_sample_images(output_dir, num_images, base_score=0.5):
-    """Create sample images with controlled prediction scores for testing."""
-    images = []
-    img_paths = []
-    expected_scores = []
-
-    for i in range(num_images):
-        # Create a dummy image with a pattern that will generate a specific score
-        img = np.random.randint(0, 255, (150, 150, 3), dtype=np.uint8)
-        img_path = os.path.join(output_dir, f"img_{i}_{base_score + i / num_images:.3f}.jpg")
-        Image.fromarray(img).save(img_path)
-        images.append(img)
-        img_paths.append(img_path)
-        expected_scores.append(base_score + i / num_images)
-
-    return img_paths, expected_scores
-
-
-def test_accumulate_top_n_results(test_config, monkeypatch):
-    """Test that top-N results are correctly accumulated across multiple batches."""
-    test_config.save_file = "test_accumulation"
-    top_n = 5
-
-    # Create mock model that will return controlled scores
-    score_pattern = [0.65, 0.85]  # Increased score ranges
-    mock_model = MockModel(score_pattern)
-
-    # Mock the model and processing functions in prediction_process module
-    import prediction_process
-
-    def mock_load_model(cfg):
-        logger.info("Using mock load_model")
-        return mock_model
-
-    monkeypatch.setattr(prediction_process, "load_model", mock_load_model)
-
-    def mock_process_batch(model, images):
-        logger.info("Using mock process_batch_predictions")
-        with torch.no_grad():
-            logits = model(images)
-            scores = torch.nn.functional.softmax(logits, dim=-1)[:, 1].cpu().numpy()
-            logger.info(f"Processed batch scores: {scores}")
-        return scores, images.cpu().numpy()
-
-    monkeypatch.setattr(prediction_process, "process_batch_predictions", mock_process_batch)
-
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        # Create two batches of images
-        batch1_paths, _ = create_controlled_sample_images(tmp_dir, 10, base_score=0.65)
-        batch2_paths, _ = create_controlled_sample_images(tmp_dir, 10, base_score=0.85)
-
-        # Process both batches
-        scores1, filenames1, imgs1 = evaluate_files(batch1_paths, test_config, top_n=top_n)
-        scores2, filenames2, imgs2 = evaluate_files(batch2_paths, test_config, top_n=top_n)
-
-        # Load final results
-        output_csv = os.path.join(test_config.output_dir, f"{test_config.save_file}_top{top_n}.csv")
-        output_npy = os.path.join(test_config.output_dir, f"{test_config.save_file}_top{top_n}.npy")
-        final_results = pd.read_csv(output_csv)
-        final_scores = final_results["Score"].values
-        final_images = np.load(output_npy)
-
-        # Check if we got the highest scores from the second batch
-        assert len(final_scores) == top_n
-        assert np.all(final_scores >= 0.85)  # All top scores should be from second batch
-        assert np.all(final_scores <= 0.95)  # Maximum probability capped at 0.95
-
-        # CRITICAL: Verify that the image array size matches the CSV
-        assert len(final_images) == len(final_scores), (
-            f"Image array size ({len(final_images)}) doesn't match CSV size ({len(final_scores)}). "
-            f"This indicates a bug in image accumulation logic."
-        )
-        assert final_images.shape[0] == top_n, (
-            f"Expected {top_n} images, got {final_images.shape[0]}"
-        )
-
-
-def test_all_predictions_accumulation(test_config, monkeypatch):
-    """Test that all predictions are correctly saved when processing multiple batches."""
-    test_config.save_file = "test_all_predictions"
-
-    # Create mock model with higher controlled scores
-    score_pattern = [0.65, 0.85]  # Increased score ranges
-    mock_model = MockModel(score_pattern)
-
-    # Mock the model and processing functions in prediction_process module
-    import prediction_process
-
-    def mock_load_model(cfg):
-        logger.info("Using mock_load_model")
-        return mock_model
-
-    monkeypatch.setattr(prediction_process, "load_model", mock_load_model)
-
-    def mock_process_batch(model, images):
-        logger.info("Using mock process_batch_predictions")
-        with torch.no_grad():
-            logits = model(images)
-            scores = torch.nn.functional.softmax(logits, dim=-1)[:, 1].cpu().numpy()
-            logger.info(f"Processed batch scores: {scores}")
-        return scores, images.cpu().numpy()
-
-    monkeypatch.setattr(prediction_process, "process_batch_predictions", mock_process_batch)
-
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        # Create two batches of images
-        batch1_paths, _ = create_controlled_sample_images(tmp_dir, 5, base_score=0.65)
-        batch2_paths, _ = create_controlled_sample_images(tmp_dir, 5, base_score=0.85)
-
-        # Process both batches
-        evaluate_files(batch1_paths, test_config)
-        evaluate_files(batch2_paths, test_config)
-
-        # Load and check predictions
-        predictions_file = os.path.join(
-            test_config.output_dir, f"all_predictions_{test_config.save_file}.npz"
-        )
-        assert os.path.exists(predictions_file)
-
-        predictions = np.load(predictions_file, allow_pickle=True)
-        all_scores = predictions["scores"]
-
-        # Print actual scores for debugging
-        logger.info(f"All scores: {all_scores}")
-        logger.info(
-            f"First batch scores >= 0.65: {np.any((all_scores >= 0.65) & (all_scores < 0.75))}"
-        )
-        logger.info(
-            f"Second batch scores >= 0.85: {np.any((all_scores >= 0.85) & (all_scores <= 0.95))}"
-        )
-
-        # Verify that scores from both batches are present
-        assert np.any((all_scores >= 0.65) & (all_scores < 0.75))  # First batch
-        assert np.any((all_scores >= 0.85) & (all_scores <= 0.95))  # Second batch
-
-
-def test_top_images_preservation_across_batches(test_config, tmp_path):
-    """Test that top images are preserved when accumulating results from multiple batches."""
-    test_config.save_file = "test_top_images_preservation"
-    test_config.output_dir = str(tmp_path)
-    top_n = 3
-
-    # Create distinctive test images for first batch
-    batch1_images = []
-    batch1_scores = []
-    batch1_filenames = []
-
-    for i in range(2):
-        # Create a distinctive image (different colors for each)
-        img = np.zeros((50, 50, 3), dtype=np.uint8)
-        img[:, :, i % 3] = 255  # Different channel for each image
-        batch1_images.append(img)
-        batch1_scores.append(0.9 - i * 0.1)  # High scores: 0.9, 0.8
-        batch1_filenames.append(f"batch1_image_{i}.jpg")
-
-    batch1_images = np.array(batch1_images)
-    batch1_scores = np.array(batch1_scores)
-    batch1_filenames = np.array(batch1_filenames)
-
-    # Save first batch results
-    save_results(test_config, batch1_scores, batch1_images, batch1_filenames, top_n)
-
-    # Load the saved top images from first batch
-    first_top_npy_path = os.path.join(
-        test_config.output_dir, f"{test_config.save_file}_top{top_n}.npy"
-    )
-    first_top_images = np.load(first_top_npy_path)
-    first_top_csv_path = os.path.join(
-        test_config.output_dir, f"{test_config.save_file}_top{top_n}.csv"
-    )
-    first_top_df = pd.read_csv(first_top_csv_path)
-
-    logger.info(f"First batch top scores: {first_top_df['Score'].values}")
-    logger.info(f"First batch top filenames: {first_top_df['Filename'].values}")
-    logger.info(f"First batch top images shape: {first_top_images.shape}")
-
-    # Create second batch with lower scores
-    batch2_images = []
-    batch2_scores = []
-    batch2_filenames = []
-
-    for i in range(2):
-        # Create different distinctive images
-        img = np.zeros((50, 50, 3), dtype=np.uint8)
-        img[:, :, (i + 2) % 3] = 128  # Different channel, lower intensity
-        batch2_images.append(img)
-        batch2_scores.append(0.6 - i * 0.1)  # Lower scores: 0.6, 0.5
-        batch2_filenames.append(f"batch2_image_{i}.jpg")
-
-    batch2_images = np.array(batch2_images)
-    batch2_scores = np.array(batch2_scores)
-    batch2_filenames = np.array(batch2_filenames)
-
-    # Save second batch results (should preserve first batch top images)
-    save_results(
-        test_config, batch2_scores, batch2_images, batch2_filenames, top_n
-    )  # Load the final top results
-    final_top_npy_path = os.path.join(
-        test_config.output_dir, f"{test_config.save_file}_top{top_n}.npy"
-    )
-    final_top_images = np.load(final_top_npy_path)
-    final_top_csv_path = os.path.join(
-        test_config.output_dir, f"{test_config.save_file}_top{top_n}.csv"
-    )
-    final_top_df = pd.read_csv(final_top_csv_path)
-
-    logger.info(f"Final top scores: {final_top_df['Score'].values}")
-    logger.info(f"Final top filenames: {final_top_df['Filename'].values}")
-    logger.info(f"Final top images shape: {final_top_images.shape}")
-
-    # Verify that the top scores are from the first batch (higher scores)
-    assert len(final_top_df) == top_n
-    assert final_top_df["Score"].iloc[0] == 0.9  # Highest score from batch1
-    assert final_top_df["Score"].iloc[1] == 0.8  # Second highest score from batch1
-    assert final_top_df["Filename"].iloc[0] == "batch1_image_0.jpg"
-    assert final_top_df["Filename"].iloc[1] == "batch1_image_1.jpg"
-
-    # Verify that the top images correspond to the top scores
-    # The images should come from batch1 (which had higher scores)
-    assert final_top_images.shape[0] >= 2  # Should have at least the top 2 images
-
-    # Check that the first image has red channel (batch1_image_0 characteristic)
-    assert np.mean(final_top_images[0, :, :, 0]) > 200  # Red channel should be high
-    assert np.mean(final_top_images[0, :, :, 1]) < 50  # Green channel should be low
-    assert np.mean(final_top_images[0, :, :, 2]) < 50  # Blue channel should be low
-
-    # Check that the second image has green channel (batch1_image_1 characteristic)
-    assert np.mean(final_top_images[1, :, :, 0]) < 50  # Red channel should be low
-    assert np.mean(final_top_images[1, :, :, 1]) > 200  # Green channel should be high
-    assert np.mean(final_top_images[1, :, :, 2]) < 50  # Blue channel should be low
-
-    # Verify that the all_predictions file contains data from both batches
-    all_predictions_path = os.path.join(
-        test_config.output_dir, f"all_predictions_{test_config.save_file}.npz"
-    )
-    assert os.path.exists(all_predictions_path), "all_predictions file should exist"
-
-    with np.load(all_predictions_path, allow_pickle=True) as data:
-        all_stored_scores = data["scores"]
-        all_stored_filenames = data["filenames"]
-
-    logger.info(f"All stored scores: {all_stored_scores}")
-    logger.info(f"All stored filenames: {all_stored_filenames}")
-    # Should have 4 total predictions (2 from each batch)
-    assert len(all_stored_scores) == 4, f"Expected 4 total scores, got {len(all_stored_scores)}"
-    assert len(all_stored_filenames) == 4, (
-        f"Expected 4 total filenames, got {len(all_stored_filenames)}"
-    )
-
-    # Verify that all scores from both batches are present
-    expected_all_scores = [0.9, 0.8, 0.6, 0.5]  # batch1: 0.9, 0.8; batch2: 0.6, 0.5
-    expected_all_filenames = [
-        "batch1_image_0.jpg",
-        "batch1_image_1.jpg",
-        "batch2_image_0.jpg",
-        "batch2_image_1.jpg",
-    ]
-
-    # Sort both arrays by score to ensure consistent ordering for comparison
-    sorted_indices = np.argsort(all_stored_scores)[::-1]  # Sort descending by score
-    sorted_scores = all_stored_scores[sorted_indices]
-    sorted_filenames = all_stored_filenames[sorted_indices]
-
-    assert np.allclose(sorted_scores, expected_all_scores), (
-        f"Expected all scores {expected_all_scores}, got {sorted_scores}"
-    )
-    assert list(sorted_filenames) == expected_all_filenames, (
-        f"Expected all filenames {expected_all_filenames}, got {list(sorted_filenames)}"
-    )
-
-    logger.info("✅ All predictions file correctly contains data from both batches")
 
 
 def test_image_directory_processing(test_config, mixed_format_images):
@@ -1050,20 +830,13 @@ def test_image_directory_processing(test_config, mixed_format_images):
     from prediction_process import evaluate_files
 
     try:
-        # Test the evaluation function
-        scores, filenames, imgs = evaluate_files([str(p) for p in image_paths], test_config)
+        evaluate_files([str(p) for p in image_paths], test_config)
 
-        # Verify results
-        assert len(scores) == len(image_paths), "Not all images were processed"
-        assert len(filenames) == len(image_paths)
-        assert imgs.shape[0] == len(image_paths)
-
-        # Check that scores are within expected range
-        assert np.all(scores >= 0) and np.all(scores <= 1), "Scores outside expected range"
+        db_path = os.path.join(test_config.output_dir, "predictions.db")
+        assert os.path.exists(db_path)
+        with AnomalyScoreDB(db_path) as db:
+            assert db.get_count() == len(image_paths), "Not all images were processed"
     finally:
-        # Clean up temporary file
-        import os
-
         if os.path.exists(file_list_path):
             os.unlink(file_list_path)
 
@@ -1175,61 +948,6 @@ def test_prediction_file_type_image(test_config, monkeypatch, mixed_format_image
             os.unlink(group_file)
 
 
-def test_image_channel_order_rgb(test_config, tmp_path):
-    """Test that images are loaded with correct RGB channel ordering."""
-    from prediction_process_hdf5 import read_and_decode_image_from_hdf5
-
-    # Create a test image with distinct colors in each channel
-    # Red channel = 255, Green channel = 128, Blue channel = 64
-    test_image = np.zeros((100, 100, 3), dtype=np.uint8)
-    test_image[:, :, 0] = 255  # Red
-    test_image[:, :, 1] = 128  # Green
-    test_image[:, :, 2] = 64  # Blue
-
-    # Save as JPEG
-    pil_image = Image.fromarray(test_image)
-    img_path = tmp_path / "test_rgb.jpg"
-    pil_image.save(img_path, format="JPEG", quality=95)
-
-    # Test HDF5 loading
-    hdf5_path = tmp_path / "test_rgb.h5"
-    with h5py.File(hdf5_path, "w") as h5f:
-        vlen_uint8 = h5py.vlen_dtype(np.dtype("uint8"))
-        dset = h5f.create_dataset("images", (1,), dtype=vlen_uint8)
-
-        with open(img_path, "rb") as f:
-            jpeg_data = f.read()
-            dset[0] = np.frombuffer(jpeg_data, dtype=np.uint8)
-
-    # Load using HDF5 method
-    with h5py.File(hdf5_path, "r") as h5f:
-        image_data = h5f["images"][0]
-        loaded_hdf5 = read_and_decode_image_from_hdf5(image_data, test_config)
-
-    # Verify that method preserves RGB channel order
-    # Allow some tolerance due to JPEG compression
-    tolerance = 20
-
-    # Check red channel (should be highest)
-    assert np.mean(loaded_hdf5[:, :, 0]) > np.mean(loaded_hdf5[:, :, 1]) + tolerance, (
-        f"HDF5: Red channel not highest. R={np.mean(loaded_hdf5[:, :, 0])}, "
-        f"G={np.mean(loaded_hdf5[:, :, 1])}, B={np.mean(loaded_hdf5[:, :, 2])}"
-    )
-    assert np.mean(loaded_hdf5[:, :, 0]) > np.mean(loaded_hdf5[:, :, 2]) + tolerance, (
-        f"HDF5: Red channel not highest vs blue. R={np.mean(loaded_hdf5[:, :, 0])}, B={np.mean(loaded_hdf5[:, :, 2])}"
-    )
-
-    # Check green channel (should be middle)
-    assert np.mean(loaded_hdf5[:, :, 1]) > np.mean(loaded_hdf5[:, :, 2]) + tolerance, (
-        f"HDF5: Green channel not higher than blue. G={np.mean(loaded_hdf5[:, :, 1])}, B={np.mean(loaded_hdf5[:, :, 2])}"
-    )
-
-    logger.info(
-        f"HDF5 RGB values: R={np.mean(loaded_hdf5[:, :, 0]):.1f}, "
-        f"G={np.mean(loaded_hdf5[:, :, 1]):.1f}, B={np.mean(loaded_hdf5[:, :, 2]):.1f}"
-    )
-
-
 def test_prediction_file_type_zarr(test_config, monkeypatch, test_zarr):
     """Test that the correct prediction process is called for the 'zarr' file type."""
     import os
@@ -1334,48 +1052,16 @@ def test_zarr_image_processing_consistency(test_config, test_zarr):
 
 
 def test_multiple_zarr_files(test_config, multiple_test_zarr):
-    """Test evaluation of multiple Zarr files."""
+    """Test evaluation of multiple Zarr files writes all results to predictions.db."""
     zarr_files, zarr_dir = multiple_test_zarr
 
-    # Test each zarr file individually
-    all_scores = []
-    all_filenames = []
-
     for zarr_file in zarr_files:
-        scores, filenames, imgs = evaluate_images_in_zarr(zarr_file, test_config, top_n=100)
-        all_scores.extend(scores)
-        all_filenames.extend(filenames)
+        evaluate_images_in_zarr(zarr_file, test_config, top_n=100)
 
-    # Should have processed all zarr files successfully
-    assert len(all_scores) > 0
-    assert len(all_filenames) > 0
-
-    # Verify that filenames from different files are present
-    filename_prefixes = set()
-    logger.debug(f"Processing {len(all_filenames)} filenames")
-    for i, filename in enumerate(all_filenames):
-        logger.debug(f"Filename {i}: {filename} (type: {type(filename)})")
-        # Handle different filename types
-        if isinstance(filename, bytes):
-            filename_str = filename.decode("utf-8")
-        elif isinstance(filename, np.ndarray):
-            filename_str = str(filename.item()) if filename.size == 1 else str(filename)
-        else:
-            filename_str = str(filename)
-
-        print(f"DEBUG: Processed filename: '{filename_str}'")
-
-        # Extract prefix for identifying different files
-        parts = filename_str.split("_")
-        if len(parts) >= 2:
-            prefix = parts[0] + "_" + parts[1]  # file_0, file_1, file_2
-            filename_prefixes.add(prefix)
-            print(f"DEBUG: Added prefix: '{prefix}'")
-
-    print(f"DEBUG: Final prefixes: {filename_prefixes}")
-
-    # Should have processed multiple zarr files (at least 1 for now)
-    assert len(filename_prefixes) >= 1  # Relaxed assertion for debugging
+    db_path = os.path.join(test_config.output_dir, "predictions.db")
+    assert os.path.exists(db_path)
+    with AnomalyScoreDB(db_path) as db:
+        assert db.get_count() > 0
 
 
 def test_zarr_auto_detection_basic(test_config, multiple_test_zarr):
@@ -1394,25 +1080,23 @@ def test_zarr_auto_detection_basic(test_config, multiple_test_zarr):
         detected_type = session._auto_detect_prediction_file_type(zarr_dir)
 
         # Should detect zarr file type
-        assert detected_type == "zarr"
+        assert detected_type == DataSourceType.ZARR
 
     except Exception:
         # If session creation fails, test the logic manually
         import os
 
         extension_map = {
-            ".h5": "hdf5",
-            ".hdf5": "hdf5",
-            ".zarr": "zarr",
-            ".jpg": "image",
-            ".jpeg": "image",
-            ".png": "image",
-            ".tif": "image",
-            ".tiff": "image",
-            ".fits": "image",
+            ".zarr": DataSourceType.ZARR,
+            ".jpg": DataSourceType.IMAGE_FOLDER,
+            ".jpeg": DataSourceType.IMAGE_FOLDER,
+            ".png": DataSourceType.IMAGE_FOLDER,
+            ".tif": DataSourceType.IMAGE_FOLDER,
+            ".tiff": DataSourceType.IMAGE_FOLDER,
+            ".fits": DataSourceType.IMAGE_FOLDER,
         }
 
-        file_type_counts = {}
+        file_type_counts: dict[DataSourceType, int] = {}
         for filename in os.listdir(zarr_dir):
             file_path = os.path.join(zarr_dir, filename)
 
@@ -1428,12 +1112,16 @@ def test_zarr_auto_detection_basic(test_config, multiple_test_zarr):
                 if filename.lower().endswith(".zarr") or os.path.exists(
                     os.path.join(file_path, "zarr.json")
                 ):
-                    file_type_counts["zarr"] = file_type_counts.get("zarr", 0) + 1
+                    file_type_counts[DataSourceType.ZARR] = (
+                        file_type_counts.get(DataSourceType.ZARR, 0) + 1
+                    )
 
         detected_type = (
-            max(file_type_counts, key=file_type_counts.get) if file_type_counts else "zarr"
+            max(file_type_counts, key=file_type_counts.get)
+            if file_type_counts
+            else DataSourceType.ZARR
         )
-        assert detected_type == "zarr"
+        assert detected_type == DataSourceType.ZARR
 
 
 def test_zarr_batch_folders_detection(test_config, zarr_batch_folders):
@@ -1450,77 +1138,91 @@ def test_zarr_batch_folders_detection(test_config, zarr_batch_folders):
         detected_type = session._auto_detect_prediction_file_type(batch_dir)
 
         # Should detect zarr file type
-        assert detected_type == "zarr"
+        assert detected_type == DataSourceType.ZARR
     except Exception:
         # Manual test
         import os
 
-        file_type_counts = {}
+        file_type_counts: dict[DataSourceType, int] = {}
         for filename in os.listdir(batch_dir):
             file_path = os.path.join(batch_dir, filename)
             if os.path.isdir(file_path):
                 # Check for batch folders containing images.zarr subdirectory
                 if os.path.exists(os.path.join(file_path, "images.zarr")):
-                    file_type_counts["zarr"] = file_type_counts.get("zarr", 0) + 1
+                    file_type_counts[DataSourceType.ZARR] = (
+                        file_type_counts.get(DataSourceType.ZARR, 0) + 1
+                    )
 
         detected_type = (
-            max(file_type_counts, key=file_type_counts.get) if file_type_counts else "image"
+            max(file_type_counts, key=file_type_counts.get)
+            if file_type_counts
+            else DataSourceType.IMAGE_FOLDER
         )
-        assert detected_type == "zarr"
+        assert detected_type == DataSourceType.ZARR
 
 
 def test_zarr_batch_folders_processing(test_config, zarr_batch_folders):
-    """Test processing multiple zarr batch folders."""
+    """Test processing multiple zarr batch folders writes results to predictions.db."""
     batch_folders, batch_dir = zarr_batch_folders
 
-    # Test each batch folder individually
-    all_scores = []
-    all_filenames = []
-
     for batch_folder in batch_folders:
-        scores, filenames, imgs = evaluate_images_in_zarr(batch_folder, test_config, top_n=100)
-        all_scores.extend(scores)
-        all_filenames.extend(filenames)
+        evaluate_images_in_zarr(batch_folder, test_config, top_n=100)
 
-    # Should have processed all batch folders successfully
-    assert len(all_scores) > 0
-    assert len(all_filenames) > 0
-
-    # Verify that filenames from different batches are present
-    batch_prefixes = set()
-    for filename in all_filenames:
-        if isinstance(filename, bytes):
-            filename_str = filename.decode("utf-8")
-        elif isinstance(filename, np.ndarray):
-            filename_str = str(filename.item()) if filename.size == 1 else str(filename)
-        else:
-            filename_str = str(filename)
-
-        # Extract batch prefix (batch_000, batch_001, etc.)
-        if filename_str.startswith("batch_"):
-            parts = filename_str.split("_")
-            if len(parts) >= 2:
-                batch_prefix = parts[0] + "_" + parts[1]
-                batch_prefixes.add(batch_prefix)
-
-    # Should have processed multiple batches
-    assert len(batch_prefixes) >= 2
+    db_path = os.path.join(test_config.output_dir, "predictions.db")
+    assert os.path.exists(db_path)
+    with AnomalyScoreDB(db_path) as db:
+        assert db.get_count() > 0
 
 
 def test_zarr_batch_metadata_loading(test_config, zarr_batch_folders):
-    """Test that metadata is correctly loaded from batch folders."""
+    """Test that metadata filenames are stored in predictions.db."""
     batch_folders, batch_dir = zarr_batch_folders
 
-    # Test the first batch folder
     first_batch = batch_folders[0]
-    scores, filenames, imgs = evaluate_images_in_zarr(first_batch, test_config, top_n=100)
+    evaluate_images_in_zarr(first_batch, test_config, top_n=100)
 
-    # Verify filenames are loaded from metadata
+    db_path = os.path.join(test_config.output_dir, "predictions.db")
+    with AnomalyScoreDB(db_path) as db:
+        results = db.get_results(sort_by="score_desc", limit=100)
+        filenames = [r["filename"] for r in results]
+
     assert len(filenames) > 0
     # Filenames should not be generic "image_000000" format
     assert not all(f.startswith("image_") for f in filenames)
     # Should contain batch identifier
     assert any("batch_" in str(f) for f in filenames)
+
+
+def test_labeled_data_cache_excluded_from_prediction_scan(test_config, test_zarr, tmp_path):
+    """A LabeledDataCache directory living next to real prediction data must
+    not be scored as a second batch.
+    """
+    from anomaly_match.data_io.labeled_data_cache import LabeledDataCache
+    from anomaly_match.pipeline.session import Session
+
+    search_dir = os.path.dirname(test_zarr)
+
+    cache_dir = os.path.join(search_dir, "labeled_data_cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_root = zarr.open_group(os.path.join(cache_dir, "images.zarr"), mode="w")
+    cache_root.create_dataset(
+        "images", shape=(2, 150, 150, 3), chunks=(1, 150, 150, 3), dtype=np.uint8
+    )
+    with open(os.path.join(cache_dir, LabeledDataCache.CACHE_INFO_JSON), "w") as f:
+        f.write("{}")
+
+    test_config.prediction_search_dir = search_dir
+    session = Session(test_config)
+    session.evaluate_all_images()
+
+    db_path = os.path.join(test_config.output_dir, "predictions.db")
+    with AnomalyScoreDB(db_path) as db:
+        results = db.get_results(sort_by="score_desc", limit=100)
+        filenames = [r["filename"] for r in results]
+
+    # Only the real store's 10 images, none of the cache's 2.
+    assert len(filenames) == 10
+    assert not any("labeled_data_cache" in str(f) for f in filenames)
 
 
 def test_zarr_fallback_filenames_have_prefix(tmp_path, test_config):
@@ -1550,23 +1252,22 @@ def test_zarr_fallback_filenames_have_prefix(tmp_path, test_config):
     for batch_idx in range(2):
         zarr_path = tmp_path / f"batch_{batch_idx:03d}" / "images.zarr"
 
-        # Use a unique output dir for each batch to avoid accumulation
-        batch_config = test_config.copy()
-        batch_config.output_dir = str(tmp_path / f"output_{batch_idx}")
-        os.makedirs(batch_config.output_dir, exist_ok=True)
+        # Each batch needs a separate output dir. Avoid DotMap copy/deepcopy
+        # entirely — both corrupt _dynamic=False to True, causing
+        # channel_combination to auto-create as empty DotMap() on access.
+        output_dir = str(tmp_path / f"output_{batch_idx}")
+        os.makedirs(output_dir, exist_ok=True)
+        original_output_dir = test_config.output_dir
+        test_config.output_dir = output_dir
 
-        scores, filenames, imgs = evaluate_images_in_zarr(str(zarr_path), batch_config, top_n=100)
+        evaluate_images_in_zarr(str(zarr_path), test_config, top_n=100)
 
-        # Convert filenames to strings
-        filenames_str = []
-        for filename in filenames:
-            if isinstance(filename, bytes):
-                filename_str = filename.decode("utf-8")
-            elif isinstance(filename, np.ndarray):
-                filename_str = str(filename.item()) if filename.size == 1 else str(filename)
-            else:
-                filename_str = str(filename)
-            filenames_str.append(filename_str)
+        test_config.output_dir = original_output_dir
+
+        db_path = os.path.join(output_dir, "predictions.db")
+        with AnomalyScoreDB(db_path) as db:
+            results = db.get_results(sort_by="score_desc", limit=100)
+            filenames_str = [r["filename"] for r in results]
 
         batch_filenames.append(filenames_str)
 

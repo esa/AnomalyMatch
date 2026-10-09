@@ -4,6 +4,13 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+
+"""Basic PyTorch dataset wrapper for image loading and augmentation."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+
 import numpy as np
 import torch
 from PIL import Image
@@ -14,34 +21,35 @@ from anomaly_match.image_processing.transforms import get_strong_transforms
 
 
 class BasicDataset(Dataset):
-    """
-    BasicDataset returns a pair of image and labels (targets).
+    """BasicDataset returns a pair of image and labels (targets).
+
     If targets are not given, BasicDataset returns None as the label.
     This class supports strong augmentation for Fixmatch,
     and returns both weakly and strongly augmented images.
+
+    Args:
+        data: x_data as numpy array or torch tensor
+        filenames: filenames of x_data
+        targets: y_data (if not exist, None)
+        num_classes: number of label classes
+        transform: basic transformation of data
+        use_strong_transform: If True, this dataset returns both weakly and
+            strongly augmented images.
+        strong_transform: list of transformation functions for strong augmentation
+        num_channels: number of image channels
     """
 
     def __init__(
         self,
-        data,
-        filenames,
-        targets=None,
-        num_classes=None,
-        transform=None,
-        use_strong_transform=False,
-        strong_transform=None,
-        num_channels=3,
-    ):
-        """
-        Args
-            data: x_data as numpy array or torch tensor
-            filenames: filenames of x_data
-            targets: y_data (if not exist, None)
-            num_classes: number of label classes
-            transform: basic transformation of data
-            use_strong_transform: If True, this dataset returns both weakly and strongly augmented images.
-            strong_transform: list of transformation functions for strong augmentation
-        """
+        data: np.ndarray | list | torch.Tensor,
+        filenames: list[str],
+        targets: torch.Tensor | list | None = None,
+        num_classes: int | None = None,
+        transform: Callable | None = None,
+        use_strong_transform: bool = False,
+        strong_transform: Callable | None = None,
+        num_channels: int = 3,
+    ) -> None:
         super(BasicDataset, self).__init__()
 
         # Ensure data and filenames are of the same length
@@ -82,11 +90,11 @@ class BasicDataset(Dataset):
                 self.strong_transform = strong_transform
 
     def __getitem__(self, idx):
-        """
+        """Return augmented image, target, and filename.
+
         If strong augmentation is not used,
-            return weak_augment_image, target, filename
-        else:
-            return weak_augment_image, strong_augment_image, target
+        return weak_augment_image, target, filename.
+        Otherwise return weak_augment_image, strong_augment_image, target.
         """
         # Set idx-th target
         target = self.targets[idx] if self.targets is not None else None
@@ -117,5 +125,5 @@ class BasicDataset(Dataset):
             img_s = self.strong_transform(img)
             return img_w, img_s, target
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.data)

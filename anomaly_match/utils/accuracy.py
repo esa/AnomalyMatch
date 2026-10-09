@@ -4,10 +4,16 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+"""Accuracy and balanced accuracy metrics."""
+
+from __future__ import annotations
+
 import torch
 
 
-def accuracy(output, target, topk=(1,)):
+def accuracy(
+    output: torch.Tensor, target: torch.Tensor, topk: tuple[int, ...] = (1,)
+) -> list[torch.Tensor]:
     """Computes the accuracy over the k top predictions for the specified values of k.
 
     Args:

@@ -12,11 +12,9 @@ import tempfile
 import numpy as np
 import pandas as pd
 import pytest
-from dotmap import DotMap
 from PIL import Image
 
 from anomaly_match.datasets.AnomalyDetectionDataset import AnomalyDetectionDataset
-from anomaly_match.pipeline.session import Session
 from anomaly_match.utils.get_default_cfg import get_default_cfg
 
 
@@ -45,7 +43,7 @@ class TestMetadata:
         # Create labeled_data.csv - label only the first two images
         label_file = os.path.join(test_dir, "labeled_data.csv")
         labels = pd.DataFrame(
-            {"filename": [f"test_image_{i}.jpg" for i in range(2)], "label": ["normal", "anomaly"]}
+            {"id": [f"test_image_{i}.jpg" for i in range(2)], "label": ["normal", "anomaly"]}
         )
         labels.to_csv(label_file, index=False)
 
@@ -102,7 +100,7 @@ class TestMetadata:
         cfg.metadata_file = paths["metadata_file"]
 
         # Create dataset
-        dataset = AnomalyDetectionDataset(cfg, use_hdf5=False)
+        dataset = AnomalyDetectionDataset(cfg)
 
         # Check that metadata was loaded
         metadata_df = dataset.get_all_metadata()
@@ -116,65 +114,6 @@ class TestMetadata:
         # Check some values
         assert metadata_df.loc["test_image_0.jpg", "sourceID"] == "source_0"
         assert metadata_df.loc["test_image_1.jpg", "ra"] == 11.0
-
-    def test_metadata_saving_in_session(self, setup_test_files, monkeypatch):
-        """Test that metadata is included when saving labels in Session."""
-
-        # Mock the load_and_process_wrapper function to avoid actual image processing
-        def mock_load_and_process_wrapper(
-            filepaths, cfg, desc="Loading images", show_progress=True
-        ):
-            # Return a list of (filepath, mock_image) tuples
-            results = []
-            for filepath in filepaths:
-                mock_image = np.zeros((224, 224, 3), dtype=np.uint8)
-                results.append((filepath, mock_image))
-            return results
-
-        monkeypatch.setattr(
-            "anomaly_match.data_io.load_images.load_and_process_wrapper",
-            mock_load_and_process_wrapper,
-        )
-
-        # Patch model initialization to avoid issues
-        def mock_init_model(self):
-            self.model = DotMap()
-            self.model.train_model = {}
-
-        monkeypatch.setattr(Session, "_init_model", mock_init_model)
-
-        # Set up configuration
-        paths = setup_test_files
-        cfg = get_default_cfg()
-        cfg.normalisation.image_size = [64, 64]
-        cfg.data_dir = paths["data_dir"]
-        cfg.label_file = paths["label_file"]
-        cfg.metadata_file = paths["metadata_file"]
-        cfg.output_dir = paths["output_dir"]
-
-        # Create session
-        session = Session(cfg)
-
-        # Save labels
-        session.save_labels()
-
-        # Check saved file in session directory (not output_dir)
-        session_path = session.session_io.get_session_save_path(session.session_tracker)
-        output_file = os.path.join(session_path, "labeled_data.csv")
-        assert os.path.exists(output_file)
-
-        saved_data = pd.read_csv(output_file)
-
-        # Check that metadata columns are included
-        for col in ["sourceID", "ra", "dec", "custom_col"]:
-            assert col in saved_data.columns
-
-        # Check that values were preserved
-        test_img_0_data = saved_data[saved_data["filename"] == "test_image_0.jpg"]
-        assert test_img_0_data["sourceID"].values[0] == "source_0"
-
-        test_img_1_data = saved_data[saved_data["filename"] == "test_image_1.jpg"]
-        assert test_img_1_data["ra"].values[0] == 11.0
 
     def test_missing_metadata_file(self, setup_test_files, monkeypatch):
         """Test behavior when metadata file is specified but doesn't exist."""
@@ -204,7 +143,7 @@ class TestMetadata:
         cfg.metadata_file = os.path.join(paths["test_dir"], "nonexistent_metadata.csv")
 
         # Create dataset - should not raise an exception
-        dataset = AnomalyDetectionDataset(cfg, use_hdf5=False)
+        dataset = AnomalyDetectionDataset(cfg)
 
         # Metadata should be None
         assert dataset.get_all_metadata() is None

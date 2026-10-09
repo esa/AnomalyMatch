@@ -23,10 +23,10 @@ jobs:
       - name: Run vulture (100% confidence)
         run: |
           echo "Running vulture dead code detection (100% confidence - blocking)..."
-          vulture anomaly_match/ anomaly_match_ui/ .vulture_whitelist.py --min-confidence 100
+          vulture anomaly_match/ anomaly_match_ui/ subprocess_scripts/ .vulture_whitelist.py --min-confidence 100
 
   vulture-warnings:
-    name: Vulture (60% confidence - not required)
+    name: Vulture (60% confidence - required)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -38,7 +38,5 @@ jobs:
         run: pip install vulture>=2.10
       - name: Run vulture (60% confidence)
         run: |
-          echo "Running vulture dead code detection (60% confidence)..."
-          echo "This check fails if potential dead code is found, but is not required to pass."
-          echo ""
-          vulture anomaly_match/ anomaly_match_ui/ .vulture_whitelist.py --min-confidence 60
+          echo "Running vulture dead code detection (60% confidence - required)..."
+          vulture anomaly_match/ anomaly_match_ui/ subprocess_scripts/ .vulture_whitelist.py --min-confidence 60

@@ -31,7 +31,7 @@ class TestFixMatch:
     def net_builder(self):
         """Simple CNN network builder for testing."""
 
-        def _builder(num_classes, in_channels):
+        def _builder(num_classes, in_channels, pretrained=None):
             return torch.nn.Sequential(
                 torch.nn.Conv2d(in_channels, 16, 3, padding=1),
                 torch.nn.ReLU(),

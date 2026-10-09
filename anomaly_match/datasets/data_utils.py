@@ -4,58 +4,19 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+
+"""Data loading and splitting utilities for dataset preparation."""
+
+from __future__ import annotations
+
 import numpy as np
 import torch
 from loguru import logger
-from torch.utils.data import DataLoader, sampler
+from torch.utils.data import DataLoader, Dataset, sampler
 from torch.utils.data.sampler import BatchSampler, WeightedRandomSampler
 
-from anomaly_match.image_processing.transforms import get_prediction_transforms
 
-from .BasicDataset import BasicDataset
-
-
-def get_prediction_dataloader(dset, batch_size=None, num_workers=4, pin_memory=True):
-    """Create a DataLoader for making predictions on unlabeled data.
-
-    Args:
-        dset: Dataset object containing unlabeled data
-        batch_size: Size of each batch
-        num_workers: Number of subprocesses to use for data loading
-        pin_memory: If True, the data loader will copy tensors into CUDA pinned memory
-
-    Returns:
-        DataLoader: PyTorch DataLoader for the unlabeled data
-    """
-    unlabeled, unlabeled_filenames = dset.unlabeled
-    num_channels = dset.num_channels
-
-    # Basic transform for prediction - just convert to tensor
-    transform = get_prediction_transforms(num_channels=num_channels)
-
-    # Create dataset with dummy labels (-1)
-    ulb_dset = BasicDataset(
-        unlabeled,
-        unlabeled_filenames,
-        torch.zeros(len(unlabeled)) - 1,  # dummy label
-        num_classes=2,
-        transform=transform,
-        use_strong_transform=False,
-        strong_transform=transform,
-        num_channels=num_channels,
-    )
-
-    return DataLoader(
-        ulb_dset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        persistent_workers=True if num_workers > 0 else False,
-    )
-
-
-def get_sampler_by_name(name):
+def get_sampler_by_name(name: str) -> type:
     """Get a PyTorch sampler class by its name.
 
     Args:
@@ -86,19 +47,19 @@ def get_sampler_by_name(name):
 
 
 def get_data_loader(
-    dset,
-    batch_size=None,
-    shuffle=False,
-    num_workers=4,
-    pin_memory=True,
-    data_sampler=None,
-    replacement=True,
-    num_epochs=None,
-    num_iters=None,
-    generator=None,
-    drop_last=True,
-    use_weighted_sampler=False,
-):
+    dset: Dataset,
+    batch_size: int | None = None,
+    shuffle: bool = False,
+    num_workers: int = 4,
+    pin_memory: bool = True,
+    data_sampler: str | type | None = None,
+    replacement: bool = True,
+    num_epochs: int | None = None,
+    num_iters: int | None = None,
+    generator: torch.Generator | None = None,
+    drop_last: bool = True,
+    use_weighted_sampler: bool = False,
+) -> DataLoader:
     """Create a PyTorch DataLoader with various sampling strategies.
 
     This function provides a flexible way to create DataLoader objects with different
@@ -122,7 +83,6 @@ def get_data_loader(
         DataLoader: PyTorch DataLoader configured with the specified parameters
 
     Raises:
-        AssertionError: If batch_size is None
         RuntimeError: If an unsupported sampler is specified
     """
     assert batch_size is not None, "Batch size must be specified"

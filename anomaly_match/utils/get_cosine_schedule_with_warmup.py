@@ -4,37 +4,41 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+"""Cosine learning rate schedule with linear warmup."""
+
+from __future__ import annotations
+
 import math
 
+import torch
 from torch.optim.lr_scheduler import LambdaLR
 
 
 def get_cosine_schedule_with_warmup(
-    optimizer,
-    num_training_steps,
-    num_cycles=7.0 / 16.0,
-    num_warmup_steps=0,
-    last_epoch=-1,
-):
+    optimizer: torch.optim.Optimizer,
+    num_training_steps: int,
+    num_cycles: float = 7.0 / 16.0,
+    num_warmup_steps: int = 0,
+    last_epoch: int = -1,
+) -> LambdaLR:
     """Get learning rate schedule with linear warmup and cosine decay.
 
     Args:
-        optimizer (torch.optim.Optimizer): optimizer.
-        num_training_steps (int): total number of training steps.
-        num_cycles (float): number of cycles in the cosine decay.
-        num_warmup_steps (int): number of warmup steps.
-        last_epoch (int): last epoch number.
+        optimizer: optimizer.
+        num_training_steps: total number of training steps.
+        num_cycles: number of cycles in the cosine decay.
+        num_warmup_steps: number of warmup steps.
+        last_epoch: last epoch number.
 
     Returns:
-        torch.optim.lr_scheduler.LambdaLR: learning rate scheduler.
+        learning rate scheduler.
     """
 
     def _lr_lambda(current_step):
-        """
-        _lr_lambda returns a multiplicative factor given an interger parameter epochs.
-        Decaying criteria: last_epoch
-        """
+        """Return a multiplicative factor given an integer parameter epochs.
 
+        Decaying criteria: last_epoch.
+        """
         if current_step < num_warmup_steps:
             _lr = float(current_step) / float(max(1, num_warmup_steps))
         else:

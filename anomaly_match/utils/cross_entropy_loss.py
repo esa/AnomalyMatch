@@ -4,11 +4,20 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+"""Cross-entropy loss functions for classification."""
+
+from __future__ import annotations
+
 import torch
 import torch.nn.functional as F
 
 
-def cross_entropy_loss(logits, targets, use_hard_labels=True, reduction="none"):
+def cross_entropy_loss(
+    logits: torch.Tensor,
+    targets: torch.Tensor,
+    use_hard_labels: bool = True,
+    reduction: str = "none",
+) -> torch.Tensor:
     """Cross entropy loss that supports both hard and soft labels.
 
     Args:

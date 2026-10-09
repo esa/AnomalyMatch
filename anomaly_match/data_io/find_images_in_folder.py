@@ -4,9 +4,9 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
-"""
-Functions to retrieve image filenames from folders.
-"""
+"""Functions to retrieve image filenames from folders."""
+
+from __future__ import annotations
 
 import os
 from pathlib import Path
@@ -15,15 +15,16 @@ from fitsbolt import SUPPORTED_IMAGE_EXTENSIONS
 from loguru import logger
 
 
-def get_image_names_from_folder(folder_path, recursive=False, extensions=None):
-    """
-    Get all image filenames from a folder.
+def get_image_names_from_folder(
+    folder_path: str, recursive: bool = False, extensions: list[str] | None = None
+) -> list[str]:
+    """Get all image filenames from a folder.
 
     Args:
-        folder_path (str): Path to the folder containing images
-        recursive (bool, optional): Whether to search recursively in subfolders. Defaults to False.
-        extensions (list, optional): List of file extensions to include.
-                                     Defaults to SUPPORTED_IMAGE_EXTENSIONS if None.
+        folder_path: Path to the folder containing images
+        recursive: Whether to search recursively in subfolders. Defaults to False.
+        extensions: List of file extensions to include.
+                    Defaults to SUPPORTED_IMAGE_EXTENSIONS if None.
 
     Returns:
         list: List of image filenames (relative to folder_path)
@@ -52,6 +53,9 @@ def get_image_names_from_folder(folder_path, recursive=False, extensions=None):
                     for path in Path(folder_path).glob(f"**/*{ext.upper()}")
                 ]
             )
+        # On case-insensitive filesystems (Windows/macOS default), the lower-
+        # and upper-case glob patterns match the same files, producing dupes.
+        image_filenames = list(dict.fromkeys(image_filenames))
     else:
         # Use os.listdir for non-recursive search
         for f in os.listdir(folder_path):
@@ -62,15 +66,16 @@ def get_image_names_from_folder(folder_path, recursive=False, extensions=None):
     return image_filenames
 
 
-def get_image_paths_from_folder(folder_path, recursive=False, extensions=None):
-    """
-    Get all image paths from a folder.
+def get_image_paths_from_folder(
+    folder_path: str, recursive: bool = False, extensions: list[str] | None = None
+) -> list[str]:
+    """Get all image paths from a folder.
 
     Args:
-        folder_path (str): Path to the folder containing images
-        recursive (bool, optional): Whether to search recursively in subfolders. Defaults to False.
-        extensions (list, optional): List of file extensions to include.
-                                     Defaults to SUPPORTED_IMAGE_EXTENSIONS if None.
+        folder_path: Path to the folder containing images
+        recursive: Whether to search recursively in subfolders. Defaults to False.
+        extensions: List of file extensions to include.
+                    Defaults to SUPPORTED_IMAGE_EXTENSIONS if None.
 
     Returns:
         list: List of absolute image paths

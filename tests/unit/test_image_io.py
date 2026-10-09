@@ -9,19 +9,19 @@ import copy
 import tempfile
 from pathlib import Path
 
-import h5py
 import numpy as np
 import pytest
 import torch
+from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 from PIL import Image
 
 from anomaly_match.data_io.load_images import (
     get_fitsbolt_config,
     load_and_process_single_wrapper,
+    load_and_process_wrapper,
     process_single_wrapper,
 )
 from anomaly_match.utils.get_default_cfg import get_default_cfg
-from prediction_utils import save_results
 
 
 def _load_image_with_fitsbolt(filepath, cfg):
@@ -154,7 +154,7 @@ class TestImageIO:
         return cfg
 
     def test_image_format_consistency(self, test_image, test_config):
-        """Test that images are consistent across different file formats."""
+        """Test that images are consistent across PNG and direct array processing."""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
 
@@ -162,19 +162,11 @@ class TestImageIO:
             png_path = temp_path / "test_image.png"
             Image.fromarray(test_image).save(png_path)
 
-            # Save as HDF5
-            hdf5_path = temp_path / "test_image.h5"
-            with h5py.File(hdf5_path, "w") as f:
-                f.create_dataset("image", data=test_image)
-
-            # Load and compare PNG vs HDF5
+            # Load from PNG via fitsbolt
             loaded_png = _load_image_with_fitsbolt(str(png_path), test_config)
-            loaded_hdf5 = None
 
-            # Load from HDF5
-            with h5py.File(hdf5_path, "r") as f:
-                hdf5_data = f["image"][:]
-                loaded_hdf5 = _process_image_array_with_fitsbolt(hdf5_data, test_config)
+            # Process the raw array directly via fitsbolt
+            loaded_array = _process_image_array_with_fitsbolt(test_image, test_config)
 
             # Both should have the same shape after processing
             if hasattr(loaded_png, "shape"):
@@ -182,52 +174,20 @@ class TestImageIO:
             else:
                 png_shape = np.array(loaded_png).shape
 
-            if hasattr(loaded_hdf5, "shape"):
-                hdf5_shape = loaded_hdf5.shape
+            if hasattr(loaded_array, "shape"):
+                array_shape = loaded_array.shape
             else:
-                hdf5_shape = np.array(loaded_hdf5).shape
+                array_shape = np.array(loaded_array).shape
 
-            assert png_shape == hdf5_shape
+            assert png_shape == array_shape
 
             # Convert to arrays for comparison
-            png_array = np.array(loaded_png) if hasattr(loaded_png, "size") else loaded_png
-            hdf5_array = np.array(loaded_hdf5) if hasattr(loaded_hdf5, "size") else loaded_hdf5
+            png_arr = np.array(loaded_png) if hasattr(loaded_png, "size") else loaded_png
+            direct_arr = np.array(loaded_array) if hasattr(loaded_array, "size") else loaded_array
 
             # Check that arrays are reasonably similar
-            # Using a tolerance for potential format differences
-            assert np.allclose(png_array, hdf5_array, atol=1)
-
-    def test_save_load_consistency(self, test_image, test_config):
-        """Test that saved images can be loaded back consistently."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            test_config.output_dir = str(temp_path)
-
-            # Create mock data for save_results function
-            all_scores = np.array([0.5])  # Convert to numpy array
-            all_imgs = test_image[np.newaxis, ...]  # Add batch dimension
-            all_filenames = np.array(["test_image.png"])  # Convert to numpy array
-
-            # Use save_results to save the results
-            save_results(
-                cfg=test_config,
-                all_scores=all_scores,
-                all_imgs=all_imgs,
-                all_filenames=all_filenames,
-                top_n=1,
-            )
-
-            # Check that output files were created
-            output_files = list(temp_path.glob("*"))
-            assert len(output_files) > 0
-
-            # Check for specific expected files
-            csv_files = list(temp_path.glob("*.csv"))
-            npy_files = list(temp_path.glob("*.npy"))
-            npz_files = list(temp_path.glob("*.npz"))
-
-            # At least one of these should exist
-            assert len(csv_files) > 0 or len(npy_files) > 0 or len(npz_files) > 0
+            # Using a tolerance for potential format differences (PNG compression)
+            assert np.allclose(png_arr, direct_arr, atol=1)
 
     def test_tensor_to_uint8_conversion(self, test_config):
         """Test conversion from float tensors to uint8 images."""
@@ -454,6 +414,104 @@ class TestImageIO:
                     else:
                         # Expected to fail
                         pass
+
+    def test_channel_combination_swap_single(self):
+        """Channel combination matrix should swap R/B for non-FITS RGB images."""
+        cfg = get_default_cfg()
+        cfg.normalisation.image_size = [64, 64]
+        cfg.normalisation.n_output_channels = 3
+        test_img = "tests/test_data/rgb/Abell2390_VIS_2_rgb.png"
+
+        img_default = load_and_process_single_wrapper(test_img, cfg)
+        cfg.normalisation.channel_combination = np.array(
+            [[0, 0, 1], [0, 1, 0], [1, 0, 0]], dtype=np.float64
+        )
+        img_swapped = load_and_process_single_wrapper(test_img, cfg)
+
+        np.testing.assert_array_equal(img_swapped[:, :, 0], img_default[:, :, 2])
+        np.testing.assert_array_equal(img_swapped[:, :, 1], img_default[:, :, 1])
+        np.testing.assert_array_equal(img_swapped[:, :, 2], img_default[:, :, 0])
+
+    def test_channel_combination_all_blue_single(self):
+        """All output channels should map to blue input when configured."""
+        cfg = get_default_cfg()
+        cfg.normalisation.image_size = [64, 64]
+        cfg.normalisation.n_output_channels = 3
+        test_img = "tests/test_data/rgb/Abell2390_VIS_2_rgb.png"
+
+        img_default = load_and_process_single_wrapper(test_img, cfg)
+        cfg.normalisation.channel_combination = np.array(
+            [[0, 0, 1], [0, 0, 1], [0, 0, 1]], dtype=np.float64
+        )
+        img_blue = load_and_process_single_wrapper(test_img, cfg)
+
+        np.testing.assert_array_equal(img_blue[:, :, 0], img_default[:, :, 2])
+        np.testing.assert_array_equal(img_blue[:, :, 1], img_default[:, :, 2])
+        np.testing.assert_array_equal(img_blue[:, :, 2], img_default[:, :, 2])
+
+    def test_channel_combination_batch(self):
+        """Batch wrapper should also apply channel_combination for non-FITS."""
+        cfg = get_default_cfg()
+        cfg.normalisation.image_size = [64, 64]
+        cfg.normalisation.n_output_channels = 3
+        test_img = "tests/test_data/rgb/Abell2390_VIS_2_rgb.png"
+
+        img_default = load_and_process_wrapper([test_img], cfg, show_progress=False)[0][1]
+
+        cfg.normalisation.channel_combination = np.array(
+            [[0, 0, 1], [0, 1, 0], [1, 0, 0]], dtype=np.float64
+        )
+        img_swapped = load_and_process_wrapper([test_img], cfg, show_progress=False)[0][1]
+
+        # Different resize paths cause ±5 tolerance
+        np.testing.assert_allclose(img_swapped[:, :, 0], img_default[:, :, 2], atol=5)
+        np.testing.assert_allclose(img_swapped[:, :, 2], img_default[:, :, 0], atol=5)
+
+    def test_asinh_normalisation_changes_output(self):
+        """ASINH normalisation should produce visibly different output."""
+        cfg = get_default_cfg()
+        cfg.normalisation.image_size = [64, 64]
+        cfg.normalisation.n_output_channels = 3
+        test_img = "tests/test_data/grayscale/Abell2390_VIS_2.jpeg"
+
+        img_default = load_and_process_single_wrapper(test_img, cfg)
+
+        cfg.normalisation.normalisation_method = NormalisationMethod.ASINH
+        cfg.normalisation.norm_asinh_scale = [0.7, 0.7, 0.7]
+        cfg.normalisation.norm_asinh_clip = [99.8, 99.8, 99.8]
+        img_asinh = load_and_process_single_wrapper(test_img, cfg)
+
+        assert not np.array_equal(img_asinh, img_default)
+
+    def test_single_wrapper_forces_num_workers_without_mutating_shared_config(
+        self, test_config, monkeypatch
+    ):
+        """load_and_process_single_wrapper must force num_workers=1 on a copy.
+
+        cfg.fitsbolt_cfg is shared with the caller (e.g. a batch loader that set
+        num_workers > 1), so the single-image wrapper must not mutate it in place —
+        it must pass a copied config to fitsbolt with num_workers forced to 1.
+        """
+        cfg = get_fitsbolt_config(test_config)
+        cfg.fitsbolt_cfg.num_workers = 4  # simulate a shared, multi-worker batch config
+
+        captured = {}
+
+        def fake_load_and_process_images(filepath, cfg, desc, show_progress):
+            captured["cfg"] = cfg
+            return np.zeros((224, 224, 3), dtype=np.uint8)
+
+        monkeypatch.setattr(
+            "anomaly_match.data_io.load_images.load_and_process_images",
+            fake_load_and_process_images,
+        )
+
+        load_and_process_single_wrapper(
+            "unused/path.png", cfg, desc="test", show_progress=False, prediction=True
+        )
+
+        assert captured["cfg"].num_workers == 1
+        assert cfg.fitsbolt_cfg.num_workers == 4
 
     def test_numpy_to_byte_stream_nan_inf_handling(self):
         """Test that numpy_to_byte_stream handles NaN and inf values properly."""

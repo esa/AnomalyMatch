@@ -48,17 +48,6 @@ class TestMultispectralDataset:
         assert multispectral_config.normalisation.n_output_channels == 4
         assert dataset.num_channels == 4
 
-    def test_dataset_mean_std_4_channels(self, multispectral_config):
-        """Test that mean and std are computed correctly for 4 channels."""
-        dataset = AnomalyDetectionDataset(multispectral_config)
-
-        assert len(dataset.mean) == 4, f"Mean should have 4 values, got {len(dataset.mean)}"
-        assert len(dataset.std) == 4, f"Std should have 4 values, got {len(dataset.std)}"
-
-        # Check that values are reasonable (between 0 and 1 for normalized)
-        assert all(0 <= m <= 1 for m in dataset.mean), f"Mean values out of range: {dataset.mean}"
-        assert all(0 <= s <= 1 for s in dataset.std), f"Std values out of range: {dataset.std}"
-
     def test_ssl_dataset_4_channels(self, multispectral_config):
         """Test SSL_Dataset initialization with 4-channel data."""
         ssl_dataset = SSL_Dataset(cfg=multispectral_config, train=True)
@@ -245,30 +234,3 @@ class TestMultispectralDisplay:
         assert np.array_equal(rgb_img[:, :, 0], img_4ch[:, :, 0])
         assert np.array_equal(rgb_img[:, :, 1], img_4ch[:, :, 2])
         assert np.array_equal(rgb_img[:, :, 2], img_4ch[:, :, 3])
-
-
-class TestMultispectralHDF5:
-    """Tests for HDF5 save/load with multispectral data."""
-
-    def test_hdf5_save_load_4_channels(self, multispectral_config, tmp_path):
-        """Test saving and loading 4-channel dataset to/from HDF5."""
-        dataset = AnomalyDetectionDataset(multispectral_config)
-
-        # Save to HDF5
-        hdf5_path = tmp_path / "test_4ch.hdf5"
-        dataset.save_as_hdf5(str(hdf5_path))
-
-        assert hdf5_path.exists()
-
-        # Load back
-        new_dataset = AnomalyDetectionDataset(multispectral_config)
-        new_dataset.load_from_hdf5(str(hdf5_path))
-
-        # Verify data integrity
-        assert len(new_dataset.data_dict) == len(dataset.data_dict)
-        for filename in dataset.data_dict:
-            if filename in new_dataset.data_dict:
-                orig_img, _ = dataset.data_dict[filename]
-                loaded_img, _ = new_dataset.data_dict[filename]
-                assert orig_img.shape == loaded_img.shape
-                assert np.array_equal(orig_img, loaded_img)

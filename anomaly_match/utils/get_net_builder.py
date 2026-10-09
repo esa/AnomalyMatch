@@ -4,9 +4,15 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+"""Neural network model builder and registry."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
 from pathlib import Path
 
 import timm
+import torch
 import torch.nn as nn
 from loguru import logger
 
@@ -56,14 +62,22 @@ class TestCNN(nn.Module):
         )
         self._fc = nn.Linear(8, num_classes)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Run the forward pass.
+
+        Args:
+            x: Input tensor.
+
+        Returns:
+            Classification logits.
+        """
         x = self._conv_stem(x)
         x = self.features(x)
         x = x.flatten(1)
         return self._fc(x)
 
 
-def _resolve_timm_name(net_name, pretrained):
+def _resolve_timm_name(net_name: str, pretrained: bool) -> tuple[str, bool]:
     """Resolve AnomalyMatch net name to timm model identifier.
 
     Args:
@@ -95,31 +109,7 @@ def _resolve_timm_name(net_name, pretrained):
     return timm_base, False
 
 
-def _reset_classifier_head(model):
-    """Reset the classifier head to PyTorch's default Linear initialisation.
-
-    timm initialises EfficientNet classifiers with TF-EfficientNet's
-    ``1/sqrt(fan_in + fan_out)`` scale, which is tuned for the 1000-class ImageNet
-    head. For AnomalyMatch's 2-class head this produces weights that are roughly
-    ``num_classes`` times too large (std ~0.4 vs PyTorch's ~0.016). Such an
-    overconfident fresh head makes almost every unlabeled image clear the FixMatch
-    ``p_cutoff`` from the very first step with essentially random pseudo-labels,
-    poisoning the backbone during fine-tuning. Resetting to PyTorch's default
-    kaiming-uniform init restores the pre-timm fine-tuning quality.
-
-    Args:
-        model: A timm model exposing ``get_classifier()``.
-
-    Returns:
-        The same model, with its classifier head re-initialised in place.
-    """
-    classifier = model.get_classifier()
-    if isinstance(classifier, nn.Linear):
-        classifier.reset_parameters()
-    return model
-
-
-def get_net_builder(net_name, pretrained=False, in_channels=3):
+def get_net_builder(net_name: str, pretrained: bool = False, in_channels: int = 3) -> Callable:
     """Create a neural network builder function for the specified architecture.
 
     This function returns a builder function that creates a neural network with the
@@ -127,18 +117,15 @@ def get_net_builder(net_name, pretrained=False, in_channels=3):
     Uses timm (pytorch-image-models) as the backend for all EfficientNet variants.
 
     Args:
-        net_name (str): Name of the network architecture, supported values:
+        net_name: Name of the network architecture, supported values:
             - efficientnet-lite0 through efficientnet-lite4
             - efficientnet-b0 through efficientnet-b7
             - test-cnn (for testing only)
-        pretrained (bool, optional): If True, loads pretrained weights. Default is False.
-        in_channels (int, optional): Number of input channels. Default is 3.
+        pretrained: If True, loads pretrained weights. Default is False.
+        in_channels: Number of input channels. Default is 3.
 
     Returns:
-        callable: A function that builds the network when called with (num_classes, in_channels)
-
-    Raises:
-        ValueError: If an unsupported network architecture is specified
+        A function that builds the network when called with (num_classes, in_channels)
     """
     if net_name == "test-cnn":
         logger.debug("Using test-cnn model (for testing only)")
@@ -185,9 +172,19 @@ def get_net_builder(net_name, pretrained=False, in_channels=3):
                 num_classes=num_classes,
                 in_chans=in_channels,
             )
-        # timm's fresh classifier head is scaled for the 1000-class ImageNet head and
-        # is ~num_classes too large for AnomalyMatch's 2-class head; reset it to
-        # PyTorch's default init to avoid poisoning FixMatch fine-tuning.
-        return _reset_classifier_head(model)
+        # timm initialises the classifier with TF-EfficientNet's
+        # ``1/sqrt(fan_in + fan_out)`` scale (``_init_weight_goog``), tuned for a
+        # 1000-class head. For AnomalyMatch's 2-class head that is ~num_classes×
+        # too large (weight std ~0.4 vs ~0.016), so the fresh head is wildly
+        # overconfident at init: nearly every unlabeled image clears FixMatch's
+        # ``p_cutoff`` (0.95) with a random pseudo-label, burning a garbage
+        # decision boundary into the backbone from the first step. Reset to
+        # PyTorch's default ``1/sqrt(fan_in)`` Linear init (as the previous
+        # efficientnet_lite_pytorch backbone used) so pseudo-labels ramp in only
+        # as the model genuinely learns.
+        classifier = model.get_classifier()
+        if isinstance(classifier, nn.Linear):
+            classifier.reset_parameters()
+        return model
 
     return build_model

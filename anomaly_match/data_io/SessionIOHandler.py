@@ -5,44 +5,50 @@
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
 
+"""Session I/O handler for saving and loading models, labels, and predictions."""
+
+from __future__ import annotations
+
 import json
 import os
+from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 from loguru import logger
 
 from anomaly_match.data_io.checkpoint_io import load_checkpoint, save_checkpoint
 from anomaly_match.data_io.save_config import save_config_toml
+from anomaly_match.datasets.Label import LABEL_ANOMALY, LABEL_NORMAL, LABEL_REMOVED
 from anomaly_match.pipeline.SessionTracker import IterationInfo, SessionTracker
+
+if TYPE_CHECKING:
+    from dotmap import DotMap
+
+    from anomaly_match.models.FixMatch import FixMatch
 
 
 class SessionIOHandler:
-    """
-    Handles saving and loading of session data from SessionTracker.
+    """Handles saving and loading of session data from SessionTracker.
 
     This class manages the persistence of session information, including:
     - Session metadata and iteration information
     - Labeled data CSV files
     - Model checkpoints
     - Configuration files
+
+    Args:
+        base_save_path: Base directory for saving session data.
     """
 
     def __init__(self, base_save_path: str = "anomaly_match_results/sessions"):
-        """
-        Initialize the SessionIOHandler.
-
-        Args:
-            base_save_path: Base directory for saving session data.
-        """
         self.base_save_path = Path(base_save_path)
         self.base_save_path.mkdir(parents=True, exist_ok=True)
         logger.debug(f"Initialized SessionIOHandler with base path: {self.base_save_path}")
 
     def get_session_save_path(self, session_tracker: SessionTracker) -> Path:
-        """
-        Get the save path for a session.
+        """Get the save path for a session.
 
         Args:
             session_tracker: SessionTracker instance.
@@ -56,11 +62,10 @@ class SessionIOHandler:
     def save_session(
         self,
         session_tracker: SessionTracker,
-        save_path: Optional[Path] = None,
-        cfg=None,
+        save_path: Path | None = None,
+        cfg: DotMap | None = None,
     ) -> Path:
-        """
-        Save complete session data to disk.
+        """Save complete session data to disk.
 
         Args:
             session_tracker: SessionTracker instance to save.
@@ -113,7 +118,9 @@ class SessionIOHandler:
         labeled_df.to_csv(labeled_data_path, index=False)
         logger.debug(f"Saved labeled data to: {labeled_data_path}")
 
-    def _save_config(self, session_tracker: SessionTracker, save_path: Path, cfg=None) -> None:
+    def _save_config(
+        self, session_tracker: SessionTracker, save_path: Path, cfg: DotMap | None = None
+    ) -> None:
         """Save configuration if available."""
         try:
             # Try to use the provided config first, then fall back to session_tracker.final_cfg
@@ -128,66 +135,13 @@ class SessionIOHandler:
         except Exception as e:
             logger.warning(f"Failed to save configuration: {e}")
 
-    def save_iteration_scores(
-        self,
-        session_tracker: SessionTracker,
-        unlabelled_scores: Dict[str, float] = None,
-        test_scores: Dict[str, float] = None,
-        save_path: Optional[Path] = None,
-    ) -> None:
-        """
-        Save per-sample scores for the current iteration.
+    def save_model(
+        self, model: FixMatch, cfg: DotMap, session_tracker: SessionTracker | None = None
+    ) -> str:
+        """Save the model to the session directory or config-specified path.
 
-        Saves unlabelled data scores and test set scores (if available) as CSV files.
-        Updates the session tracker with the file paths.
-
-        Args:
-            session_tracker: SessionTracker instance to update.
-            unlabelled_scores: Dict mapping filename to anomaly score for unlabelled data.
-            test_scores: Dict mapping filename to anomaly score for test set.
-            save_path: Optional custom save path. If None, uses default session path.
-        """
-        if save_path is None:
-            save_path = self.get_session_save_path(session_tracker)
-
-        save_path.mkdir(parents=True, exist_ok=True)
-        scores_dir = save_path / "iteration_scores"
-        scores_dir.mkdir(exist_ok=True)
-
-        iteration_num = (
-            len(session_tracker.session_iterations) - 1 if session_tracker.session_iterations else 0
-        )
-
-        # Save unlabelled scores
-        if unlabelled_scores is not None and len(unlabelled_scores) > 0:
-            unlabelled_df = pd.DataFrame(
-                list(unlabelled_scores.items()), columns=["filename", "score"]
-            )
-            unlabelled_path = scores_dir / f"unlabelled_scores_iter_{iteration_num}.csv"
-            try:
-                unlabelled_df.to_csv(unlabelled_path, index=False)
-                session_tracker.update_unlabelled_scores_path(str(unlabelled_path))
-                logger.debug(
-                    f"Saved {len(unlabelled_scores)} unlabelled scores to: {unlabelled_path}"
-                )
-            except Exception as e:
-                logger.warning(f"Failed to save unlabelled scores: {e}")
-
-        # Save test scores
-        if test_scores is not None and len(test_scores) > 0:
-            test_df = pd.DataFrame(list(test_scores.items()), columns=["filename", "score"])
-            test_path = scores_dir / f"test_scores_iter_{iteration_num}.csv"
-            try:
-                test_df.to_csv(test_path, index=False)
-                session_tracker.update_test_scores_path(str(test_path))
-                logger.debug(f"Saved {len(test_scores)} test scores to: {test_path}")
-            except Exception as e:
-                logger.warning(f"Failed to save test scores: {e}")
-
-    def save_model(self, model, cfg, session_tracker: SessionTracker = None) -> str:
-        """
-        Save the model to the session directory if session_tracker is available,
-        otherwise use the path specified in the config.
+        If session_tracker is available, saves to the session directory,
+        otherwise uses the path specified in the config.
 
         Args:
             model: FixMatch model instance to save
@@ -196,6 +150,10 @@ class SessionIOHandler:
 
         Returns:
             Path where the model was saved
+
+        Raises:
+            ValueError: If no session_tracker is provided and model_path is not
+                specified in config.
         """
         if session_tracker is not None:
             # Always save as part of session when session_tracker is available
@@ -215,7 +173,7 @@ class SessionIOHandler:
                 logger.error("No model path specified in config or session tracker")
                 raise ValueError("Model path must be specified in config or session tracker")
             else:
-                model_path = Path(cfg.model_path)
+                model_path = Path(cfg.model_path).with_suffix(".safetensors")
             model_path.parent.mkdir(parents=True, exist_ok=True)
 
         logger.trace(f"Saving model to {model_path}")
@@ -246,12 +204,26 @@ class SessionIOHandler:
             "last_normalisation_method": getattr(model, "last_normalisation_method", None),
             "normalisation_method": cfg.normalisation.normalisation_method,
             "num_channels": cfg.num_channels,
+            "net": cfg.net,
             "fitsbolt_cfg": fitsbolt_cfg,
+            # Persist the band-mixing matrix as the authoritative standalone field.
+            # fitsbolt only embeds a copy in fitsbolt_cfg when fits_extension is a
+            # band list (not for catalogue/Cutana sources where it's None), and
+            # prediction applies it on the GPU — so without this field a
+            # >input-channel model (e.g. 4-band -> 3 ch) can't score.
+            "channel_combination": cfg.normalisation.channel_combination,
         }
 
-        # Save model (save_checkpoint forces .safetensors extension)
+        # Embed labeled data as CSV string so the checkpoint is self-contained
+        if session_tracker is not None:
+            labeled_df = session_tracker.get_labeled_data_df()
+            if labeled_df.empty:
+                logger.warning("Saving model checkpoint without labeled data")
+            else:
+                save_state["labeled_data_csv"] = labeled_df.to_csv(index=False)
+
+        # Save model
         save_checkpoint(save_state, model_path)
-        model_path = Path(model_path).with_suffix(".safetensors")
 
         if session_tracker is not None:
             # Ensure there's an active session iteration
@@ -264,9 +236,8 @@ class SessionIOHandler:
         logger.debug(f"Model saved successfully to: {model_path}")
         return str(model_path)
 
-    def load_model(self, model, cfg, model_path: str = None) -> bool:
-        """
-        Load a saved model from the specified path or config model_path.
+    def load_model(self, model: FixMatch, cfg: DotMap, model_path: str | None = None) -> bool:
+        """Load a saved model from the specified path or config model_path.
 
         Args:
             model: FixMatch model instance to load into
@@ -389,15 +360,39 @@ class SessionIOHandler:
             logger.error(f"Failed to load model from {load_path}: {e}")
             return False
 
-    def load_session(self, session_path: Path) -> SessionTracker:
+    @staticmethod
+    def get_labeled_data_from_checkpoint(checkpoint: dict[str, Any]) -> pd.DataFrame:
+        """Extract labeled data DataFrame from a model checkpoint.
+
+        Args:
+            checkpoint: Loaded checkpoint dict (from load_checkpoint)
+
+        Returns:
+            DataFrame with columns [filename, label, iteration].
+
+        Raises:
+            ValueError: If the checkpoint does not contain labeled data.
         """
-        Load a session from disk.
+        csv_str = checkpoint.get("labeled_data_csv")
+        if csv_str is None:
+            raise ValueError(
+                "Checkpoint does not contain labeled data. "
+                "Only checkpoints saved with a session tracker include labeled data."
+            )
+        return pd.read_csv(StringIO(csv_str))
+
+    def load_session(self, session_path: Path) -> SessionTracker:
+        """Load a session from disk.
 
         Args:
             session_path: Path to the session directory.
 
         Returns:
             Loaded SessionTracker instance.
+
+        Raises:
+            FileNotFoundError: If the session path or session metadata file
+                does not exist.
         """
         session_path = Path(session_path)
         if not session_path.exists():
@@ -444,9 +439,8 @@ class SessionIOHandler:
         logger.info(f"Session loaded successfully from: {session_path}")
         return session_tracker
 
-    def list_sessions(self) -> List[Path]:
-        """
-        List all available sessions in the base save path.
+    def list_sessions(self) -> list[Path]:
+        """List all available sessions in the base save path.
 
         Returns:
             List of paths to session directories.
@@ -461,9 +455,8 @@ class SessionIOHandler:
 
         return sorted(sessions)
 
-    def get_session_summary(self, session_path: Path) -> Dict[str, Any]:
-        """
-        Get a summary of a session without fully loading it.
+    def get_session_summary(self, session_path: Path) -> dict[str, Any]:
+        """Get a summary of a session without fully loading it.
 
         Args:
             session_path: Path to the session directory.
@@ -482,112 +475,16 @@ class SessionIOHandler:
         except Exception as e:
             return {"error": f"Failed to load session summary: {str(e)}"}
 
-    def save_run(
-        self,
-        model,
-        save_name: str,
-        save_path: str,
-        cfg=None,
-        session_tracker: SessionTracker = None,
-    ) -> str:
-        """
-        Save a training run's model weights and configuration.
-
-        This replaces the FixMatch.save_run method and integrates with SessionTracker.
-
-        Args:
-            model: FixMatch model instance to save
-            save_name: Filename for the saved model
-            save_path: Directory path for saving
-            cfg: Optional configuration to save alongside the model
-            session_tracker: Optional session tracker to update with model path
-
-        Returns:
-            str: Path where the model was saved
-        """
-        save_filename = os.path.join(save_path, save_name)
-
-        # Create directory if it doesn't exist
-        Path(save_path).mkdir(parents=True, exist_ok=True)
-
-        # Handle distributed training case
-        train_model = (
-            model.train_model.module
-            if hasattr(model.train_model, "module") and model.train_model.module is not None
-            else model.train_model
-        )
-        eval_model = (
-            model.eval_model.module
-            if hasattr(model.eval_model, "module") and model.eval_model.module is not None
-            else model.eval_model
-        )
-
-        # Get fitsbolt config if present (DotMap pickles directly)
-        fitsbolt_cfg = None
-        if cfg is not None:
-            fitsbolt_cfg = getattr(cfg, "fitsbolt_cfg", None)
-            if fitsbolt_cfg is not None:
-                logger.debug("Including fitsbolt config in training run checkpoint")
-
-        # Save model state
-        save_state = {
-            "train_model": train_model.state_dict(),
-            "eval_model": eval_model.state_dict(),
-            "optimizer": model.optimizer.state_dict() if model.optimizer else None,
-            "scheduler": model.scheduler.state_dict() if model.scheduler else None,
-            "it": model.it,
-            "total_it": getattr(model, "total_it", model.it),
-            "best_eval_acc": getattr(model, "best_eval_acc", None),
-            "best_it": getattr(model, "best_it", None),
-            "last_normalisation_method": getattr(model, "last_normalisation_method", None),
-            "fitsbolt_cfg": fitsbolt_cfg,
-        }
-
-        save_checkpoint(save_state, save_filename)
-        # save_checkpoint forces .safetensors extension; update save_filename to match
-        save_filename = str(Path(save_filename).with_suffix(".safetensors"))
-
-        # Update session tracker if provided
-        if session_tracker is not None:
-            if not session_tracker.session_iterations:
-                session_tracker.start_new_session_iteration()
-            session_tracker.update_model_state_path(save_filename)
-
-        # Save configuration if provided and NOT using session_tracker (to avoid duplicates)
-        if cfg is not None and session_tracker is None:
-            # Use the new TOML config saving
-            try:
-                from anomaly_match.data_io.save_config import save_config_toml
-
-                config_path = os.path.join(
-                    save_path, f"{os.path.splitext(save_name)[0]}_config.toml"
-                )
-                save_config_toml(cfg, config_path)
-                logger.info(f"Configuration saved to: {config_path}")
-            except Exception as e:
-                logger.warning(f"Failed to save config as TOML: {e}")
-                # Fallback to legacy save_cfg if available
-                try:
-                    from anomaly_match.utils.validate_config import save_cfg
-
-                    save_cfg(cfg)
-                except Exception as fallback_e:
-                    logger.error(f"Failed to save config with fallback method: {fallback_e}")
-
-        logger.info(f"Training run saved to: {save_filename}")
-        return save_filename
-
     def save_labels_to_output_dir(
         self,
         labeled_data_df: pd.DataFrame,
         output_dir: str,
-        session_tracker: SessionTracker = None,
+        session_tracker: SessionTracker | None = None,
     ) -> str:
-        """
-        Save labeled data to the session directory if session_tracker is available,
-        otherwise use output_dir for backward compatibility.
+        """Save labeled data to the session directory or output_dir.
 
-        This replaces the session.save_labels functionality.
+        If session_tracker is available, saves to the session directory,
+        otherwise uses output_dir for backward compatibility.
 
         Args:
             labeled_data_df: DataFrame containing labeled data
@@ -623,9 +520,126 @@ class SessionIOHandler:
 
         return str(filepath)
 
-    def update_config_paths_for_session(self, cfg, session_tracker: SessionTracker) -> None:
+    def merge_gallery_labels(
+        self,
+        existing_label_file: str | None,
+        new_labels: dict[str, str],
+        output_path: str,
+    ) -> str:
+        """Merge new gallery labels with an existing label CSV and write the result.
+
+        The CSV uses ``id, label`` columns.  ``id`` is the data-source
+        identifier (filename for image folders, source-id for Cutana, index
+        for Zarr) and is read and written as text throughout, so numeric
+        catalogue ids survive the round trip exactly as the catalogue wrote
+        them.
+
+        Args:
+            existing_label_file: Path to the current labels CSV (may be ``None``).
+            new_labels: Dict mapping ``id → csv_label_string``.  Values are
+                ``LABEL_ANOMALY``, ``LABEL_NORMAL`` or ``LABEL_REMOVED``;
+                a ``removed`` value overrides any existing label for that id
+                so an un-labelled gallery cell drops out of the labeled set.
+            output_path: Where to write the merged CSV.
+
+        Returns:
+            Absolute path to the written CSV file.
+
+        Raises:
+            ValueError: If the existing CSV cannot be read, or carries no
+                ``id`` column.  Either way the merge key is unavailable, so
+                proceeding would write out only the new gallery labels and
+                silently discard everything the user had labelled before.
         """
-        Update configuration paths to use session directories.
+        existing_df = pd.DataFrame(columns=["id", "label"])
+        if existing_label_file and os.path.isfile(existing_label_file):
+            try:
+                # ``dtype={"id": str}`` rather than a post-hoc ``astype(str)``:
+                # the gallery hands ids back as str, and pandas treats 51 and
+                # "51" as distinct keys, so an unnormalised concat makes
+                # ``drop_duplicates`` below append a second row for a relabelled
+                # source instead of overwriting the first (#556).  Normalising at
+                # the read is what makes that exact, since type inference is
+                # lossy: a single blank id infers float64 and turns 51 into
+                # "51.0" (which never matches), and a zero-padded "007" into "7".
+                existing_df = pd.read_csv(existing_label_file, dtype={"id": str})
+            except Exception as exc:
+                # Not recoverable: continuing would write a CSV holding only the
+                # handful of new gallery labels, silently discarding every label
+                # the user has already made and retraining on the remainder.
+                raise ValueError(
+                    f"Could not read existing labels CSV {existing_label_file}: {exc}"
+                ) from exc
+
+        if "id" not in existing_df.columns:
+            raise ValueError(
+                f"Labels CSV {existing_label_file} has no 'id' column — "
+                f"found {list(existing_df.columns)}"
+            )
+
+        existing_ids = set(existing_df["id"])
+        valid_new: dict[str, str] = {}
+        for raw_id, label in new_labels.items():
+            source_id = str(raw_id)
+            if label in (LABEL_ANOMALY, LABEL_NORMAL):
+                valid_new[source_id] = label
+            elif label == LABEL_REMOVED and source_id in existing_ids:
+                # A 'removed' override only matters for an id that already
+                # carried a label — marking a never-labelled id removed would
+                # just add a meaningless row that the dataset build skips anyway.
+                valid_new[source_id] = label
+
+        if valid_new:
+            new_df = pd.DataFrame(
+                [{"id": source_id, "label": label} for source_id, label in valid_new.items()]
+            )
+            merged = pd.concat([existing_df, new_df]).drop_duplicates(subset="id", keep="last")
+        else:
+            merged = existing_df
+
+        # Strict id,label output — drop any extra columns from existing CSVs
+        merged = merged[["id", "label"]]
+
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        merged.to_csv(output_path, index=False)
+        return output_path
+
+    @staticmethod
+    def filter_labels_csv_to_ids(csv_path: str, valid_ids: set[str]) -> tuple[int, int]:
+        """Rewrite *csv_path* keeping only rows whose ``id`` is in *valid_ids*.
+
+        Used just before launching the training subprocess to drop
+        labels for IDs the data source didn't surface (catalogue rows
+        that Cutana silently rejected, files the user moved since
+        labelling, ...).  Without this the training subprocess logs a
+        ``Filename X not found in dataset`` warning per orphaned label
+        — one line per row, which on a 1000+ label CSV floods the UI
+        output and masks real warnings.
+
+        Args:
+            csv_path: Path to the labels CSV to filter in place.
+            valid_ids: IDs to keep.  Rows whose ``id`` is not in this
+                set are dropped.
+
+        Returns:
+            Tuple ``(kept_count, dropped_count)``.
+        """
+        # Same read-time normalisation as ``merge_gallery_labels``, and for the
+        # same reason: a post-hoc ``astype(str)`` inherits pandas' inference, so
+        # one blank id row makes the column float64 and turns every id into
+        # "51.0".  Nothing then matches *valid_ids*, and this function — which
+        # runs immediately before training and rewrites the CSV in place —
+        # would silently drop the user's entire label set.  Reading as str also
+        # keeps zero-padded ids ("007") from being rewritten as "7".
+        df = pd.read_csv(csv_path, dtype={"id": str})
+        total = len(df)
+        mask = df["id"].isin(valid_ids)
+        kept = df[mask]
+        kept.to_csv(csv_path, index=False)
+        return len(kept), total - len(kept)
+
+    def update_config_paths_for_session(self, cfg: DotMap, session_tracker: SessionTracker) -> None:
+        """Update configuration paths to use session directories.
 
         This ensures all saves go to the centralized session folder.
 
@@ -660,8 +674,7 @@ class SessionIOHandler:
 
 
 def print_session(filepath: str) -> None:
-    """
-    Print session information in a formatted way.
+    """Print session information in a formatted way.
 
     Args:
         filepath: Path to the session directory.
@@ -701,7 +714,7 @@ def print_session(filepath: str) -> None:
         print("-" * 30)
         print(f"Total Labeled Samples: {summary['total_labeled_samples']}")
         print(f"Anomalous Samples: {summary['total_anomalous_samples']}")
-        print(f"Nominal Samples: {summary['total_nominal_samples']}")
+        print(f"Normal Samples: {summary['total_nominal_samples']}")
         print()
 
         # Load full session for detailed iteration info
@@ -716,7 +729,7 @@ def print_session(filepath: str) -> None:
                     print(f"Iteration {iter_info['iteration_number']}:")
                     print(f"  Timestamp: {iter_info['timestamp']}")
                     print(f"  Anomalous samples: {iter_info['num_anomalous_samples']}")
-                    print(f"  Nominal samples: {iter_info['num_nominal_samples']}")
+                    print(f"  Normal samples: {iter_info['num_nominal_samples']}")
                     if iter_info["model_loss"]:
                         print(f"  Model loss: {iter_info['model_loss']:.4f}")
                     if iter_info["test_performance"]:

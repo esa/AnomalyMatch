@@ -1,0 +1,40 @@
+#   Copyright (c) European Space Agency, 2025.
+#
+#   This file is subject to the terms and conditions defined in file 'LICENCE.txt', which
+#   is part of this source code package. No part of the package, including
+#   this file, may be copied, modified, propagated, or distributed except according to
+#   the terms contained in the file 'LICENCE.txt'.
+name: Install Cutana
+description: >
+  Install Cutana from the PyPI release for main-targeting builds and
+  from the Cutana develop branch otherwise. The source is picked from
+  GITHUB_BASE_REF (PR) or GITHUB_REF_NAME (push) so the workflow file
+  shipped on the PR's source branch always installs the cutana version
+  that matches the *target* branch. Develop carries APIs the 2.0 line
+  of AnomalyMatch depends on (``create_cutouts_direct``,
+  ``StreamingOrchestrator`` with ``max_workers``) that aren't on PyPI
+  yet; main is verified against the released PyPI version.
+
+  This action lives in both ``main`` and ``develop`` and MUST be kept
+  byte-identical on both branches so release-time syncs don't conflict.
+inputs:
+  cutana-token:
+    description: GitHub PAT with read access to ESA-Datalabs/Cutana (the CUTANA_REPO_READ_TOKEN repo secret).
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash -l {0}
+      env:
+        CUTANA_TOKEN: ${{ inputs.cutana-token }}
+      run: |
+        set -e
+        micromamba activate am
+        TARGET="${GITHUB_BASE_REF:-${GITHUB_REF_NAME}}"
+        if [ "$TARGET" = "main" ]; then
+          echo "Target '$TARGET' -> installing Cutana from PyPI"
+          pip install "cutana>=0.3.0"
+        else
+          echo "Target '$TARGET' -> installing Cutana from develop branch"
+          pip install "git+https://x-access-token:${CUTANA_TOKEN}@github.com/ESA-Datalabs/Cutana.git@develop"
+        fi

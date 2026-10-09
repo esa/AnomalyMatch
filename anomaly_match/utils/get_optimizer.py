@@ -4,38 +4,45 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+"""Optimizer factory for model training."""
+
+from __future__ import annotations
+
 import torch
 
 
 def get_optimizer(
-    net,
-    name="SGD",
-    lr=0.1,
-    momentum=0.9,
-    weight_decay=5e-4,
-    nesterov=True,
-    bn_wd_skip=True,
-):
+    net: torch.nn.Module,
+    name: str = "SGD",
+    lr: float = 0.1,
+    momentum: float = 0.9,
+    weight_decay: float = 5e-4,
+    nesterov: bool = True,
+    bn_wd_skip: bool = True,
+) -> torch.optim.Optimizer:
     """Creates a optimizer for the given network.
 
     Args:
-        net (torch.model): network to optimize.
-        name (str): optimizer name.
-        lr (float): learning rate.
-        momentum (float): momentum.
-        weight_decay (float): weight decay.
-        nesterov (bool): if True, use Nesterov momentum.
-        bn_wd_skip (bool): If bn_wd_skip, the optimizer does not apply weight decay regularization on parameters
-        in batch normalization.
+        net: network to optimize.
+        name: optimizer name.
+        lr: learning rate.
+        momentum: momentum.
+        weight_decay: weight decay.
+        nesterov: if True, use Nesterov momentum.
+        bn_wd_skip: If bn_wd_skip, the optimizer does not apply weight decay
+            regularization on parameters in batch normalization.
 
     Returns:
         torch.optim.Optimizer: optimizer.
+
+    Raises:
+        ValueError: If learning rate is too high for the Adam optimizer.
     """
     decay = []
     no_decay = []
     if name == "SGD":
-        for name, param in net.named_parameters():
-            if ("bn" in name) and bn_wd_skip:
+        for param_name, param in net.named_parameters():
+            if ("bn" in param_name) and bn_wd_skip:
                 no_decay.append(param)
             else:
                 decay.append(param)
@@ -53,8 +60,8 @@ def get_optimizer(
         if lr > 0.005:
             raise ValueError("Learning rate is " + str(lr) + ". That is too high for ADAM.")
 
-        for name, param in net.named_parameters():
-            if ("bn" in name) and bn_wd_skip:
+        for param_name, param in net.named_parameters():
+            if ("bn" in param_name) and bn_wd_skip:
                 no_decay.append(param)
             else:
                 decay.append(param)

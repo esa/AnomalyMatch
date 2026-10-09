@@ -4,6 +4,8 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+"""Random seed initialization for reproducibility."""
+
 import random
 
 import numpy as np
@@ -15,8 +17,8 @@ def set_seeds(seed: int, deterministic: bool = False) -> None:
     """Sets the seeds for the random number generators in torch, numpy and random.
 
     Args:
-        seed (int): seed for the random number generators
-        deterministic (bool): if True, sets the cudnn to deterministic mode. Default: False
+        seed: seed for the random number generators
+        deterministic: if True, sets the cudnn to deterministic mode. Default: False
     """
     random.seed(seed)
     torch.manual_seed(seed)

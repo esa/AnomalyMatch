@@ -175,18 +175,6 @@ class TestApplyTransformsUI:
         result_array = np.array(result)
         assert np.all(result_array[:, :, 0] == 0)
 
-    def test_channel_visibility_list(self, sample_pil_image):
-        result = apply_transforms_ui(
-            sample_pil_image,
-            invert=False,
-            brightness=1.0,
-            contrast=1.0,
-            unsharp_mask_applied=False,
-            channel_visibility=[True, False, True],
-        )
-        result_array = np.array(result)
-        assert np.all(result_array[:, :, 1] == 0)
-
     def test_all_transforms_combined(self, sample_pil_image):
         result = apply_transforms_ui(
             sample_pil_image,

@@ -4,6 +4,11 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+
+"""Image transform pipelines for weak, strong, and prediction augmentation."""
+
+from __future__ import annotations
+
 import numpy as np
 import torch
 from torchvision import transforms
@@ -20,8 +25,12 @@ class NumpyToTensor:
     Handles HWC to CHW conversion for arbitrary channel counts.
     """
 
-    def __call__(self, img):
-        """Convert numpy array (H, W, C) to tensor (C, H, W)."""
+    def __call__(self, img) -> torch.Tensor:
+        """Convert numpy array (H, W, C) to tensor (C, H, W).
+
+        Returns:
+            torch.Tensor: Image tensor in CHW format.
+        """
         if isinstance(img, np.ndarray):
             # HWC to CHW conversion
             img = np.transpose(img, (2, 0, 1))
@@ -35,7 +44,12 @@ class NumpyRandomHorizontalFlip:
     def __init__(self, p=0.5):
         self.p = p
 
-    def __call__(self, img):
+    def __call__(self, img) -> np.ndarray | torch.Tensor:
+        """Apply random horizontal flip to the image.
+
+        Returns:
+            Image with random horizontal flip applied.
+        """
         if isinstance(img, np.ndarray):
             if np.random.random() < self.p:
                 return np.ascontiguousarray(img[:, ::-1, :])
@@ -53,7 +67,12 @@ class NumpyRandomTranslate:
     def __init__(self, translate=(0, 0.125)):
         self.translate = translate
 
-    def __call__(self, img):
+    def __call__(self, img) -> np.ndarray | torch.Tensor:
+        """Apply random translation to the image.
+
+        Returns:
+            Image with random translation applied.
+        """
         if isinstance(img, np.ndarray):
             h, w = img.shape[:2]
             max_dx = self.translate[1] * w
@@ -76,7 +95,7 @@ class NumpyRandomTranslate:
         return img
 
 
-def get_weak_transforms(num_channels=3):
+def get_weak_transforms(num_channels: int = 3) -> transforms.Compose:
     """Get weak augmentation transforms.
 
     Args:
@@ -105,7 +124,7 @@ def get_weak_transforms(num_channels=3):
         )
 
 
-def get_prediction_transforms(num_channels=3):
+def get_prediction_transforms(num_channels: int = 3) -> transforms.Compose:
     """Get the standard image transform.
 
     Args:
@@ -120,7 +139,7 @@ def get_prediction_transforms(num_channels=3):
         return transforms.Compose([NumpyToTensor()])
 
 
-def get_strong_transforms(num_channels=3):
+def get_strong_transforms(num_channels: int = 3) -> transforms.Compose:
     """Get strong augmentations for FixMatch.
 
     Includes RandAugment followed by the same transforms as weak (ToTensor,

@@ -7,17 +7,77 @@
 # This workflow will install Python dependencies, run tests and lint with a single version of Python
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
 name: Running tests
-
 on:
   push:
     branches:
       - main
   pull_request:
   workflow_dispatch:
+# A new push to a PR makes the in-flight run obsolete. Cancelling it frees the
+# runner immediately instead of paying for a result nobody will look at.
+# Non-PR runs get a group of their own (run_id): a shared group would let a newer
+# main push cancel an older *pending* one even with cancel-in-progress off, and
+# every commit on main needs its own verdict.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 jobs:
+  large-files:
+    # Binaries committed to git stay in the pack forever, even once deleted.
+    # Catching them at review time is the only cheap moment — after merge the
+    # only remedy is a history rewrite plus a force-push of every branch.
+    name: Reject large files
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check added blobs against the size limit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MAX_BYTES: 2097152
+        run: |
+          set -euo pipefail
+          # Every blob the PR's own commits introduce, not just the files still
+          # present at HEAD.  A binary added in one commit and deleted in the
+          # next never appears in a HEAD-vs-base tree diff, yet merging still
+          # puts it in the pack forever — which is exactly how data.zip got in
+          # (197aa1a added it, 9ee07bb deleted it).  Walking the commit range
+          # also avoids the two-dot tree diff's false positives when the base
+          # branch has moved on since the PR was opened.
+          # LFS pointers are ~130 bytes in git regardless of payload size, so
+          # anything tracked by .gitattributes passes on its own.
+          offenders=$(
+            git rev-list --objects "$BASE_SHA..$HEAD_SHA" \
+              | git cat-file --batch-check='%(objecttype) %(objectsize) %(rest)' \
+              | awk -v max="$MAX_BYTES" '$1 == "blob" && $2 > max && NF > 2 {
+                  size = $2; $1 = ""; $2 = ""; sub(/^ +/, "");
+                  print size "\t" $0
+                }' \
+              | sort -u
+          )
+          fail=0
+          while IFS=$'\t' read -r size path; do
+            [ -n "${path:-}" ] || continue
+            # A path that is already over the limit on the base branch may be
+            # updated (e.g. refreshing resources/demo.gif); only files that are
+            # newly this large are rejected.
+            if base_size=$(git cat-file -s "$BASE_SHA:$path" 2>/dev/null) \
+               && [ "$base_size" -gt "$MAX_BYTES" ]; then
+              echo "note: $path was already over the limit on the base branch — allowed"
+              continue
+            fi
+            echo "::error file=$path::$path is $((size / 1024)) KiB, over the $((MAX_BYTES / 1024)) KiB limit. Generate it at test time, or track it with git-lfs (see .gitattributes)."
+            fail=1
+          done <<< "$offenders"
+          exit $fail
+
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       pull-requests: write
       contents: read
@@ -42,15 +102,72 @@ jobs:
           environment-name: am
           cache-downloads: true
           cache-environment: true
-      - name: Test with pytest
+      - name: Install Cutana
+        uses: ./.github/actions/install-cutana
+        with:
+          cutana-token: ${{ secrets.CUTANA_REPO_READ_TOKEN }}
+      - name: Pin fitsbolt to a released version
+        shell: bash -l {0}
+        run: |
+          # The norm_asinh_n_samples subsampling and float32 channel mixing that
+          # AnomalyMatch needs shipped in fitsbolt 0.3.0, so the old
+          # perf-integration branch install is no longer required.
+          #
+          # 0.3.1 rather than 0.3.0: that release evaluates
+          # len(cfg.fits_extension) before its `is not None` guard, so every load
+          # path without FITS extensions raises TypeError.
+          #
+          # Installed explicitly rather than left to Cutana's transitive dep so a
+          # Cutana release with a narrower pin cannot silently downgrade it.
+          # --no-deps keeps pip from re-resolving the already-synced environment.
+          set -e
+          micromamba activate am
+          pip install --no-deps --force-reinstall "fitsbolt>=0.3.1,<0.4"
+          python -c "import fitsbolt; print('fitsbolt', fitsbolt.__version__)"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('environment_CI.yml') }}
+      - name: Install Playwright browsers
+        shell: bash -l {0}
+        run: |
+          micromamba activate am
+          playwright install chromium --with-deps
+      - name: Unit / integration / UI tests
         shell: bash -l {0}
         run: |
           set -e
           set -o pipefail
           micromamba activate am
-          pytest --durations=20 --junitxml=pytest.xml --cov-report=xml:coverage.xml --cov-report=term --cov=anomaly_match tests/ | tee pytest-coverage.txt
-          echo "===== Coverage report ====="
-          cat pytest-coverage.txt
+          pytest -m "not browser" --durations=20 --junitxml=pytest.xml --cov-report=xml:coverage.xml --cov-report=term --cov=anomaly_match tests/ | tee pytest-coverage.txt
+      - name: Browser tests (Voila + Playwright)
+        if: always()
+        shell: bash -l {0}
+        run: |
+          set -e
+          set -o pipefail
+          micromamba activate am
+          pytest -m "browser and not slow" --durations=20 -v --tb=short --junitxml=pytest-browser.xml --cov-report=xml:coverage-browser.xml --cov-report=term --cov=anomaly_match --cov-append tests/ | tee -a pytest-coverage.txt
+      - name: Merge JUnit XML reports
+        if: always()
+        run: |
+          pip install -q junitparser
+          python -c "
+          from junitparser import JUnitXml
+          merged = JUnitXml()
+          for f in ['pytest.xml', 'pytest-browser.xml']:
+              try: merged += JUnitXml.fromfile(f)
+              except FileNotFoundError: pass
+          merged.write('pytest-merged.xml')
+          "
+      - name: Upload Playwright failure artifacts
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: test-results/
+          retention-days: 7
       - name: Pytest coverage comment
         uses: MishaKav/pytest-coverage-comment@main
         if: always() && github.event_name == 'pull_request'
@@ -64,4 +181,4 @@ jobs:
           create-new-comment: false
           hide-comment: false
           report-only-changed-files: false
-          junitxml-path: ./pytest.xml
+          junitxml-path: ./pytest-merged.xml

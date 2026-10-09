@@ -4,17 +4,25 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+"""Model string generation for checkpoint naming."""
+
+from __future__ import annotations
+
 import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from dotmap import DotMap
 
 
-def create_model_string(cfg):
+def create_model_string(cfg: DotMap) -> str:
     """Creates a string from the arguments.
 
     Args:
-        cfg (DotMap): config dictionary/dotmap
+        cfg: config dictionary/dotmap
 
     Returns:
-        str: string of the arguments
+        string of the arguments
     """
     # fmt: off
     dir_name = (

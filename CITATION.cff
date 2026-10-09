@@ -15,9 +15,9 @@ authors:
   given-names: "David"
   orcid: "https://orcid.org/0000-0003-1217-4617"
 title: "AnomalyMatch: Discovering Rare Objects of Interest with Semi-supervised and Active Learning"
-version: 1.1.0
+version: 2.0.0
 doi: 10.48550/arXiv.2505.03509
-date-released: 2025-07-04
+date-released: 2026-10-08
 url: "https://github.com/ESA/AnomalyMatch"
 preferred-citation:
   type: article

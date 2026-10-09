@@ -100,7 +100,7 @@ def main():
     # Create labeled_data.csv - label first 6, leave 4 unlabeled
     labeled_filenames = generated_filenames[:6]
     labels = ["anomaly"] * 3 + ["normal"] * 3
-    df = pd.DataFrame({"filename": labeled_filenames, "label": labels})
+    df = pd.DataFrame({"id": labeled_filenames, "label": labels})
     df.to_csv(os.path.join(ms_subdir, "labeled_data.csv"), index=False)
     print(f"Created labeled_data.csv with {len(labeled_filenames)} labeled entries")
 

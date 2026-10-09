@@ -4,7 +4,13 @@
 #   is part of this source code package. No part of the package, including
 #   this file, may be copied, modified, propagated, or distributed except according to
 #   the terms contained in the file 'LICENCE.txt'.
+
+"""FixMatch semi-supervised learning model with exponential moving average."""
+
+from __future__ import annotations
+
 import sys
+from typing import TYPE_CHECKING, Any
 
 import torch
 import torch.nn.functional as F
@@ -17,36 +23,47 @@ from anomaly_match.utils.accuracy import accuracy
 from anomaly_match.utils.consistency_loss import consistency_loss
 from anomaly_match.utils.cross_entropy_loss import cross_entropy_loss
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from dotmap import DotMap
+    from torch.utils.data import DataLoader
+
+    from anomaly_match.datasets.BasicDataset import BasicDataset
+    from anomaly_match.pipeline.SessionTracker import SessionTracker
+
 
 class FixMatch:
+    """FixMatch semi-supervised learning with consistency regularization and pseudo-labeling.
+
+    This class implements the FixMatch algorithm for semi-supervised learning,
+    which combines consistency regularization with pseudo-labeling.
+
+    Args:
+        net_builder: Function that builds the backbone network
+        num_classes: Number of classification classes
+        in_channels: Number of input image channels
+        ema_m: Momentum for exponential moving average of evaluation model
+        T: Temperature parameter for sharpening predictions
+        p_cutoff: Confidence threshold for pseudo-labeling
+        lambda_u: Weight for unsupervised loss component
+        logger: Logger instance for outputting information
+        session_tracker: Optional session tracker for recording training
+            progress
+    """
+
     def __init__(
         self,
-        net_builder,
-        num_classes,
-        in_channels,
-        ema_m,
-        T,
-        p_cutoff,
-        lambda_u,
-        logger=None,
-        session_tracker=None,
-    ):
-        """FixMatch implementation for semi-supervised learning.
-
-        This class implements the FixMatch algorithm for semi-supervised learning,
-        which combines consistency regularization with pseudo-labeling.
-
-        Args:
-            net_builder: Function that builds the backbone network
-            num_classes: Number of classification classes
-            in_channels: Number of input image channels
-            ema_m: Momentum for exponential moving average of evaluation model
-            T: Temperature parameter for sharpening predictions
-            p_cutoff: Confidence threshold for pseudo-labeling
-            lambda_u: Weight for unsupervised loss component
-            logger: Logger instance for outputting information
-            session_tracker: Optional session tracker for recording training progress
-        """
+        net_builder: Callable,
+        num_classes: int,
+        in_channels: int,
+        ema_m: float,
+        T: float,
+        p_cutoff: float,
+        lambda_u: float,
+        logger: Any = None,
+        session_tracker: SessionTracker | None = None,
+    ) -> None:
         super(FixMatch, self).__init__()
 
         # Store parameters
@@ -57,12 +74,9 @@ class FixMatch:
         # eval_model skips pretrained weight download because its weights are immediately
         # overwritten by copying from train_model below.
         self.train_model = net_builder(num_classes=num_classes, in_channels=in_channels)
-        try:
-            self.eval_model = net_builder(
-                num_classes=num_classes, in_channels=in_channels, pretrained=False
-            )
-        except TypeError:
-            self.eval_model = net_builder(num_classes=num_classes, in_channels=in_channels)
+        self.eval_model = net_builder(
+            num_classes=num_classes, in_channels=in_channels, pretrained=False
+        )
         self.T = T
         self.p_cutoff = p_cutoff
         self.lambda_u = lambda_u
@@ -94,7 +108,7 @@ class FixMatch:
         self.eval_model.eval()
 
     @torch.no_grad()
-    def _eval_model_update(self):
+    def _eval_model_update(self) -> None:
         """Update the evaluation model using exponential moving average of the training model weights."""
         train_model_params = (
             self.train_model.module.parameters()
@@ -107,7 +121,13 @@ class FixMatch:
         for buffer_train, buffer_eval in zip(self.train_model.buffers(), self.eval_model.buffers()):
             buffer_eval.copy_(buffer_train)
 
-    def set_data_loader(self, cfg, lb_dset, ulb_dset, eval_dset=None):
+    def set_data_loader(
+        self,
+        cfg: DotMap,
+        lb_dset: BasicDataset,
+        ulb_dset: BasicDataset,
+        eval_dset: BasicDataset | None = None,
+    ) -> None:
         """Set up data loaders for training and evaluation.
 
         Args:
@@ -149,7 +169,11 @@ class FixMatch:
 
         self.loader_dict = loader_dict
 
-    def set_optimizer(self, optimizer, scheduler=None):
+    def set_optimizer(
+        self,
+        optimizer: torch.optim.Optimizer,
+        scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
+    ) -> None:
         """Set the optimizer and optional scheduler.
 
         Args:
@@ -159,7 +183,9 @@ class FixMatch:
         self.optimizer = optimizer
         self.scheduler = scheduler
 
-    def train(self, cfg, progressbar=None, progress_callback=None):
+    def train(
+        self, cfg: DotMap, progressbar: Any = None, progress_callback: Callable | None = None
+    ) -> dict[str, Any]:
         """Train the model using the FixMatch algorithm.
 
         Args:
@@ -321,7 +347,12 @@ class FixMatch:
         return eval_dict
 
     @torch.no_grad()
-    def evaluate(self, cfg, eval_loader=None, progress_callback=None):
+    def evaluate(
+        self,
+        cfg: DotMap,
+        eval_loader: DataLoader | None = None,
+        progress_callback: Callable | None = None,
+    ) -> dict[str, Any]:
         """Evaluate the model on a dataset.
 
         Args:
@@ -444,95 +475,3 @@ class FixMatch:
             "eval/roc_data": (all_labels, all_probs),
             "eval/precision_recall": (precision, recall),
         }
-
-    def get_scored_binary_unlabeled_samples(
-        self, data_loader, target_class, cfg, N_to_load=None, progress_callback=None, data_iter=None
-    ):
-        """Evaluate and score unlabeled samples for the given target class.
-
-        Args:
-            data_loader: DataLoader for unlabeled data
-            target_class: Class index to score against (typically 1 for anomaly)
-            cfg: Configuration object
-            N_to_load: Maximum number of samples to evaluate
-            progress_callback: Optional callback for progress reporting
-            data_iter: Optional iterator to continue from a previous run
-
-        Returns:
-            tuple: (scores, images, filenames, data_iterator)
-                - scores: Tensor of anomaly scores
-                - images: Tensor of corresponding images
-                - filenames: List of filenames for the images
-                - data_iterator: Iterator for continuing evaluation
-        """
-        logger.debug("Getting scores for unlabeled samples")
-
-        # Determine which model to use
-        use_ema = hasattr(self, "eval_model")
-        eval_model = self.eval_model if use_ema else self.train_model
-        eval_model.eval()
-
-        # Initialize result containers
-        scores = []
-        imgs = []
-        filenames = []
-        images_evaluated = 0
-        total_images = N_to_load if N_to_load is not None else len(data_loader.dataset)
-
-        # Create iterator if not provided
-        if data_iter is None:
-            data_iter = iter(data_loader)
-
-        # Default N_to_load if not specified
-        if N_to_load is None:
-            N_to_load = len(data_loader.dataset)
-
-        # Process batches until we reach N_to_load
-        while images_evaluated < N_to_load:
-            try:
-                # Get next batch
-                x, _, filename = next(data_iter)
-            except StopIteration:
-                # End of data
-                logger.debug("Reached end of dataloader")
-                break
-
-            # Move to GPU if available
-            if torch.cuda.is_available():
-                x = x.cuda()
-
-            # Get predictions and scores
-            with torch.no_grad():
-                logits = eval_model(x)
-                batch_scores = F.softmax(logits, dim=-1)[:, target_class].detach()
-                scores.append(batch_scores)
-                imgs.append(x.cpu())
-                filenames.extend(filename)
-
-            # Update counters and progress
-            images_evaluated += x.size(0)
-            if progress_callback:
-                progress_callback(images_evaluated, total_images)
-
-        # Handle empty result case
-        if not scores:
-            logger.warning("No samples evaluated")
-            return torch.tensor([]), torch.tensor([]), [], data_iter
-
-        # Combine results
-        scores = torch.cat(scores)
-        imgs = torch.cat(imgs)
-
-        # Log statistics
-        logger.debug(f"Evaluated {len(scores)} samples")
-        logger.debug(
-            f"Score stats - min: {scores.min():.4f}, max: {scores.max():.4f}, "
-            f"mean: {scores.mean():.4f}, std: {scores.std():.4f}"
-        )
-
-        # Sort by scores (highest anomaly score first)
-        scores, indices = scores.sort(descending=True)
-        imgs = imgs[indices.cpu()]
-        filenames = [filenames[i] for i in indices.cpu()]
-
-        return scores, imgs, filenames, data_iter
