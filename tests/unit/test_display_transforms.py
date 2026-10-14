@@ -64,8 +64,13 @@ class TestPrepareForDisplay:
 
     def test_invalid_rgb_mapping_index(self):
         img = np.random.randint(0, 255, (64, 64, 4), dtype=np.uint8)
-        with pytest.raises(ValueError, match="exceed channel count"):
+        with pytest.raises(ValueError, match="must be between 0 and 3"):
             prepare_for_display(img, rgb_mapping=[0, 1, 5])
+
+    def test_negative_rgb_mapping_index(self):
+        img = np.random.randint(0, 255, (64, 64, 4), dtype=np.uint8)
+        with pytest.raises(ValueError, match="must be between 0 and 3"):
+            prepare_for_display(img, rgb_mapping=[-1, 0, 1])
 
     def test_float_to_uint8_conversion(self):
         img = np.random.random((64, 64, 3)).astype(np.float32)
