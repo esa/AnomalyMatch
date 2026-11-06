@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import glob
 import os
 
 import numpy as np
@@ -15,6 +16,11 @@ from dotmap import DotMap
 from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 
 from .create_model_string import create_model_string
+
+
+#: Where the Euclid Hackathon App puts each team's catalogue and starter labels.
+HACKATHON_DATA_DIR = "/media/home/euclid_hackathon_data"
+HACKATHON_DATA_DIR_ENV = "EUCLID_HACKATHON_DATA_DIR"
 
 
 def get_default_cfg() -> DotMap:
@@ -204,7 +210,51 @@ def get_default_cfg() -> DotMap:
         cfg.num_train_iter = 32
         cfg.normalisation.image_size = [64, 64]
 
+    _apply_hackathon_defaults(cfg)
     return cfg
+
+
+def _apply_hackathon_defaults(cfg: DotMap) -> None:
+    """Set the Euclid Hackathon's paths and imaging defaults, inside a team's App.
+
+    Teams should start from the data they were given, with images that look like what the jury
+    judges. Outside the App the data directory does not exist, so the upstream defaults (and the
+    tests relying on them) stay as they are.
+
+    The asinh stretch, zoom-out and channel matrix match the portal's Y+VIS panel: red is NIR-Y,
+    blue is VIS, and green is the mean of the two. Results sit next to the catalogue, so that they
+    are found, and stay on the team's persistent storage.
+
+    Args:
+        cfg: The configuration to change in place.
+    """
+    data_dir = os.environ.get(HACKATHON_DATA_DIR_ENV, HACKATHON_DATA_DIR)
+    if not os.path.isdir(data_dir):
+        return
+    catalogues = sorted(glob.glob(os.path.join(data_dir, "*_search_catalogue")))
+    cfg.data_dir = catalogues[-1] if catalogues else data_dir
+    cfg.prediction_search_dir = cfg.data_dir
+    cfg.label_file = os.path.join(data_dir, "labelled_data.csv")
+    cfg.save_dir = os.path.join(data_dir, "anomaly_match_results", "sessions", "")
+    cfg.output_dir = cfg.save_dir
+    cfg.save_path = cfg.save_dir
+
+    cfg.num_train_iter = 200
+    cfg.normalisation.image_size = [192, 192]
+    cfg.normalisation.cutout_padding_factor = 3.0
+    cfg.normalisation.normalisation_method = NormalisationMethod.ASINH
+    cfg.normalisation.norm_asinh_scale = [0.1, 0.1, 0.1]
+    cfg.normalisation.norm_asinh_clip = [99.5, 99.5, 99.5]
+    cfg.normalisation.fits_extension = ["VIS", "NIR-H", "NIR-J", "NIR-Y"]
+    cfg.normalisation.n_output_channels = 3
+    cfg.num_channels = 3
+    cfg.normalisation.channel_combination = np.array(
+        [
+            [0.0, 0.0, 0.0, 1.0],  # R = NIR-Y
+            [0.5, 0.0, 0.0, 0.5],  # G = mean of VIS and NIR-Y
+            [1.0, 0.0, 0.0, 0.0],  # B = VIS
+        ]
+    )
 
 
 def is_shipped_default_path(key: str, value: str | None) -> bool:
