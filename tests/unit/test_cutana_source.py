@@ -12,7 +12,10 @@ Integration tests that stream real FITS cutouts live in
 
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pandas as pd
+from astropy.io import fits
+from astropy.wcs import WCS
 from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 
 import anomaly_match as am
@@ -245,3 +248,64 @@ class TestDetectCutanaFilterNames:
 
         assert names == []
         mock_warning.assert_called_once()
+
+
+class TestBandNamesOfPerBandFiles:
+    """Naming the bands of a catalogue that lists one FITS file per band selects
+    those files, whose images sit in their PRIMARY HDU; it never asks Cutana for
+    an HDU called after the band."""
+
+    def _cfg(self, extensions):
+        cfg = am.get_default_cfg()
+        cfg.normalisation.fits_extension = list(extensions)
+        cfg.normalisation.n_output_channels = len(extensions)
+        cfg.normalisation.channel_combination = None
+        return get_fitsbolt_config(cfg)
+
+    def test_named_bands_of_a_per_band_catalogue_read_primary(self, tmp_path):
+        _write_q1_catalogue(tmp_path)
+        catalogue = str(tmp_path / "q1_source_cat_search_0.parquet")
+
+        ccfg = build_cutana_orchestrator_config(catalogue, self._cfg(["VIS", "NIR-Y"]))
+
+        assert ccfg.fits_extensions == ["PRIMARY"]
+        assert ccfg.selected_extensions == [
+            {"name": "VIS", "ext": "PRIMARY"},
+            {"name": "NIR-Y", "ext": "PRIMARY"},
+        ]
+
+    def test_names_that_match_no_file_stay_hdu_names(self, tmp_path):
+        _write_q1_catalogue(tmp_path)
+        catalogue = str(tmp_path / "q1_source_cat_search_0.parquet")
+
+        ccfg = build_cutana_orchestrator_config(catalogue, self._cfg(["SCI", "WHT"]))
+
+        assert ccfg.fits_extensions == ["SCI", "WHT"]
+
+    def test_named_band_extracts_from_a_mer_mosaic(self, tmp_path):
+        """End to end through Cutana, on a mosaic laid out like a MER one."""
+        wcs = WCS(naxis=2)
+        wcs.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+        wcs.wcs.crval = [150.0, 2.3]
+        wcs.wcs.crpix = [100.5, 100.5]
+        wcs.wcs.cd = [[-0.1 / 3600, 0.0], [0.0, 0.1 / 3600]]
+        header = wcs.to_header()
+        header["MAGZERO"] = 24.6
+        mosaic = tmp_path / "EUC_MER_BGSUB-MOSAIC-VIS_TILE102018211-ACBD03_00.00.fits"
+        data = np.random.default_rng(0).normal(0.0, 1.0, (200, 200)).astype(np.float32)
+        fits.PrimaryHDU(data=data, header=header).writeto(mosaic)
+        catalogue = pd.DataFrame(
+            {
+                "SourceID": ["s1", "s2"],
+                "RA": [150.0, 150.001],
+                "Dec": [2.3, 2.3005],
+                "diameter_pixel": [20, 20],
+                "fits_file_paths": [str([str(mosaic)])] * 2,
+            }
+        )
+        cfg = self._cfg(["VIS"])
+        cfg.normalisation.image_size = [32, 32]
+
+        batches = extract_cutouts_direct(catalogue, cfg)
+
+        assert sum(len(batch["metadata"]) for batch in batches) == 2

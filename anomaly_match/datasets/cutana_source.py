@@ -19,6 +19,7 @@ from pathlib import Path
 import cutana
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 from cutana import StreamingOrchestrator
 from cutana.catalogue_preprocessor import extract_filter_name, parse_fits_file_paths
 from dotmap import DotMap
@@ -1110,9 +1111,15 @@ def build_cutana_orchestrator_config(
 
     # Multi-file catalogues (one FITS per band) store each file under its own
     # PRIMARY HDU, so fits_extensions must be ["PRIMARY"] when filter names
-    # came from file-name inspection.  When the user supplied filter name
-    # strings directly, trust those.
-    if has_integer_indices or cfg.normalisation.fits_extension is None:
+    # came from file-name inspection, or when the names the user gave are
+    # those files' bands.  Other names are HDUs of a multi-extension file.
+    if (
+        has_integer_indices
+        or cfg.normalisation.fits_extension is None
+        or _names_catalogue_files(
+            extension_names, catalogue_path=catalogue_path, sub_catalogue_df=sub_catalogue_df
+        )
+    ):
         cutana_cfg.fits_extensions = ["PRIMARY"]
     else:
         cutana_cfg.fits_extensions = extension_names
@@ -1420,6 +1427,38 @@ def _resolve_extension_names(
     return all_filter_names, False
 
 
+def _names_catalogue_files(
+    names: list[str],
+    *,
+    catalogue_path: str | None,
+    sub_catalogue_df: pd.DataFrame | None,
+) -> bool:
+    """Return whether band *names* are the bands of a catalogue's per-band FITS files.
+
+    Euclid MER catalogues list one file per band, each holding its image in the
+    PRIMARY HDU, so naming those bands selects files, never HDUs.  A catalogue
+    path that does not exist yet keeps the names as HDU names.
+
+    Args:
+        names: Band names from ``fits_extension``.
+        catalogue_path: Catalogue file or folder; ignored when
+            *sub_catalogue_df* is given.
+        sub_catalogue_df: Optional in-memory catalogue.
+
+    Returns:
+        ``True`` when every name is the band of one of the first source's files.
+    """
+    if sub_catalogue_df is not None:
+        file_bands = _filter_names_from_fits_paths_entry(
+            sub_catalogue_df["fits_file_paths"].iloc[0]
+        )
+    elif catalogue_path is not None and os.path.exists(catalogue_path):
+        file_bands = resolve_catalogue_filter_names(catalogue_path)
+    else:
+        return False
+    return set(names) <= set(file_bands)
+
+
 def _filter_names_from_fits_paths_entry(fits_paths_entry) -> list[str]:
     """Parse filter names from a single ``fits_file_paths`` catalogue cell.
 
@@ -1518,7 +1557,11 @@ def resolve_catalogue_filter_names(catalogue_path: str) -> list[str]:
         first_file = candidates[0]
 
     if first_file.endswith(".parquet"):
-        df = pd.read_parquet(first_file, columns=["fits_file_paths"]).head(1)
+        # One row, not the column: a search catalogue holds millions of path lists.
+        first_batch = next(
+            pq.ParquetFile(first_file).iter_batches(batch_size=1, columns=["fits_file_paths"])
+        )
+        df = first_batch.to_pandas()
     else:
         df = pd.read_csv(first_file, usecols=["fits_file_paths"], nrows=1)
 
