@@ -645,19 +645,32 @@ class TrainingSetupScreen(BaseScreen):
         BackendInterface.set_terminal_output(self._out)
         self._log_sink.attach(self._out)
         self._install_progress_tap()
-        self._auto_validate_from_config()
+        # cfg goes into the widget before the auto-validation starts its job:
+        # that job writes the widget back into cfg, so the other way round the
+        # widget's initial values replaced cfg's normalisation before it was read.
         # update_from_config() writes many widget values in sequence; each
         # assignment fires the value-observer callback, and without
         # suppression that would spawn a separate background job per field
         # (setup-screen gens jumped from 1 to 14 on a single re-enter).
         self._suppress_norm_preview = True
         try:
+            # A cfg that names its input bands needs those matrix columns first, or
+            # update_from_config() can only fill the placeholder ones.
+            extensions = self._cfg.normalisation.fits_extension
+            # fits_extension may also be one extension (an int or a str): no columns then.
+            if (
+                isinstance(extensions, list | tuple)
+                and extensions
+                and (list(extensions) != self._norm_widget.extensions)
+            ):
+                self._norm_widget.set_extensions(list(extensions))
             self._norm_widget.update_from_config(dict(self._cfg.normalisation))
         finally:
             self._suppress_norm_preview = False
         # Resync the dedup snapshot so the next genuine user change
         # registers as a diff against the post-restore widget state.
         self._last_norm_config = serialisable_config(self._norm_widget.get_normalisation_config())
+        self._auto_validate_from_config()
 
     def on_leave(self) -> None:
         """Remove the progress tap and widget sink when navigating away."""
@@ -1060,16 +1073,30 @@ class TrainingSetupScreen(BaseScreen):
                         _restorable_normalisation(record, filter_names) if bands_match else {}
                     )
                     remembered = bool(settings)
+                    # Without remembered settings, a cfg that pins a channel layout for
+                    # exactly these bands is the choice to keep, rather than one output
+                    # channel per band.
+                    pinned = not remembered and self._cfg_pins_layout_for(filter_names)
                     # Suppress preview refresh during programmatic widget
                     # changes — the counting thread triggers preview separately.
                     self._suppress_norm_preview = True
                     try:
-                        if remembered:
+                        if remembered or pinned:
                             self._norm_widget.sync_cutana_bands(filter_names)
                         else:
                             self._norm_widget.apply_cutana_bands(filter_names)
+                        if pinned:
+                            # sync_cutana_bands rebuilds the matrix from defaults.
+                            self._norm_widget.update_from_config(dict(self._cfg.normalisation))
                     finally:
                         self._suppress_norm_preview = False
+                    if pinned:
+                        logger.info("Kept the configured channel layout for {}", filter_names)
+                        self._last_norm_config = serialisable_config(
+                            self._norm_widget.get_normalisation_config()
+                        )
+                        # Same hand-off as for remembered settings below.
+                        self._schedule_norm_refresh()
                     if remembered:
                         # Both band helpers rebuild the matrix from defaults, so
                         # the remembered cell values have to go back in after.
@@ -1094,6 +1121,24 @@ class TrainingSetupScreen(BaseScreen):
             pass
         # No running event loop (e.g. plain Python tests) — run inline
         _detect_and_apply()
+
+    def _cfg_pins_layout_for(self, filter_names: list[str]) -> bool:
+        """Whether cfg names exactly these input bands and a matrix to combine them.
+
+        Args:
+            filter_names: Filter names detected from the catalogue.
+
+        Returns:
+            ``True`` when cfg's ``fits_extension`` lists these bands in this order
+            and its ``channel_combination`` is set.
+        """
+        norm = self._cfg.normalisation
+        extensions = norm.fits_extension
+        return (
+            isinstance(extensions, list | tuple)
+            and list(extensions) == list(filter_names)
+            and norm.channel_combination is not None
+        )
 
     def _apply_source_channel_info(
         self, folder: str, source_type: DataSourceType, image_files: list[str] | None
