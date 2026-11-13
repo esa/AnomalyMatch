@@ -30,9 +30,22 @@ Run the training workflow to find sourceID's - Train, select new anomalies, retr
 We encourage being creative about using [AnomalyMatch](https://esa.github.io/AnomalyMatch/stable/). Run it in headless mode, change the catalogue using your own scripts or something completely different! Go craaaaazy. 
 
 ## Normalisation suggestions
+Some good starting points for step 2:
 
-## How to spot an Anomaly
+**A quick look** (VIS only)
+
+<img src="assets/normalisation/norm_vis_asinh.png" width="300">
+
+**A Galaxy Zoo look**
+
+<img src="assets/normalisation/norm_galaxyzoo_asinh.png" width="300">
+
+**Faint, extended structure and surroundings**
+
+<img src="assets/normalisation/norm_galaxyzoo_log.png" width="300">
 
 ## Considerations 
-Be carefull about running multiple instances of AnomalyMatch at once. 
-More ... 
+* Be careful about running multiple instances of AnomalyMatch at once. Cutana uses all available memory.
+* Submitting multiple times per window overwrites previous submission. 
+
+more...  
