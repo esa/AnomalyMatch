@@ -17,7 +17,6 @@ from fitsbolt.normalisation.NormalisationMethod import NormalisationMethod
 
 from .create_model_string import create_model_string
 
-
 #: Where the Euclid Hackathon App puts each team's catalogue and starter labels.
 HACKATHON_DATA_DIR = "/media/home/euclid_hackathon_data"
 HACKATHON_DATA_DIR_ENV = "EUCLID_HACKATHON_DATA_DIR"
