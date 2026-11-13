@@ -329,6 +329,54 @@ class TestSyncNormalisationFromCheckpoint:
         assert legacy_fb is None and legacy_cc is None
 
 
+class TestBandMixingCheckpoint:
+    """A model trained on more bands than output channels must load again.
+
+    fitsbolt only accepts more extensions than output channels when a mixing matrix
+    is given, so every reader that rebuilds the embedded fitsbolt config has to keep
+    the stored matrix.
+    """
+
+    MATRIX = np.array(
+        [
+            [0.0, 0.0, 0.0, 1.0],
+            [0.5, 0.0, 0.0, 0.5],
+            [1.0, 0.0, 0.0, 0.0],
+        ]
+    )
+
+    def _save(self, tmp_path):
+        cfg = am.get_default_cfg()
+        cfg.normalisation.normalisation_method = NormalisationMethod.ASINH
+        cfg.normalisation.image_size = [64, 64]
+        cfg.normalisation.fits_extension = ["B1", "B2", "B3", "B4"]
+        cfg.normalisation.n_output_channels = 3
+        cfg.normalisation.channel_combination = self.MATRIX
+        cfg = get_fitsbolt_config(cfg)
+        checkpoint = _make_full_checkpoint(
+            normalisation_method=NormalisationMethod.ASINH,
+            fitsbolt_cfg=cfg.fitsbolt_cfg,
+            channel_combination=self.MATRIX,
+        )
+        return save_checkpoint(checkpoint, tmp_path / "model")
+
+    def test_read_checkpoint_normalisation(self, tmp_path):
+        loaded_fb, loaded_cc = read_checkpoint_normalisation(self._save(tmp_path))
+        assert list(loaded_fb.fits_extension) == ["B1", "B2", "B3", "B4"]
+        assert loaded_fb.n_output_channels == 3
+        assert np.array_equal(np.asarray(loaded_fb.channel_combination), self.MATRIX)
+        assert np.array_equal(np.asarray(loaded_cc), self.MATRIX)
+
+    def test_load_checkpoint(self, tmp_path):
+        loaded = load_checkpoint(self._save(tmp_path))
+        assert np.array_equal(np.asarray(loaded["fitsbolt_cfg"].channel_combination), self.MATRIX)
+
+    def test_read_model_normalisation(self, tmp_path):
+        summary = read_model_normalisation(self._save(tmp_path))
+        assert summary["n_output_channels"] == 3
+        assert summary["normalisation_method"] == NormalisationMethod.ASINH
+
+
 class TestSecurity:
     """Verify the format is safe against code execution attacks."""
 

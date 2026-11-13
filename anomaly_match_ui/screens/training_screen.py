@@ -48,6 +48,7 @@ from anomaly_match_ui.styles import (
     ESA_RED,
 )
 from anomaly_match_ui.utils.backend_interface import BackendInterface
+from anomaly_match_ui.utils.output_capture import run_in_output
 from anomaly_match_ui.utils.plot_utils import render_size_stratification_png
 from anomaly_match_ui.utils.progress_tap import LogProgressTap, clean_hint_text
 from anomaly_match_ui.utils.scrolling_log_sink import ScreenLogSink
@@ -969,11 +970,14 @@ class TrainingScreen(GalleryScreenBase):
     def _run_scoring(self) -> None:
         """Run the prediction pipeline (background thread)."""
         self._scoring_error: str | None = None
+
+        def _score() -> None:
+            logger.info("Scoring with model: {}", self.cfg.model_path)
+            logger.info("Source dir: {}", self.cfg.prediction_search_dir)
+            BackendInterface.evaluate_all_images(top_n=0)
+
         try:
-            with self.out:
-                logger.info("Scoring with model: {}", self.cfg.model_path)
-                logger.info("Source dir: {}", self.cfg.prediction_search_dir)
-                BackendInterface.evaluate_all_images(top_n=0)
+            run_in_output(self.out, _score)
         except KeyboardInterrupt:
             self._scoring_error = "stopped"
             self._set_status("Scoring stopped", color=ESA_RED)

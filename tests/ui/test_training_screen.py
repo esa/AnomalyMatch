@@ -237,6 +237,37 @@ def test_stop_scoring_shows_partial(screen, tmp_path):
     assert "partial results" in screen.status_html.value
 
 
+class _SwallowingOutput:
+    """Like ``ipywidgets.Output`` inside a kernel, which suppresses exceptions."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, etype, evalue, tb):
+        return True
+
+
+def test_scoring_error_is_reported_not_swallowed(screen, mock_session, tmp_path):
+    """A failing scoring run ends in an error, not in an empty "Done"."""
+    mock_session.last_run_skipped_chunks = 0
+    mock_session.last_run_skipped_sources = 0
+    mock_session.last_run_total_chunks = 0
+    mock_session.last_run_total_sources = 0
+    db_path = tmp_path / "predictions.db"
+    AnomalyScoreDB(str(db_path)).close()
+    BackendInterface.open_prediction_monitor(str(db_path), str(tmp_path))
+    screen.out = _SwallowingOutput()
+    screen._start_time = 0
+
+    with patch.object(
+        BackendInterface, "evaluate_all_images", side_effect=ValueError("cannot read model")
+    ):
+        screen._run_scoring()
+
+    assert screen._scoring_error == "cannot read model"
+    assert "Scoring error: cannot read model" in screen.status_html.value
+
+
 def test_stop_training_shows_immediate_feedback(screen):
     """Stop click must flip the button + status before subprocess teardown (#434)."""
     captured: dict = {}

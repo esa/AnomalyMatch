@@ -200,6 +200,9 @@ def _backfill_fitsbolt_cfg(fb_data: dict) -> dict:
         output_dtype=fb_data.get("output_dtype", np.uint8),
         size=fb_data.get("size", [224, 224]),
         fits_extension=fb_data.get("fits_extension"),
+        # fitsbolt rejects more extensions than output channels without the matrix
+        # that mixes them, so a band-mixing checkpoint needs it to rebuild at all.
+        channel_combination=fb_data.get("channel_combination"),
         interpolation_order=fb_data.get("interpolation_order", 1),
         n_output_channels=fb_data.get("n_output_channels", 3),
         normalisation_method=NormalisationMethod(fb_data.get("normalisation_method", 0)),

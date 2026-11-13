@@ -32,6 +32,7 @@ from anomaly_match_ui.styles import (
     ESA_RED,
 )
 from anomaly_match_ui.utils.backend_interface import BackendInterface
+from anomaly_match_ui.utils.output_capture import run_in_output
 from anomaly_match_ui.utils.scrolling_log_sink import ScreenLogSink
 from anomaly_match_ui.widgets.gallery_widget import GalleryWidget
 from anomaly_match_ui.widgets.header_widget import HeaderWidget
@@ -370,17 +371,18 @@ class PredictionScreen(GalleryScreenBase):
 
     def _run_prediction(self) -> None:
         """Execute the prediction pipeline (runs in a background thread)."""
+
+        def _predict() -> None:
+            logger.info(f"Model: {self.cfg.model_path}")
+            logger.info(f"Search dir: {self.cfg.prediction_search_dir}")
+            logger.info(f"Output dir: {self.cfg.output_dir}")
+            BackendInterface.evaluate_all_images(
+                top_n=0,
+                progress_callback=self._update_progress,
+            )
+
         try:
-            with self.out:
-                logger.info(f"Model: {self.cfg.model_path}")
-                logger.info(f"Search dir: {self.cfg.prediction_search_dir}")
-                logger.info(f"Output dir: {self.cfg.output_dir}")
-
-                BackendInterface.evaluate_all_images(
-                    top_n=0,
-                    progress_callback=self._update_progress,
-                )
-
+            run_in_output(self.out, _predict)
         except KeyboardInterrupt:
             self._set_status("Prediction stopped by user", color=ESA_RED)
             with self.out:
