@@ -13,7 +13,7 @@
 
 **Semi-supervised anomaly detection for astronomical images.**
 
-![Demo search of Hubble Legacy Archive cutouts](assets/demo.gif)
+![Demo search of a Euclid catalogue](assets/demo.gif)
 
 AnomalyMatch uses the FixMatch algorithm with active learning to detect anomalies in astronomical image datasets. Starting from as few as 5-10 labeled examples, it achieves AUROC of 0.96 on miniImageNet and 0.89 on GalaxyMNIST. It provides a Jupyter notebook interface with ipywidgets for interactive labeling and model training.
 
