@@ -13,7 +13,7 @@ High-performance semi-supervised anomaly detection with active learning
 
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://esa.github.io/AnomalyMatch/)
 
-![Demo search of Hubble Legacy Archive cutouts](resources/demo.gif)
+![Demo search of a Euclid catalogue](resources/demo.gif)
 
 > 🤝 **Contributions are welcome!** See the [Contribution Guidelines](CONTRIBUTING.md) to get started.
 
