@@ -25,12 +25,10 @@ submit, so note the IDs of the interesting objects you find.
 
 ## Quick start: hunting with AnomalyMatch
 
-Click any animation to open it at full size.
-
 ### 1. Select a source catalogue and labels
 
-Choose the source catalogue and the labelled data CSV in the top-left corner. Besides the
-full DR1 catalogue, a smaller demo catalogue with its own labels is available, so you can
+Choose the source catalogue and the labelled data CSV in the top-left corner. On your Datalabs hackathon instance in the folder `/euclid_hackathon_data` the
+full DR1 catalogue and a smaller demo catalogue with its own labels is available, so you can
 quickly get a feel for using and configuring AnomalyMatch.
 
 [![Selecting the demo catalogue and its labels](assets/gifs/select_sources.gif)](assets/gifs/select_sources.gif)
@@ -58,7 +56,7 @@ disks or something nobody has catalogued yet.
 Some good starting points for step 2. Each preset shows the settings, followed by the same
 five sources from the demo catalogue as they look with those settings.
 
-**A quick look** (VIS only): a single greyscale band at the highest resolution.
+**A quick look** (VIS only): a single greyscale band.
 
 <img src="assets/normalisation/norm_vis_asinh.png" width="300" alt="Settings: Asinh, VIS only">
 
