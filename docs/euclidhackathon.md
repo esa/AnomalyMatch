@@ -6,40 +6,89 @@
 [//]: # (the terms contained in the file 'LICENCE.txt'.)
 
 # ESA Datalabs Euclid Hackathon 2026
-The Euclid Hackathon takes place 23 to 26 November 2026 where teams will go head-to-head to surface the rarest and most remarkable objects in DR1, using benchmarked ESA methods or approaches of their own. The rare objects found by each team will be scored by their rarity and scientific value, with the top scoring teams winning prizes. AnomalyMatch is a great tool for that.  
 
-A convenient app with AnomalyMatch and everything else you initially need to hunt these rare objects is made available on [ESA Datalabs](https://datalabs.esa.int/). It has access to the full DR1 catalogue and a computing resources. An introducing notebook for submissions and other relevant information is also available here. 
+The Euclid Hackathon takes place from 23 to 26 November 2026. Teams compete to find the
+rarest and most remarkable objects in Euclid DR1, using benchmarked ESA methods or their
+own approaches. Each team's finds are scored on their rarity and scientific value, and the
+top-scoring teams win prizes. AnomalyMatch is well suited to this kind of search.
 
-## Quick start for using AnomalyMatch to hunt 
+Everything you need to start hunting is available as an app on
+[ESA Datalabs](https://datalabs.esa.int/). The app comes with AnomalyMatch installed,
+access to the full DR1 catalogue, and GPU computing resources. It also includes a welcome
+notebook that explains how to submit your finds, along with other useful information.
+
+## Source IDs
+
+Every source in the DR1 catalogue has a unique `SourceID`, a large integer such as
+`-701751464660863904`. AnomalyMatch shows it above each cutout. Source IDs are what you
+submit, so note the IDs of the interesting objects you find.
+
+## Quick start: hunting with AnomalyMatch
+
+Click any animation to open it at full size.
+
 ### 1. Select a source catalogue and labels
-Source and labels should be selected in the top left corner. The full DR1 catalogue as well as a convenient smaller demo DR1 catalogue is available for quickly getting the feel of using and configuring AnomalyMatch. 
 
-<img src="assets/gifs/Selecting_sources-resize.gif" width="600">
+Choose the source catalogue and the labelled data CSV in the top-left corner. Besides the
+full DR1 catalogue, a smaller demo catalogue with its own labels is available, so you can
+quickly get a feel for using and configuring AnomalyMatch.
 
-### 2. Preview and configure normalisations for sources
-Configure normalisation to your preference for inferring which galaxies are interesting. 
+[![Selecting the demo catalogue and its labels](assets/gifs/select_sources.gif)](assets/gifs/select_sources.gif)
 
-<img src="assets/gifs/normalisation-resize.gif" width="600">
+### 2. Preview and configure the normalisation
 
-### 3. Training loop 
-Run the training workflow to find sourceID's - Train, select new anomalies, retrain
+The normalisation controls how the raw Euclid bands are stretched and combined into the
+images that you and the model see. Adjust it until the features you care about stand out.
+The preview updates as you change the settings. See
+[Normalisation suggestions](#normalisation-suggestions) below for some starting points.
 
-<img src="assets/gifs/training_loop-resize.gif" width="600">
+[![Configuring the normalisation](assets/gifs/normalisation.gif)](assets/gifs/normalisation.gif)
 
-### Advanced usages
-We encourage being creative about using [AnomalyMatch](https://esa.github.io/AnomalyMatch/stable/). Run it in headless mode, change the catalogue using your own scripts or something completely different! 
+### 3. Run the training loop
+
+Train the model, then review the sources it scores as most anomalous. Label them as
+anomalous or normal, and retrain. Each round teaches the model more about what you are
+looking for, whether that is gravitational lenses, merging galaxies, protoplanetary
+disks or something nobody has catalogued yet.
+
+[![Training, labelling and retraining](assets/gifs/training_loop.gif)](assets/gifs/training_loop.gif)
 
 ## Normalisation suggestions
-Some good starting points for step 2:
 
-**A quick look** (VIS only)
+Some good starting points for step 2. Each preset shows the settings, followed by the same
+five sources from the demo catalogue as they look with those settings.
 
-<img src="assets/normalisation/norm_vis_asinh.png" width="300">
+**A quick look** (VIS only): a single greyscale band at the highest resolution.
 
-**A Galaxy Zoo look**
+<img src="assets/normalisation/norm_vis_asinh.png" width="300" alt="Settings: Asinh, VIS only">
 
-<img src="assets/normalisation/norm_galaxyzoo_asinh.png" width="300">
+![Example sources with the VIS-only asinh stretch](assets/normalisation/norm_vis_asinh_examples.png)
 
-**Faint, extended structure and surroundings**
+**A Galaxy Zoo look**: VIS and NIR-Y combined into colour images.
 
-<img src="assets/normalisation/norm_galaxyzoo_log.png" width="300">
+<img src="assets/normalisation/norm_galaxyzoo_asinh.png" width="300" alt="Settings: Asinh, VIS and NIR-Y in colour">
+
+![Example sources with the Galaxy Zoo asinh stretch](assets/normalisation/norm_galaxyzoo_asinh_examples.png)
+
+**Faint, extended structure and surroundings**: a logarithmic stretch that brings out faint
+features such as tidal tails and halos, at the cost of brighter noise.
+
+<img src="assets/normalisation/norm_galaxyzoo_log.png" width="300" alt="Settings: LogStretch, VIS and NIR-Y in colour">
+
+![Example sources with the Galaxy Zoo log stretch](assets/normalisation/norm_galaxyzoo_log_examples.png)
+
+For what each method and parameter does, see [Configuration](user-guide/configuration.md#normalisation).
+
+## Going further
+
+Be creative with AnomalyMatch. The rest of the documentation covers what the quick start
+leaves out:
+
+- [Getting Started](getting-started.md): installation, label files and session tracking
+- [Training](user-guide/training.md): the setup screen and each step of the training cycle
+- [Prediction](user-guide/prediction.md): scoring catalogues and other data sources
+- [Headless Mode](user-guide/headless.md): train and score from your own scripts, with no UI
+- [Configuration](user-guide/configuration.md): every configuration option
+- [Method](method.md): the semi-supervised method behind AnomalyMatch
+
+You can also modify the catalogue with your own scripts, or try something completely different.
